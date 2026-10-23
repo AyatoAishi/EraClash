@@ -538,3 +538,11 @@ small.passive { color: var(--gold) !important; }
 .rq:hover::after { content: '×'; position: absolute; inset: 0; background: rgba(120,0,0,.6); color: #fff; font-family: var(--arcade); font-size: .7rem; display: flex; align-items: center; justify-content: center; }
 .floater.dmg { color: #f2f2f2; font-size: .6rem; }
 .floater.dmg.foe { color: #ff9a9a; }
+
+/* v0.10.3: faction emblems instead of troop pictures (rosters can grow without overlapping) */
+#faction-cards > .fcard { min-width: 0; }
+.fcard .emblem { display: flex; justify-content: center; align-items: center; height: 9rem; margin-top: .8rem; }
+.fcard .emblem svg { width: 8.5rem; height: 8.5rem; image-rendering: pixelated; filter: drop-shadow(.3rem .3rem 0 rgba(0,0,0,.45)); transition: transform .15s steps(3); }
+.fcard:hover .emblem svg, .fcard.on .emblem svg { transform: translateY(-.25rem); }
+.fcard .frow b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fcard .frow span { white-space: nowrap; }

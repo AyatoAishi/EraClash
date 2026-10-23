@@ -292,7 +292,7 @@ export class UI {
       card.className = 'fcard frame ' + f.id;
       card.innerHTML = `
         <div class="fside">${f.team === 0 ? '◀ LEFT SIDE' : 'RIGHT SIDE ▶'}</div>
-        <div class="imgs">${roster.map((u) => `<img src="${PORTRAITS[u.id].full}" alt="">`).join('')}</div>
+        <div class="emblem"><svg><use href="#${f.emblem}"/></svg></div>
         <h3>${f.name}</h3>
         <p class="tag">${f.tagline}</p>
         <div class="frow"><span>Base</span><b>${f.baseName}</b></div>

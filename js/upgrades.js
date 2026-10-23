@@ -1,4 +1,4 @@
-import { UNITS } from './config.js';
+import { UNITS, FACTIONS } from './config.js';
 // ============================================================
 //  BARRACKS UPGRADES — per match only (reset every game).
 //  max: number of levels (Infinity = unlimited)
@@ -183,4 +183,17 @@ const pick = (v, lvl) => (Array.isArray(v) ? v[lvl] : v.pct !== undefined ? r2(v
 /** Price of the NEXT level when the current level is `lvl` (0 = not bought). */
 export const upgradePrice = (U, lvl) => pick(U.price, lvl);
 export const upgradeTime = (U, lvl) => pick(U.time, lvl);
-export const upgradesFor = (factionId) => Object.values(UPGRADES).filter((u) => u.faction === factionId || u.faction === 'both');
+/**
+ * What a faction can research:
+ *  - BASE upgrades: the faction's own (faction: id) + shared ones (faction: 'both'). These stay faction-bound
+ *    (Battlement always puts Archers on the castle, Overwatch always Gunners on the HQ).
+ *  - TROOP upgrades follow the UNIT, not the faction: available for every unit the faction can field —
+ *    its hiring roster AND the units its base upgrades spawn (so Battlement archers can still get
+ *    Accuracy Training even if Archers are removed from the roster). The troop upgrade's `faction` field is ignored.
+ */
+export const upgradesFor = (factionId) => {
+  const base = (u) => u.category === 'base' && (u.faction === factionId || u.faction === 'both');
+  const units = new Set(FACTIONS[factionId]?.units || []);
+  for (const U of Object.values(UPGRADES)) if (base(U)) for (const e of U.effects || []) if (e.type === 'towers') units.add(e.unit);
+  return Object.values(UPGRADES).filter((U) => base(U) || (U.category === 'troop' && units.has(U.unit)));
+};

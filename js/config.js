@@ -39,6 +39,7 @@ export const FACTIONS = {
     name: 'Medieval Kingdom',
     tagline: 'Steel, fury and old magic.',
     baseName: 'Stone Keep',
+    emblem: 'em-medieval',                // pixel symbol id in index.html
     color: '#d9a441',
     units: ['viking', 'archer', 'imp'],   // shop order = default buy key order (1, 2, 3...)
   },
@@ -48,6 +49,7 @@ export const FACTIONS = {
     name: 'Modern Republic',
     tagline: 'Discipline, tech and firepower.',
     baseName: 'Command HQ',
+    emblem: 'em-modern',
     color: '#4aa3ff',
     units: ['police', 'gunner', 'sniper'],
   },

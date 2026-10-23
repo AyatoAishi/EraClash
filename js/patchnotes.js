@@ -6,6 +6,16 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.10.3', date: '2026-10-24T03:01:00+08:00', title: 'Emblems & unit-bound upgrades',
+    sections: [
+      { title: 'Changes', items: [
+        'Faction select shows each side\'s <b>emblem</b> instead of troop pictures (rosters of any size no longer overlap): a blue-and-white cross shield for the Medieval Kingdom, a star-and-stripes badge for the Modern Republic.',
+        '<b>Troop upgrades now follow the unit, not the faction.</b> Whoever can field a unit gets its upgrades (e.g. a Sniper in the medieval roster brings Hollow Points and Ghillie Conditioning). Abilities always come with the unit.',
+        'Base upgrades stay with their faction (Battlement = castle Archers, Overwatch = rooftop Gunners). A tower unit\'s troop upgrades stay available even if that unit isn\'t in the roster, so Battlement archers can still be upgraded.',
+      ] },
+    ],
+  },
+  {
     version: '0.10.2', date: '2026-10-24T02:48:00+08:00', title: 'One unit system',
     sections: [
       { title: 'Changes', items: [

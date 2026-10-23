@@ -139,7 +139,7 @@ export class Game {
   /** Start researching the next level of an upgrade. Returns error string or null. */
   research(team, id) {
     const T = this.teams[team], U = UPGRADES[id];
-    if (!U || (U.faction !== 'both' && U.faction !== T.faction)) return 'Not available';
+    if (!U || !upgradesFor(T.faction).includes(U)) return 'Not available';
     if (this.over) return 'Match is over';
     const lvl = this.pendingLevel(team, id);            // queued levels count: you can stack the same upgrade
     if (lvl >= U.max) return T.research || T.rqueue.length ? 'Max level already queued' : 'Already maxed';
