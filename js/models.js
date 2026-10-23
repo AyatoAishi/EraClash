@@ -1,0 +1,657 @@
+// Voxel model factory — everything is boxes.
+import * as THREE from 'three';
+
+const geoCache = new Map();
+export function boxGeo(w, h, d) {
+  const k = `${w}|${h}|${d}`;
+  if (!geoCache.has(k)) geoCache.set(k, new THREE.BoxGeometry(w, h, d));
+  return geoCache.get(k);
+}
+const sharedMats = new Map();
+export function sharedMat(color, extra = {}) {
+  const k = color + JSON.stringify(extra);
+  if (!sharedMats.has(k)) sharedMats.set(k, new THREE.MeshLambertMaterial({ color, ...extra }));
+  return sharedMats.get(k);
+}
+
+// Builds a box into `parent`. `mats` = per-model material map (for hit flash) or null for shared.
+function B(parent, w, h, d, color, x, y, z, mats, extra) {
+  let m;
+  if (mats) {
+    const k = color + (extra ? JSON.stringify(extra) : '');
+    if (!mats.has(k)) mats.set(k, new THREE.MeshLambertMaterial({ color, ...(extra || {}) }));
+    m = mats.get(k);
+  } else m = sharedMat(color, extra);
+  const mesh = new THREE.Mesh(boxGeo(w, h, d), m);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+}
+
+function pivot(parent, x, y, z) {
+  const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g;
+}
+
+// ----- shared humanoid skeleton -----
+function humanoid(p) {
+  const root = new THREE.Group();
+  const body = new THREE.Group(); root.add(body);
+  const mats = new Map();
+  const rig = { root, body, mats };
+
+  // legs
+  rig.legL = pivot(body, -0.17, 0.75, 0);
+  rig.legR = pivot(body, 0.17, 0.75, 0);
+  for (const leg of [rig.legL, rig.legR]) {
+    B(leg, 0.26, 0.6, 0.3, p.pants, 0, -0.3, 0, mats);
+    B(leg, 0.3, 0.2, 0.36, p.boots, 0, -0.66, 0.03, mats);
+  }
+  // torso
+  rig.torso = pivot(body, 0, 1.12, 0);
+  B(rig.torso, 0.66, 0.72, 0.4, p.shirt, 0, 0, 0, mats);
+  B(rig.torso, 0.68, 0.1, 0.42, p.belt, 0, -0.28, 0, mats);
+  // head
+  rig.head = pivot(body, 0, 1.73, 0);
+  B(rig.head, 0.5, 0.5, 0.5, p.skin, 0, 0, 0, mats);
+  B(rig.head, 0.08, 0.08, 0.02, 0x111111, -0.12, 0.04, 0.255, mats);
+  B(rig.head, 0.08, 0.08, 0.02, 0x111111, 0.12, 0.04, 0.255, mats);
+  // arms (pivot at shoulder)
+  rig.armL = pivot(body, -0.45, 1.42, 0);
+  rig.armR = pivot(body, 0.45, 1.42, 0);
+  for (const arm of [rig.armL, rig.armR]) {
+    B(arm, 0.22, 0.52, 0.24, p.sleeve, 0, -0.24, 0, mats);
+    B(arm, 0.22, 0.16, 0.24, p.skin, 0, -0.58, 0, mats);
+  }
+  rig.handR = pivot(rig.armR, 0, -0.6, 0.02);
+  rig.handL = pivot(rig.armL, 0, -0.45, 0.0);
+  return rig;
+}
+
+export function buildViking() {
+  const p = { skin: 0xe8b48a, pants: 0x5a3b22, boots: 0x33210f, shirt: 0x7a2e22, sleeve: 0x7a2e22, belt: 0x2a1a0e };
+  const r = humanoid(p); const m = r.mats;
+  // bare forearms + bracers
+  B(r.armL, 0.24, 0.12, 0.26, 0x3d2a17, 0, -0.42, 0, m);
+  B(r.armR, 0.24, 0.12, 0.26, 0x3d2a17, 0, -0.42, 0, m);
+  // fur mantle
+  B(r.torso, 0.9, 0.18, 0.5, 0xcdb995, 0, 0.34, 0, m);
+  B(r.torso, 0.5, 0.12, 0.1, 0xb9a47e, 0, 0.24, 0.22, m);
+  B(r.torso, 0.12, 0.12, 0.04, 0xe0b040, 0, -0.28, 0.22, m); // buckle
+  // beard + braids
+  B(r.head, 0.52, 0.26, 0.12, 0xc8642a, 0, -0.17, 0.25, m);
+  B(r.head, 0.1, 0.22, 0.1, 0xc8642a, -0.13, -0.38, 0.27, m);
+  B(r.head, 0.1, 0.22, 0.1, 0xc8642a, 0.13, -0.38, 0.27, m);
+  B(r.head, 0.3, 0.06, 0.04, 0xa84f1e, 0, -0.06, 0.27, m); // moustache
+  // helmet
+  B(r.head, 0.56, 0.2, 0.56, 0x9aa3ab, 0, 0.24, 0, m);
+  B(r.head, 0.36, 0.1, 0.36, 0x9aa3ab, 0, 0.38, 0, m);
+  B(r.head, 0.08, 0.22, 0.04, 0x8a929a, 0, 0.06, 0.28, m); // nose guard
+  // horns (stepped voxels)
+  for (const s of [-1, 1]) {
+    B(r.head, 0.14, 0.12, 0.14, 0xf1e4c3, s * 0.34, 0.24, 0, m);
+    B(r.head, 0.12, 0.14, 0.12, 0xf1e4c3, s * 0.44, 0.34, 0, m);
+    B(r.head, 0.1, 0.14, 0.1, 0xe5d4ad, s * 0.5, 0.46, 0, m);
+    B(r.head, 0.08, 0.1, 0.08, 0xd8c497, s * 0.5, 0.56, 0.02, m);
+  }
+  // axe in right hand (handle points forward)
+  const axe = pivot(r.handR, 0, 0, 0);
+  B(axe, 0.08, 0.08, 0.95, 0x7b5130, 0, 0, 0.3, m);
+  B(axe, 0.06, 0.38, 0.22, 0xc9d1d8, 0, 0.12, 0.7, m);
+  B(axe, 0.06, 0.14, 0.08, 0xc9d1d8, 0, 0.0, 0.62, m);
+  B(axe, 0.07, 0.42, 0.05, 0xeef2f5, 0, 0.12, 0.82, m); // edge
+  r.weapon = axe;
+  // round-ish voxel shield on left arm
+  const sh = pivot(r.handL, -0.16, 0.05, 0.05);
+  B(sh, 0.06, 0.62, 0.62, 0x8a5a2b, 0, 0, 0, m);
+  B(sh, 0.07, 0.62, 0.08, 0x6b6b6b, 0, 0, 0, m);
+  B(sh, 0.07, 0.08, 0.62, 0x6b6b6b, 0, 0, 0, m);
+  B(sh, 0.1, 0.16, 0.16, 0xb8b8b8, -0.03, 0, 0, m);
+  return finalize(r);
+}
+
+export function buildPolice() {
+  const p = { skin: 0xe2a982, pants: 0x1a2440, boots: 0x111111, shirt: 0x22325c, sleeve: 0x22325c, belt: 0x151515 };
+  const r = humanoid(p); const m = r.mats;
+  // collar, badge, radio, tie
+  B(r.torso, 0.4, 0.1, 0.42, 0x8fb8e8, 0, 0.32, 0, m);
+  B(r.torso, 0.08, 0.3, 0.03, 0x0f162b, 0, 0.12, 0.21, m);
+  B(r.torso, 0.12, 0.14, 0.04, 0xf2c94c, -0.18, 0.14, 0.21, m);
+  B(r.torso, 0.1, 0.16, 0.06, 0x333333, 0.2, 0.18, 0.22, m);
+  B(r.torso, 0.1, 0.1, 0.1, 0x2b2b2b, -0.26, -0.28, 0.16, m); // holster
+  // shoulder patches
+  B(r.armL, 0.24, 0.1, 0.26, 0x4a6fb0, 0, -0.06, 0, m);
+  B(r.armR, 0.24, 0.1, 0.26, 0x4a6fb0, 0, -0.06, 0, m);
+  // hair, cap, shades
+  B(r.head, 0.52, 0.1, 0.52, 0x2b1d14, 0, 0.2, 0, m);
+  B(r.head, 0.56, 0.16, 0.56, 0x1c2a50, 0, 0.3, 0, m);
+  B(r.head, 0.5, 0.06, 0.22, 0x0d0d0d, 0, 0.22, 0.34, m); // brim
+  B(r.head, 0.12, 0.12, 0.04, 0xf2c94c, 0, 0.32, 0.29, m);
+  B(r.head, 0.42, 0.1, 0.03, 0x0a0a0a, 0, 0.05, 0.265, m); // sunglasses
+  B(r.head, 0.2, 0.04, 0.02, 0x9a5a4a, 0, -0.14, 0.255, m); // mouth
+  // baton
+  const bat = pivot(r.handR, 0, 0, 0);
+  B(bat, 0.08, 0.08, 0.9, 0x111111, 0, 0, 0.32, m);
+  B(bat, 0.08, 0.2, 0.08, 0x1a1a1a, 0, -0.06, 0.12, m);
+  r.weapon = bat;
+  // riot shield
+  const sh = pivot(r.handL, -0.16, 0.12, 0.05);
+  B(sh, 0.05, 0.9, 0.55, 0x9ad0ff, 0, 0, 0, m, { transparent: true, opacity: 0.45 });
+  B(sh, 0.06, 0.1, 0.55, 0x2a2a2a, 0, 0.42, 0, m);
+  B(sh, 0.06, 0.08, 0.3, 0xffffff, 0, 0.15, 0, m); // POLICE stripe
+  return finalize(r);
+}
+
+function finalize(r) {
+  r.matList = [...r.mats.values()];
+  for (const mt of r.matList) mt.emissive = new THREE.Color(0x000000);
+  // rest pose: arms slightly forward holding gear
+  r.armL.rotation.x = -0.5; r.armR.rotation.x = -0.3;
+  return r;
+}
+
+export function buildArcher() {
+  const p = { skin: 0xe9b995, pants: 0x5a4630, boots: 0x3a2a18, shirt: 0x4e6b2e, sleeve: 0x4e6b2e, belt: 0x3b2a17 };
+  const r = humanoid(p); const m = r.mats;
+  // leather jerkin + bracer
+  B(r.torso, 0.5, 0.5, 0.06, 0x7a5532, 0, 0.02, 0.21, m);
+  B(r.torso, 0.08, 0.08, 0.04, 0xc9a050, 0, -0.28, 0.22, m);
+  B(r.armL, 0.24, 0.2, 0.26, 0x7a5532, 0, -0.4, 0, m);
+  // hood (stepped) + cape
+  B(r.head, 0.58, 0.18, 0.58, 0x3d5a24, 0, 0.26, -0.02, m);
+  B(r.head, 0.58, 0.4, 0.12, 0x3d5a24, 0, 0.0, -0.26, m);
+  B(r.head, 0.1, 0.44, 0.5, 0x3d5a24, -0.28, 0.02, -0.02, m);
+  B(r.head, 0.1, 0.44, 0.5, 0x3d5a24, 0.28, 0.02, -0.02, m);
+  B(r.head, 0.3, 0.14, 0.2, 0x3d5a24, 0, 0.4, -0.2, m);
+  B(r.head, 0.12, 0.12, 0.14, 0x34501f, 0, 0.46, -0.34, m);
+  B(r.head, 0.5, 0.06, 0.04, 0x2a1d14, 0, 0.12, 0.255, m); // fringe
+  B(r.head, 0.12, 0.3, 0.1, 0x8a3b1e, 0.1, -0.3, -0.3, m); // braid
+  B(r.torso, 0.62, 0.7, 0.06, 0x34501f, 0, -0.05, -0.23, m); // cape
+  // quiver on back
+  const q = pivot(r.torso, 0.15, 0.12, -0.3);
+  q.rotation.z = -0.35;
+  B(q, 0.2, 0.62, 0.2, 0x6b4423, 0, 0, 0, m);
+  for (const [x, c] of [[-0.05, 0xf2f2f2], [0.05, 0xc0392b], [0, 0xf2f2f2]]) {
+    B(q, 0.04, 0.18, 0.04, 0x8a6a42, x, 0.38, 0, m);
+    B(q, 0.07, 0.1, 0.03, c, x, 0.45, 0, m);
+  }
+  // bow (built upright along Y, bulging forward on +Z; kept level by animation)
+  const bow = pivot(r.handL, 0, -0.02, 0.04);
+  const seg = [[-0.6, 0.0], [-0.45, 0.1], [-0.28, 0.16], [-0.1, 0.19], [0.1, 0.19], [0.28, 0.16], [0.45, 0.1], [0.6, 0.0]];
+  seg.forEach(([y, z]) => B(bow, 0.07, 0.2, 0.07, 0x8a5a2b, 0, y, z, m));
+  B(bow, 0.09, 0.16, 0.1, 0x3b2a17, 0, 0, 0.19, m); // grip
+  const str = B(bow, 0.02, 1.2, 0.02, 0xeeeeee, 0, 0, -0.02, m);
+  str.castShadow = false;
+  const nock = pivot(bow, 0, 0, 0);
+  B(nock, 0.035, 0.035, 0.75, 0x8a6a42, 0, 0.0, 0.3, m);
+  B(nock, 0.06, 0.06, 0.08, 0x9aa3ab, 0, 0.0, 0.68, m);
+  r.level = [{ obj: bow, arm: r.armL, offset: 0 }];
+  r.nockedArrow = nock;
+  r.style = 'bow';
+  return finalize(r);
+}
+
+export function buildGunner() {
+  const p = { skin: 0xd99a74, pants: 0x4a5560, boots: 0x1a1a1a, shirt: 0x3b4652, sleeve: 0x3b4652, belt: 0x1a1d22 };
+  const r = humanoid(p); const m = r.mats;
+  // plate carrier + pouches
+  B(r.torso, 0.72, 0.56, 0.48, 0x1d2329, 0, 0.06, 0, m);
+  for (const x of [-0.2, 0, 0.2]) B(r.torso, 0.14, 0.16, 0.06, 0x2a3138, x, -0.1, 0.26, m);
+  B(r.torso, 0.3, 0.08, 0.02, 0x4aa3ff, -0.1, 0.22, 0.25, m); // blue patch
+  B(r.armL, 0.24, 0.12, 0.26, 0x1d2329, 0, -0.06, 0, m);
+  B(r.armR, 0.24, 0.12, 0.26, 0x1d2329, 0, -0.06, 0, m);
+  // knee pads
+  B(r.legL, 0.28, 0.14, 0.08, 0x1d2329, 0, -0.42, 0.16, m);
+  B(r.legR, 0.28, 0.14, 0.08, 0x1d2329, 0, -0.42, 0.16, m);
+  // helmet + goggles + mask
+  B(r.head, 0.58, 0.22, 0.58, 0x2b3540, 0, 0.24, 0, m);
+  B(r.head, 0.62, 0.08, 0.62, 0x26303a, 0, 0.14, 0, m);
+  B(r.head, 0.46, 0.12, 0.05, 0x7fd4ff, 0, 0.04, 0.27, m);
+  B(r.head, 0.52, 0.18, 0.05, 0x23282e, 0, -0.14, 0.255, m);
+  B(r.head, 0.1, 0.1, 0.1, 0x3a4450, 0.24, 0.32, -0.12, m); // helmet light mount
+  // rifle in right hand (built along +Z, kept level by animation)
+  const gun = pivot(r.handR, -0.08, 0.02, 0.0);
+  B(gun, 0.1, 0.14, 0.9, 0x15181c, 0, 0.0, 0.3, m);          // body
+  B(gun, 0.06, 0.06, 0.38, 0x0d0f12, 0, 0.03, 0.92, m);      // barrel
+  B(gun, 0.08, 0.24, 0.12, 0x23282e, 0, -0.17, 0.42, m);     // magazine
+  B(gun, 0.08, 0.18, 0.1, 0x23282e, 0, -0.12, 0.08, m);      // grip
+  B(gun, 0.1, 0.16, 0.28, 0x15181c, 0, -0.02, -0.22, m);     // stock
+  B(gun, 0.06, 0.08, 0.2, 0x3a4450, 0, 0.12, 0.3, m);        // optic
+  const flash = B(gun, 0.2, 0.2, 0.22, 0xfff0a0, 0, 0.03, 1.2, null, { emissive: 0xffc030 });
+  flash.castShadow = false; flash.visible = false;
+  r.muzzle = flash;
+  r.level = [{ obj: gun, arm: r.armR, offset: 0 }];
+  r.style = 'rifle';
+  return finalize(r);
+}
+
+export function buildImp() {
+  const p = { skin: 0xb8342a, pants: 0x3a2418, boots: 0x7a1f1a, shirt: 0xb8342a, sleeve: 0xb8342a, belt: 0x2a1a10 };
+  const r = humanoid(p); const m = r.mats;
+  // pot belly + loincloth
+  B(r.torso, 0.5, 0.36, 0.12, 0xd0503e, 0, -0.08, 0.2, m);
+  B(r.torso, 0.4, 0.3, 0.06, 0x5a3420, 0, -0.42, 0.21, m);
+  // big head features: yellow eyes, grin, horns, ears
+  B(r.head, 0.14, 0.12, 0.03, 0xffd23a, -0.12, 0.05, 0.26, m);
+  B(r.head, 0.14, 0.12, 0.03, 0xffd23a, 0.12, 0.05, 0.26, m);
+  B(r.head, 0.05, 0.08, 0.04, 0x111111, -0.12, 0.05, 0.27, m);
+  B(r.head, 0.05, 0.08, 0.04, 0x111111, 0.12, 0.05, 0.27, m);
+  B(r.head, 0.3, 0.06, 0.03, 0x3a0a0a, 0, -0.13, 0.26, m);
+  for (const x of [-0.1, 0, 0.1]) B(r.head, 0.05, 0.05, 0.03, 0xf4f0e0, x, -0.1, 0.27, m);
+  for (const s of [-1, 1]) {
+    B(r.head, 0.1, 0.16, 0.1, 0x2a1a1a, s * 0.16, 0.32, 0, m);
+    B(r.head, 0.08, 0.14, 0.08, 0x1a1010, s * 0.2, 0.44, -0.03, m);
+    B(r.head, 0.06, 0.08, 0.06, 0xe8d8b0, s * 0.22, 0.54, -0.06, m);
+    B(r.head, 0.18, 0.1, 0.06, 0xa02a22, s * 0.32, 0.06, 0, m);   // pointy ears
+    B(r.head, 0.1, 0.08, 0.05, 0xa02a22, s * 0.42, 0.12, 0, m);
+  }
+  // bat wings
+  for (const s of [-1, 1]) {
+    const w = pivot(r.torso, s * 0.2, 0.25, -0.22);
+    w.rotation.y = s * 0.5;
+    B(w, 0.06, 0.08, 0.5, 0x3a0f12, 0, 0.18, -0.2, m);
+    B(w, 0.05, 0.36, 0.4, 0x6a1a20, 0, 0.0, -0.22, m);
+    B(w, 0.05, 0.22, 0.22, 0x6a1a20, 0, -0.22, -0.32, m);
+    r['wing' + (s > 0 ? 'R' : 'L')] = w;
+  }
+  // spade tail
+  const tail = pivot(r.torso, 0, -0.32, -0.2);
+  B(tail, 0.08, 0.08, 0.36, 0xb8342a, 0, -0.04, -0.18, m);
+  B(tail, 0.08, 0.08, 0.2, 0xb8342a, 0, 0.06, -0.38, m);
+  B(tail, 0.18, 0.16, 0.06, 0x2a1a1a, 0, 0.12, -0.48, m);
+  r.tail = tail;
+  // claws on both hands + small bone dagger
+  B(r.armL, 0.24, 0.06, 0.26, 0xe8d8b0, 0, -0.68, 0.04, m);
+  B(r.armR, 0.24, 0.06, 0.26, 0xe8d8b0, 0, -0.68, 0.04, m);
+  const dag = pivot(r.handR, 0, 0, 0);
+  B(dag, 0.06, 0.08, 0.2, 0x3a2418, 0, 0, 0.1, m);
+  B(dag, 0.04, 0.1, 0.4, 0xe8d8b0, 0, 0, 0.38, m);
+  r.weapon = dag;
+  r.scale = 0.78;          // imps are small
+  r.style = 'imp';
+  return finalize(r);
+}
+
+export function buildSniper() {
+  const p = { skin: 0xd9a07a, pants: 0x3a4630, boots: 0x1a1a1a, shirt: 0x4a5a3a, sleeve: 0x4a5a3a, belt: 0x1d2329 };
+  const r = humanoid(p); const m = r.mats;
+  // ghillie scraps on shoulders/back
+  for (const [x, y, z, c] of [[-0.3, 0.32, -0.1, 0x5c6b3e], [0.3, 0.3, -0.05, 0x3f4d2a], [0, 0.2, -0.24, 0x6b7b4a], [-0.15, -0.05, -0.23, 0x4a5a3a], [0.2, 0.05, -0.23, 0x2f3a26]])
+    B(r.torso, 0.24, 0.2, 0.08, c, x, y, z, m);
+  B(r.torso, 0.7, 0.14, 0.46, 0x2f3a26, 0, 0.3, 0, m);
+  // hood + face wrap + scope eye
+  B(r.head, 0.58, 0.24, 0.58, 0x3f4d2a, 0, 0.24, -0.02, m);
+  B(r.head, 0.58, 0.44, 0.1, 0x3f4d2a, 0, 0.02, -0.26, m);
+  B(r.head, 0.5, 0.18, 0.04, 0x2f3a26, 0, -0.14, 0.26, m);
+  B(r.head, 0.08, 0.08, 0.06, 0x6b7b4a, 0.22, 0.38, -0.12, m);
+  // long rifle with scope + bipod (built along +Z, kept level)
+  const gun = pivot(r.handR, -0.08, 0.02, 0.0);
+  B(gun, 0.1, 0.14, 1.0, 0x23282e, 0, 0, 0.32, m);
+  B(gun, 0.06, 0.06, 0.8, 0x15181c, 0, 0.03, 1.2, m);
+  B(gun, 0.08, 0.1, 0.06, 0x15181c, 0, 0.03, 1.62, m);        // muzzle brake
+  B(gun, 0.1, 0.1, 0.42, 0x111111, 0, 0.16, 0.38, m);         // scope
+  B(gun, 0.12, 0.12, 0.05, 0x7fd4ff, 0, 0.16, 0.6, m);
+  B(gun, 0.1, 0.18, 0.3, 0x3a4630, 0, -0.04, -0.24, m);       // stock
+  B(gun, 0.03, 0.24, 0.03, 0x15181c, -0.05, -0.14, 1.0, m);   // bipod
+  B(gun, 0.03, 0.24, 0.03, 0x15181c, 0.05, -0.14, 1.0, m);
+  const flash = B(gun, 0.26, 0.26, 0.3, 0xfff0a0, 0, 0.03, 1.8, null, { emissive: 0xffc030 });
+  flash.castShadow = false; flash.visible = false;
+  r.muzzle = flash;
+  r.level = [{ obj: gun, arm: r.armR, offset: 0 }];
+  r.style = 'rifle';
+  return finalize(r);
+}
+
+// ---------- neutral creeps ----------
+/** Floating loot cube on the ground. */
+export function buildLoot(color) {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(boxGeo(0.45, 0.45, 0.45), new THREE.MeshLambertMaterial({ color, emissive: new THREE.Color(color).multiplyScalar(0.4) }));
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(0.55, 0.55, 0.55)), new THREE.LineBasicMaterial({ color: 0xffffff }));
+  const beam = new THREE.Mesh(boxGeo(0.12, 2.2, 0.12), new THREE.MeshBasicMaterial({ color: 0xfff3b0, transparent: true, opacity: 0.35, depthWrite: false }));
+  beam.position.y = 1.1;
+  g.add(core, edge, beam);
+  g.userData.spin = [core, edge];
+  return g;
+}
+
+/** Four-legged rig (bears). Provides the same rig fields the animator expects (dummy arms). */
+function quadruped(p) {
+  const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
+  const m = new Map(); const r = { root, body, mats: m };
+  r.torso = pivot(body, 0, 0.95, 0);
+  B(r.torso, 0.95, 0.75, 1.55, p.fur, 0, 0, 0, m);              // body
+  B(r.torso, 0.85, 0.3, 1.2, p.dark, 0, 0.42, -0.1, m);         // back hump
+  B(r.torso, 0.25, 0.25, 0.2, p.dark, 0, 0.15, -0.85, m);       // tail
+  r.head = pivot(body, 0, 1.15, 0.9);
+  B(r.head, 0.62, 0.55, 0.55, p.fur, 0, 0, 0, m);
+  B(r.head, 0.36, 0.28, 0.3, p.snout, 0, -0.1, 0.38, m);        // snout
+  B(r.head, 0.12, 0.1, 0.06, 0x111111, 0, -0.02, 0.54, m);      // nose
+  for (const sx of [-1, 1]) {
+    B(r.head, 0.16, 0.16, 0.1, p.dark, sx * 0.24, 0.32, -0.05, m); // ears
+    B(r.head, 0.08, 0.08, 0.03, p.eye, sx * 0.15, 0.1, 0.28, m);    // eyes
+  }
+  const legs = [];
+  for (const [x, z] of [[-0.3, 0.55], [0.3, 0.55], [-0.3, -0.55], [0.3, -0.55]]) {
+    const leg = pivot(body, x, 0.65, z);
+    B(leg, 0.28, 0.6, 0.32, p.fur, 0, -0.3, 0, m);
+    B(leg, 0.3, 0.12, 0.36, p.dark, 0, -0.6, 0.03, m);
+    legs.push(leg);
+  }
+  r.legL = legs[0]; r.legR = legs[1]; r.extraLegs = [legs[2], legs[3]];
+  r.armL = pivot(body, 0, 0, 0); r.armR = pivot(body, 0, 0, 0);    // dummies (bears bite with the head)
+  r.handL = pivot(r.armL, 0, 0, 0); r.handR = pivot(r.armR, 0, 0, 0);
+  r.style = 'beast';
+  return r;
+}
+export function buildDireBear() {
+  const r = quadruped({ fur: 0x5a3a22, dark: 0x3a2414, snout: 0x8a6a4a, eye: 0xff3a2a });
+  B(r.head, 0.1, 0.16, 0.06, 0xf2ead6, -0.1, -0.28, 0.48, r.mats); B(r.head, 0.1, 0.16, 0.06, 0xf2ead6, 0.1, -0.28, 0.48, r.mats); // fangs
+  B(r.torso, 1.0, 0.18, 0.4, 0x2a1a10, 0, 0.5, 0.55, r.mats);   // shaggy mane
+  r.scale = 1.35;
+  return finalize(r);
+}
+export function buildBlueBear() {
+  const r = quadruped({ fur: 0x4a6a9a, dark: 0x2f4a70, snout: 0x9ab0d0, eye: 0x111111 });
+  r.scale = 0.95;
+  return finalize(r);
+}
+function ghost(p) {
+  const r = humanoid({ skin: p.skin, pants: p.robe, boots: p.robe, shirt: p.robe, sleeve: p.robe, belt: p.dark });
+  const m = r.mats, ex = { transparent: true, opacity: 0.78 };
+  r.legL.parent.remove(r.legL); r.legR.parent.remove(r.legR);
+  for (const [w, y, d] of [[0.7, 0.62, 0.45], [0.6, 0.36, 0.38], [0.44, 0.16, 0.3]]) B(r.body, w, 0.26, d, p.robe, 0, y, 0, m, ex);   // tapered wisp tail
+  B(r.head, 0.6, 0.6, 0.6, p.robe, 0, 0.05, -0.04, m, ex);     // hood
+  B(r.head, 0.42, 0.4, 0.06, 0x0a0614, 0, 0, 0.26, m);           // dark face
+  B(r.head, 0.1, 0.06, 0.03, p.eye, -0.1, 0.04, 0.3, m, { emissive: p.eye });
+  B(r.head, 0.1, 0.06, 0.03, p.eye, 0.1, 0.04, 0.3, m, { emissive: p.eye });
+  r.hover = true;
+  return r;
+}
+export function buildBanshee() { const r = ghost({ skin: 0xd8d0f0, robe: 0x8a7ab8, dark: 0x4a3a78, eye: 0x9af0ff }); r.scale = 1.15; return finalize(r); }
+export function buildSmallBanshee() { const r = ghost({ skin: 0xd8d0f0, robe: 0xa89ad0, dark: 0x5a4a88, eye: 0x9af0ff }); r.scale = 0.85; return finalize(r); }
+export function buildAlphaThug() {
+  const p = { skin: 0x8a5a40, pants: 0x1a1a22, boots: 0xf0f0f0, shirt: 0xb83a3a, sleeve: 0xb83a3a, belt: 0x111111 };
+  const r = humanoid(p); const m = r.mats;
+  B(r.torso, 0.74, 0.62, 0.46, 0xa02a2a, 0, 0.05, 0, m);         // red varsity jacket
+  B(r.torso, 0.4, 0.06, 0.05, 0xf2c94c, 0, 0.2, 0.25, m);        // chain
+  B(r.head, 0.56, 0.12, 0.56, 0x111111, 0, 0.26, 0, m);          // snapback
+  B(r.head, 0.5, 0.05, 0.24, 0x111111, 0, 0.21, 0.32, m);
+  B(r.head, 0.44, 0.1, 0.03, 0x050505, 0, 0.05, 0.265, m);       // shades
+  const bat = pivot(r.handR, 0, 0, 0);
+  B(bat, 0.08, 0.08, 0.5, 0x2a2a2a, 0, 0, 0.2, m); B(bat, 0.14, 0.14, 0.55, 0x9aa3ab, 0, 0, 0.68, m);   // metal bat
+  r.weapon = bat; r.scale = 1.15;
+  return finalize(r);
+}
+export function buildHooligan() {
+  const p = { skin: 0xd09a74, pants: 0x2f6b3a, boots: 0x111111, shirt: 0x2f6b3a, sleeve: 0x2f6b3a, belt: 0x1a1a1a };
+  const r = humanoid(p); const m = r.mats;
+  B(r.torso, 0.06, 0.6, 0.44, 0xf0f0f0, -0.34, 0.02, 0, m); B(r.torso, 0.06, 0.6, 0.44, 0xf0f0f0, 0.34, 0.02, 0, m);   // track-suit stripes
+  B(r.head, 0.56, 0.14, 0.56, 0x2f2f2f, 0, 0.24, 0, m);          // beanie
+  const bot = pivot(r.handR, 0, 0, 0);
+  B(bot, 0.12, 0.12, 0.3, 0x2f6b3a, 0, 0, 0.2, m, { transparent: true, opacity: 0.8 }); B(bot, 0.06, 0.06, 0.16, 0x2f6b3a, 0, 0, 0.42, m);
+  r.weapon = bot;
+  return finalize(r);
+}
+export function buildOutlaw() {
+  const p = { skin: 0xb07a58, pants: 0x2a2a30, boots: 0x3a2414, shirt: 0x3a2a1a, sleeve: 0x3a2a1a, belt: 0x111111 };
+  const r = humanoid(p); const m = r.mats;
+  B(r.torso, 0.76, 0.6, 0.46, 0x2a1a10, 0, 0.05, 0, m);          // leather vest
+  B(r.torso, 0.5, 0.1, 0.05, 0x9aa3ab, 0, -0.1, 0.25, m);        // chain belt
+  B(r.head, 0.44, 0.2, 0.04, 0x8a2a2a, 0, -0.12, 0.26, m);       // bandana mask
+  B(r.head, 0.7, 0.06, 0.7, 0x3a2414, 0, 0.26, 0, m);            // hat brim
+  B(r.head, 0.44, 0.22, 0.44, 0x3a2414, 0, 0.38, 0, m);
+  const bar = pivot(r.handR, 0, 0, 0);
+  B(bar, 0.08, 0.08, 0.95, 0xb03030, 0, 0, 0.35, m); B(bar, 0.08, 0.22, 0.08, 0xb03030, 0, 0.08, 0.82, m);    // crowbar
+  r.weapon = bar; r.scale = 1.1;
+  return finalize(r);
+}
+export function buildWisp() {
+  const g = new THREE.Group();
+  const c = B(g, 0.3, 0.3, 0.3, 0xb89af0, 0, 0, 0, null, { emissive: 0x7a4ad0 });
+  const t = B(g, 0.16, 0.16, 0.5, 0xd8c8ff, 0, 0, -0.35, null, { emissive: 0x5a3aa0, transparent: true, opacity: 0.6 });
+  c.castShadow = t.castShadow = false;
+  return g;
+}
+/** Sleeping "Z" sprite (shared texture). */
+let zTex = null;
+export function buildZzz() {
+  if (!zTex) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 16;
+    const c = cv.getContext('2d'); c.fillStyle = '#e8f0ff';
+    for (const [x, y, w] of [[3, 3, 10], [9, 5, 2], [7, 7, 2], [5, 9, 2], [3, 11, 10]]) c.fillRect(x, y, w, 2);
+    zTex = new THREE.CanvasTexture(cv); zTex.magFilter = THREE.NearestFilter; zTex.minFilter = THREE.NearestFilter;
+  }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: zTex, transparent: true, depthWrite: false }));
+  s.scale.setScalar(0.45);
+  return s;
+}
+
+export const UNIT_BUILDERS = { direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
+
+// projectiles — built along +Z so lookAt() aims them
+export function buildArrow() {
+  const g = new THREE.Group();
+  B(g, 0.05, 0.05, 0.85, 0x8a6a42, 0, 0, 0, null);
+  B(g, 0.09, 0.09, 0.12, 0x9aa3ab, 0, 0, 0.46, null);
+  B(g, 0.12, 0.02, 0.14, 0xf2f2f2, 0, 0, -0.36, null);
+  B(g, 0.02, 0.12, 0.14, 0xc0392b, 0, 0, -0.36, null);
+  g.children.forEach((c) => (c.castShadow = false));
+  return g;
+}
+export function buildBullet() {
+  const g = new THREE.Group();
+  const t = B(g, 0.07, 0.07, 0.9, 0xfff3b0, 0, 0, 0, null, { emissive: 0xffd040 });
+  t.castShadow = false;
+  return g;
+}
+
+// ======================= STRUCTURES & PROPS =======================
+
+export function buildCastle() {
+  const g = new THREE.Group();
+  const stone = [0x8d8f93, 0x7f8186, 0x9a9ca0, 0x74767b];
+  const pick = (i) => stone[i % stone.length];
+  // main keep
+  B(g, 9, 9, 12, 0x86888d, 0, 4.5, 0, null);
+  // corner towers
+  const towers = [[-4.5, -6], [-4.5, 6], [4.5, -6], [4.5, 6]];
+  towers.forEach(([x, z], i) => {
+    B(g, 3.2, 13, 3.2, pick(i), x, 6.5, z, null);
+    for (let a = 0; a < 4; a++) {
+      const ox = [-1.2, 1.2][a % 2], oz = [-1.2, 1.2][a >> 1];
+      B(g, 0.9, 0.9, 0.9, 0x7a7c80, x + ox, 13.45, z + oz, null);
+    }
+    B(g, 3.6, 0.4, 3.6, 0x6e7075, x, 12.2, z, null);
+    // pointed roof (stacked)
+    B(g, 2.4, 1, 2.4, 0x6b2a24, x, 14.4, z, null);
+    B(g, 1.6, 1, 1.6, 0x7d3129, x, 15.4, z, null);
+    B(g, 0.8, 1, 0.8, 0x8e3a30, x, 16.4, z, null);
+  });
+  // wall crenellations
+  for (let z = -4; z <= 4; z += 2) {
+    B(g, 0.9, 0.9, 0.9, 0x7a7c80, 4.1, 9.45, z, null);
+    B(g, 0.9, 0.9, 0.9, 0x7a7c80, -4.1, 9.45, z, null);
+  }
+  for (let x = -2.5; x <= 2.5; x += 2.5) {
+    B(g, 0.9, 0.9, 0.9, 0x7a7c80, x, 9.45, 5.6, null);
+    B(g, 0.9, 0.9, 0.9, 0x7a7c80, x, 9.45, -5.6, null);
+  }
+  // brick accents
+  for (let i = 0; i < 70; i++) {
+    const face = i % 3;
+    const y = 0.6 + ((i * 37) % 80) / 10;
+    if (face === 0) B(g, 0.15, 0.5, 1, pick(i + 1), 4.55, y, -5 + ((i * 53) % 100) / 10, null);
+    else if (face === 1) B(g, 1, 0.5, 0.15, pick(i + 2), -4 + ((i * 29) % 80) / 10, y, 6.05, null);
+    else B(g, 1, 0.5, 0.15, pick(i + 3), -4 + ((i * 41) % 80) / 10, y, -6.05, null);
+  }
+  // gate facing +x
+  B(g, 0.3, 4.4, 3.4, 0x2a1d12, 4.55, 2.2, 0, null);
+  for (let z = -1.2; z <= 1.2; z += 0.6) B(g, 0.2, 4.2, 0.12, 0x3a3a3a, 4.75, 2.1, z, null);
+  B(g, 0.4, 0.6, 4.2, 0x6e7075, 4.6, 4.6, 0, null);
+  // banners
+  for (const z of [-2.6, 2.6]) {
+    B(g, 0.1, 3.2, 1.4, 0xa3221c, 4.6, 6.5, z, null);
+    B(g, 0.12, 0.8, 0.6, 0xe0b040, 4.62, 6.8, z, null);
+  }
+  // flag on top
+  B(g, 0.15, 4, 0.15, 0x4a3520, 0, 11, 0, null);
+  const flag = B(g, 0.1, 1.2, 2, 0xa3221c, 0, 12.3, 1.05, null);
+  g.userData.flag = flag;
+  // torches (emissive, flicker)
+  const torches = [];
+  for (const z of [-2, 2]) {
+    B(g, 0.2, 0.6, 0.2, 0x4a3520, 4.75, 3.6, z * 1.1, null);
+    const fl = B(g, 0.3, 0.3, 0.3, 0xffa030, 4.75, 4.05, z * 1.1, null, { emissive: 0xff7a00 });
+    fl.castShadow = false; torches.push(fl);
+  }
+  g.userData.torches = torches;
+  return g;
+}
+
+export function buildHQ() {
+  const g = new THREE.Group();
+  B(g, 10, 10, 12, 0xb8bcc2, 0, 5, 0, null);
+  B(g, 10.4, 0.5, 12.4, 0x9ea2a8, 0, 10.25, 0, null);
+  B(g, 10.4, 0.4, 12.4, 0x9ea2a8, 0, 0.2, 0, null);
+  // window strips on all faces
+  const glass = { emissive: 0x0b2a44 };
+  for (let y = 2.5; y <= 8.5; y += 2) {
+    B(g, 0.1, 0.9, 10.5, 0x4fa8e0, -5.03, y, 0, null, glass);
+    B(g, 0.1, 0.9, 10.5, 0x4fa8e0, 5.03, y, 0, null, glass);
+    B(g, 8.5, 0.9, 0.1, 0x4fa8e0, 0, y, 6.03, null, glass);
+    B(g, 8.5, 0.9, 0.1, 0x4fa8e0, 0, y, -6.03, null, glass);
+  }
+  // entrance facing -x
+  B(g, 0.2, 2.6, 3.2, 0x7fc4f0, -5.1, 1.5, 0, null, { emissive: 0x123a5a });
+  B(g, 2, 0.3, 4.4, 0x5a5e64, -6, 3, 0, null);
+  for (const z of [-1.9, 1.9]) B(g, 0.25, 2.8, 0.25, 0x5a5e64, -6.8, 1.5, z, null);
+  B(g, 0.15, 0.6, 3.6, 0x1c2a50, -5.12, 3.6, 0, null);
+  // rooftop
+  B(g, 3, 1.4, 3, 0x8a8e94, 2.5, 11.2, -3, null);
+  B(g, 1.4, 0.6, 1.4, 0x5a5e64, 2.5, 12.2, -3, null);
+  // helipad
+  B(g, 5, 0.1, 5, 0x3a3d42, -1.5, 10.55, 2, null);
+  B(g, 0.5, 0.12, 2.6, 0xf2c94c, -2.4, 10.62, 2, null);
+  B(g, 0.5, 0.12, 2.6, 0xf2c94c, -0.6, 10.62, 2, null);
+  B(g, 1.6, 0.12, 0.5, 0xf2c94c, -1.5, 10.62, 2, null);
+  // antenna + blinker
+  B(g, 0.2, 5, 0.2, 0x6a6e74, 3.5, 13, 3.5, null);
+  B(g, 0.9, 0.12, 0.12, 0x6a6e74, 3.5, 14.2, 3.5, null);
+  const blink = B(g, 0.35, 0.35, 0.35, 0xff2020, 3.5, 15.6, 3.5, null, { emissive: 0xff0000 });
+  blink.castShadow = false;
+  g.userData.blink = blink;
+  // flag
+  B(g, 0.15, 5, 0.15, 0xcccccc, -6.2, 2.5, 5.2, null);
+  const flag = B(g, 0.1, 1.1, 1.8, 0x2f6fd6, -6.2, 4.4, 6.1, null);
+  B(g, 0.12, 0.3, 1.8, 0xffffff, -6.2, 4.4, 6.1, null);
+  g.userData.flag = flag;
+  // sandbags / barriers out front
+  for (let z = -5; z <= 5; z += 1.2) {
+    if (Math.abs(z) < 2.2) continue;
+    B(g, 1, 0.5, 1.1, 0xa8956a, -7.6, 0.25, z, null);
+    B(g, 1, 0.45, 1.1, 0x9a8760, -7.6, 0.72, z + 0.3, null);
+  }
+  return g;
+}
+
+export function buildTree(scale = 1, hue = 0) {
+  const g = new THREE.Group();
+  const leaf = [0x3f7a2e, 0x4c8c36, 0x356a27, 0x5a9a3e][hue % 4];
+  B(g, 0.6, 2.2, 0.6, 0x5b3d22, 0, 1.1, 0, null);
+  B(g, 2.4, 1.2, 2.4, leaf, 0, 2.6, 0, null);
+  B(g, 1.8, 1.0, 1.8, leaf, 0, 3.6, 0, null);
+  B(g, 1.0, 0.8, 1.0, leaf, 0, 4.4, 0, null);
+  B(g, 0.6, 0.6, 0.6, leaf, 0.9, 2.3, 0.9, null);
+  g.scale.setScalar(scale);
+  return g;
+}
+export function buildPine(scale = 1) {
+  const g = new THREE.Group();
+  B(g, 0.5, 1.4, 0.5, 0x4a311b, 0, 0.7, 0, null);
+  const c = 0x2e5e2a;
+  B(g, 2.4, 0.8, 2.4, c, 0, 1.6, 0, null);
+  B(g, 1.8, 0.8, 1.8, 0x356b30, 0, 2.4, 0, null);
+  B(g, 1.2, 0.8, 1.2, c, 0, 3.2, 0, null);
+  B(g, 0.6, 0.8, 0.6, 0x356b30, 0, 4.0, 0, null);
+  g.scale.setScalar(scale);
+  return g;
+}
+export function buildRock(scale = 1) {
+  const g = new THREE.Group();
+  B(g, 1.4, 0.8, 1.1, 0x7d7f84, 0, 0.4, 0, null);
+  B(g, 0.8, 0.6, 0.7, 0x8e9095, 0.3, 0.9, 0.1, null);
+  B(g, 0.6, 0.4, 0.6, 0x6e7075, -0.6, 0.2, 0.4, null);
+  g.scale.setScalar(scale);
+  return g;
+}
+export function buildLamp() {
+  const g = new THREE.Group();
+  B(g, 0.25, 4.5, 0.25, 0x55595f, 0, 2.25, 0, null);
+  B(g, 1.2, 0.15, 0.2, 0x55595f, 0.5, 4.4, 0, null);
+  const l = B(g, 0.5, 0.2, 0.4, 0xfff3c0, 1.0, 4.25, 0, null, { emissive: 0xffd770 });
+  l.castShadow = false;
+  return g;
+}
+export function buildTorch() {
+  const g = new THREE.Group();
+  B(g, 0.22, 3.0, 0.22, 0x5b3d22, 0, 1.5, 0, null);
+  B(g, 0.5, 0.12, 0.5, 0x3a3a3a, 0, 3.0, 0, null);
+  for (const [x, z] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) B(g, 0.08, 0.35, 0.08, 0x3a3a3a, x, 3.2, z, null);
+  const fl = B(g, 0.34, 0.34, 0.34, 0xffa030, 0, 3.32, 0, null, { emissive: 0xff7a00 });
+  const fl2 = B(g, 0.2, 0.22, 0.2, 0xffe070, 0, 3.58, 0, null, { emissive: 0xffc040 });
+  fl.castShadow = fl2.castShadow = false;
+  g.userData.flames = [fl, fl2];
+  return g;
+}
+export function buildBarrel(fire = false) {
+  const g = new THREE.Group();
+  B(g, 0.8, 1.1, 0.8, 0x4a5560, 0, 0.55, 0, null);
+  B(g, 0.84, 0.1, 0.84, 0x2f363d, 0, 0.3, 0, null);
+  B(g, 0.84, 0.1, 0.84, 0x2f363d, 0, 0.85, 0, null);
+  if (fire) {
+    const f = B(g, 0.5, 0.4, 0.5, 0xff7a2e, 0, 1.25, 0, null, { emissive: 0xff5a00 });
+    f.castShadow = false; g.userData.flames = [f];
+  }
+  return g;
+}
+export function buildDumpster() {
+  const g = new THREE.Group();
+  B(g, 2.2, 1.2, 1.2, 0x2f6b3a, 0, 0.6, 0, null);
+  B(g, 2.3, 0.12, 1.3, 0x24502c, 0, 1.25, -0.05, null);
+  B(g, 0.3, 0.2, 0.3, 0x111111, -0.8, 0.1, 0.4, null);
+  B(g, 0.3, 0.2, 0.3, 0x111111, 0.8, 0.1, 0.4, null);
+  return g;
+}
+export function buildFence(len = 4) {
+  const g = new THREE.Group();
+  for (let x = -len / 2; x <= len / 2; x += 0.5) B(g, 0.06, 1.8, 0.06, 0x8a9096, x, 0.9, 0, null);
+  B(g, len, 0.06, 0.06, 0x8a9096, 0, 1.75, 0, null);
+  B(g, len, 0.06, 0.06, 0x8a9096, 0, 0.1, 0, null);
+  return g;
+}
+
+export function buildBarrier() {
+  const g = new THREE.Group();
+  B(g, 2.2, 0.8, 0.5, 0xd9d9d9, 0, 0.4, 0, null);
+  B(g, 2.4, 0.2, 0.7, 0xc4c4c4, 0, 0.1, 0, null);
+  for (let i = -0.8; i <= 0.8; i += 0.8) B(g, 0.35, 0.5, 0.52, 0xd03030, i, 0.45, 0, null);
+  return g;
+}
+export function buildBuilding(w, h, d, color) {
+  const g = new THREE.Group();
+  B(g, w, h, d, color, 0, h / 2, 0, null);
+  for (let y = 1.5; y < h - 0.5; y += 1.8)
+    for (let x = -w / 2 + 1; x <= w / 2 - 1; x += 1.5)
+      B(g, 0.8, 0.9, 0.05, (Math.random() < 0.3 ? 0xffe9a0 : 0x5c84a8), x, y, d / 2 + 0.03, null,
+        Math.random() < 0.3 ? { emissive: 0x6a5520 } : undefined);
+  return g;
+}
+export function buildCrate() {
+  const g = new THREE.Group();
+  B(g, 0.9, 0.9, 0.9, 0x9a6b3a, 0, 0.45, 0, null);
+  B(g, 0.95, 0.12, 0.95, 0x6e4a26, 0, 0.85, 0, null);
+  B(g, 0.95, 0.12, 0.95, 0x6e4a26, 0, 0.06, 0, null);
+  return g;
+}

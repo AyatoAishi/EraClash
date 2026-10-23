@@ -1,0 +1,785 @@
+// Match state: economy, training queues, AI, combat bookkeeping, particles, win/lose.
+import * as THREE from 'three';
+import { GAME, FACTIONS, UNITS, DIFFICULTY, defenseMult } from './config.js';
+import { Unit } from './unit.js';
+import { UPGRADES, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
+import { ABILITIES, ITEMS } from './config.js';
+import { NEUTRAL_TEAM, CAMP_RULES, CAMPS } from './neutrals.js';
+import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot } from './models.js';
+import { sfx } from './audio.js';
+
+const FACTION_BY_TEAM = ['medieval', 'modern'];
+
+export class Game {
+  /**
+   * @param {object} o
+   * @param {THREE.Scene} o.scene
+   * @param {number|null} o.playerTeam  0 / 1, or null for AI-vs-AI demo
+   * @param {string} o.difficulty
+   * @param {object} o.world
+   * @param {function} o.getViewX  returns camera x (for audio culling)
+   */
+  constructor({ scene, playerTeam, difficulty = 'normal', world, getViewX = () => 0 }) {
+    this.scene = scene;
+    this.world = world;
+    this.playerTeam = playerTeam;
+    this.diff = DIFFICULTY[difficulty];
+    this.diffId = difficulty;
+    this.getViewX = getViewX;
+    this.time = 0;
+    this.over = false;
+    this.winner = null;
+    this.overT = 0;
+    this.units = [];
+    this.particles = [];
+    this.projectiles = [];
+    this.markers = [];
+    this.decals = [];
+    this.loot = [];
+    this.nextCampSpawn = CAMP_RULES.firstSpawn;
+    this.listeners = {};
+    this.teams = [0, 1].map((t) => ({
+      team: t,
+      faction: FACTION_BY_TEAM[t],
+      gold: GAME.startGold,
+      income: GAME.incomePerSec * (this.isAI(t) ? this.diff.incomeMult : 1),
+      queue: [],
+      queuePaid: [],
+      // Barracks (per match)
+      upLevels: {},      // upgradeId -> level
+      unitMods: {},      // unitId -> flat stat bonuses from stat upgrades
+      costAdd: {},       // unitId -> extra hiring cost
+      grants: {},        // unitId -> [abilityId] added by upgrades
+      research: null,    // { id, t, total, price }
+      towers: 0,
+      trainT: 0,
+      isAI: this.isAI(t),
+      aiT: 0,
+      stats: { trained: 0, kills: 0, lost: 0, baseDamage: 0, goldSpent: 0 },
+      upgrades: {},   // familyId -> { damage, armor, ward, hp, hpRegen, attackSpeed, moveSpeed, range } (flat, stacked)
+    }));
+    this.bases = [0, 1].map((t) => ({
+      isBase: true, team: t,
+      hp: GAME.baseHP, maxHp: GAME.baseHP,
+      x: t === 0 ? -GAME.baseX : GAME.baseX,
+      pos: new THREE.Vector3(t === 0 ? -GAME.baseX : GAME.baseX, 0, 0),
+      shake: 0,
+      obj: t === 0 ? world.castle : world.hq,
+      dead: false,
+    }));
+    this.bases.forEach((b) => { b.obj.position.set(b.x, 0, 0); b.obj.rotation.set(0, 0, 0); });
+  }
+
+  /** Day/night: 5 min day then 5 min night, alternating, with a short fade. */
+  get dayNight() {
+    const { half, fade } = GAME.dayNight;
+    const t = this.time % (half * 2);
+    const night = t >= half;
+    const into = night ? t - half : t;            // seconds into the current phase
+    const ramp = Math.min(1, into / fade);
+    const f = night ? ramp : 1 - ramp;            // fades over the first `fade` seconds of each phase
+    return { night, f: this.time < fade && !night ? 0 : f, left: half - into, cycle: Math.floor(this.time / (half * 2)) + 1 };
+  }
+  isAI(t) { return this.playerTeam === null || t !== this.playerTeam; }
+  on(evt, fn) { (this.listeners[evt] ||= []).push(fn); }
+  emit(evt, ...a) { (this.listeners[evt] || []).forEach((fn) => fn(...a)); }
+
+  pop(team) { return this.units.filter((u) => u.team === team && !u.dead && !u.tower).length + this.teams[team].queue.length; }
+  unitCost(team, unitId) { return UNITS[unitId].cost + (this.teams[team].costAdd[unitId] || 0); }
+  upLevel(team, id) { return this.teams[team]?.upLevels[id] || 0; }
+  /** Logistics: multiplier on research & training durations. */
+  speedMult(team) {
+    if (!this.teams[team]) return 1; const L = this.upLevel(team, 'logistics'); return L ? 1 - UPGRADES.logistics.values.speed[L - 1] : 1; }
+  repairRates(team) { const L = this.upLevel(team, 'repairCrews'), R = GAME.repair; return { heal: R.heal + R.healPerLevel * L, drain: R.drain + R.drainPerLevel * L }; }
+  setRepair(team, on) {
+    const T = this.teams[team];
+    if (on && T.gold < 1) return 'Not enough gold';
+    T.repairOn = !!on;
+    this.emit('repair', team, T.repairOn);
+    return null;
+  }
+
+  // ---------------- Barracks research ----------------
+  /** Start researching the next level of an upgrade. Returns error string or null. */
+  research(team, id) {
+    const T = this.teams[team], U = UPGRADES[id];
+    if (!U || (U.faction !== 'both' && U.faction !== T.faction)) return 'Not available';
+    if (this.over) return 'Match is over';
+    const lvl = this.upLevel(team, id);
+    if (lvl >= U.max) return 'Already maxed';
+    if (T.research) return 'Already researching ' + UPGRADES[T.research.id].name;
+    const price = upgradePrice(U, lvl);
+    if (T.gold < price) return 'Not enough gold';
+    T.gold -= price; T.stats.goldSpent += price;
+    T.research = { id, t: 0, total: upgradeTime(U, lvl) * this.speedMult(team), price, level: lvl + 1 };
+    this.emit('researchStart', team, id);
+    return null;
+  }
+  cancelResearch(team) {
+    const T = this.teams[team];
+    if (!T.research) return false;
+    T.gold += T.research.price; T.stats.goldSpent -= T.research.price;
+    T.research = null;
+    return true;
+  }
+  /** Apply one level of an upgrade (called when research finishes). */
+  applyUpgrade(team, id) {
+    const T = this.teams[team], U = UPGRADES[id];
+    const lvl = (T.upLevels[id] = (T.upLevels[id] || 0) + 1);
+    for (const e of U.effects || []) {
+      if (e.type === 'unitStats') {
+        const m = (T.unitMods[e.unit] ||= {});
+        for (const [k, v] of Object.entries(e.perLevel)) m[k] = (m[k] || 0) + v;
+        T.costAdd[e.unit] = (T.costAdd[e.unit] || 0) + (e.costPerLevel || 0);
+      } else if (e.type === 'grantAbility' || (e.type === 'grantAtMax' && lvl === U.max)) {
+        const list = (T.grants[e.unit] ||= []);
+        if (!list.includes(e.ability)) list.push(e.ability);
+      } else if (e.type === 'towers') {
+        this.spawnTower(team, e.unit, T.towers++, e.rangeBonus);
+      } else if (e.type === 'baseHP') {
+        const b = this.bases[team]; b.maxHp += e.perLevel; b.hp += e.perLevel;
+      } else if (e.type === 'income') {
+        T.income += e.perLevel;
+      }
+    }
+    for (const u of this.units) if (!u.dead && u.team === team) { u.syncAbilities(); u.recalcStats(); }
+    this.emit('upgrade', team, id, lvl);
+  }
+
+  /** Invulnerable, unselectable archer/gunner standing on the base. */
+  spawnTower(team, unitId, idx, rangeBonus) {
+    const u = new Unit(this, unitId, team);
+    u.tower = true;
+    u.towerRange = rangeBonus;
+    u.invulnT = 0; u.shield.visible = false; u.bar.visible = false;
+    const b = this.bases[team];
+    const zs = [0, -3.2, 3.2, -1.6, 1.6, -4.6, 4.6];
+    const front = team === 0 ? b.x + 4.2 : b.x - 4.4;
+    const y = team === 0 ? 9.9 : 10.5;
+    u.spawnAt(front, zs[idx % zs.length]);
+    u.yOff = y;
+    u.obj.position.y = y;
+    u.order = { type: 'idle' };
+    u.recalcStats();
+    this.units.push(u);
+    this.scene.add(u.obj);
+    this.burst({ x: front, z: u.pos.z }, 10, [0xffffff, 0xf7c948], 2, 0.6);
+    return u;
+  }
+
+  // ---------------- economy / training ----------------
+  train(team, unitId) {
+    const T = this.teams[team], def = UNITS[unitId];
+    if (this.over) return 'Match is over';
+    if (FACTIONS[T.faction].units.indexOf(unitId) < 0) return 'Wrong faction';
+    if (T.queue.length >= GAME.queueMax) return 'Training queue full';
+    if (this.pop(team) >= GAME.popCap) return `Army limit reached (${GAME.popCap})`;
+    const cost = this.unitCost(team, unitId);
+    if (T.gold < cost) return 'Not enough gold';
+    T.gold -= cost;
+    T.stats.goldSpent += cost;
+    T.queue.push(unitId);
+    T.queuePaid.push(cost);
+    return null;
+  }
+
+  /** Cancel a queued troop and refund it in full. */
+  cancelQueue(team, index) {
+    const T = this.teams[team];
+    const id = T.queue[index];
+    if (!id) return false;
+    T.queue.splice(index, 1);
+    const paid = T.queuePaid.splice(index, 1)[0] ?? UNITS[id].cost;
+    T.gold += paid;
+    T.stats.goldSpent -= paid;
+    if (index === 0) T.trainT = 0;
+    return true;
+  }
+
+  spawn(team, unitId) {
+    const u = new Unit(this, unitId, team);
+    const sx = team === 0 ? -GAME.baseX + GAME.baseHalfX + 1.2 : GAME.baseX - GAME.baseHalfX - 1.2;
+    u.spawnAt(sx, (Math.random() - 0.5) * 6);
+    this.units.push(u);
+    this.scene.add(u.obj);
+    this.teams[team].stats.trained++;
+    if (team === this.playerTeam) sfx('train');
+    this.emit('spawn', u);
+    return u;
+  }
+
+  // ---------------- family upgrades (Barracks hook) ----------------
+  /** Add flat stats to a whole family on one team. Applies to living troops now and all future spawns. */
+  addFamilyUpgrade(team, familyId, stats) {
+    const ups = this.teams[team].upgrades;
+    const cur = (ups[familyId] ||= {});
+    for (const [k, v] of Object.entries(stats)) {
+      cur[k] = (cur[k] || 0) + v;
+    }
+    for (const u of this.units) if (!u.dead && u.team === team && u.family === familyId) u.recalcStats();
+    this.emit('upgrade', team, familyId, cur);
+  }
+
+  // ---------------- neutral camps ----------------
+  campBoxEmpty(c) {
+    return !this.units.some((u) => !u.dead && !u.tower && Math.hypot(u.pos.x - c.x, u.pos.z - c.z) < CAMP_RULES.boxRadius);
+  }
+  spawnCamp(c) {
+    c.units.forEach((id, k) => {
+      const u = new Unit(this, id, NEUTRAL_TEAM);
+      const a = (k / c.units.length) * Math.PI * 2;
+      const hx = c.x + Math.cos(a) * 1.4, hz = c.z + Math.sin(a) * 1.4;
+      u.spawnAt(hx, hz);
+      u.home = { x: hx, z: hz };
+      u.camp = c;
+      u.invulnT = 0; u.shield.visible = false;
+      u.nState = 'home';
+      u.facing = Math.atan2(-Math.cos(a), -Math.sin(a));
+      this.units.push(u);
+      this.scene.add(u.obj);
+    });
+    this.burst({ x: c.x, z: c.z }, 10, c.side === 'medieval' ? [0x7fbf3a, 0xffffff] : [0xf2c94c, 0x9aa3ab], 2.5, 0.6);
+    this.emit('campSpawn', c);
+  }
+  updateCamps() {
+    if (this.time < this.nextCampSpawn) return;
+    this.nextCampSpawn += CAMP_RULES.interval;
+    for (const c of CAMPS) if (this.campBoxEmpty(c)) this.spawnCamp(c);
+  }
+  /** A neutral got hit: its whole camp group joins the fight against the attacker's team. */
+  neutralAggro(n, src) {
+    if (!src || src.team === undefined || src.team === NEUTRAL_TEAM) return;
+    for (const c of this.units) {
+      if (c.dead || c.team !== NEUTRAL_TEAM || c.camp !== n.camp) continue;
+      if (Math.hypot(c.pos.x - n.pos.x, c.pos.z - n.pos.z) > 9 && c !== n) continue;
+      if (c.nState !== 'chase' || !c.nTarget || c.nTarget.dead) c.nTarget = src;
+      c.nState = 'chase';
+      c.aggroTeam = src.team;
+      c.lastHitT = this.time;
+    }
+  }
+  spawnLoot(itemId, p) {
+    const it = ITEMS[itemId]; if (!it) return;
+    const mesh = buildLoot(it.icon);
+    mesh.position.set(p.x, 0.5, p.z);
+    this.scene.add(mesh);
+    this.loot.push({ id: itemId, x: p.x, z: p.z, mesh, t: 0 });
+    this.emit('lootDrop', itemId, p);
+  }
+  updateLoot(dt) {
+    for (let i = this.loot.length - 1; i >= 0; i--) {
+      const L = this.loot[i];
+      L.t += dt;
+      L.mesh.position.y = 0.55 + Math.sin(L.t * 3) * 0.12;
+      L.mesh.userData.spin.forEach((m) => (m.rotation.y += dt * 1.6));
+      // AI troops grab loot they walk over; the player picks up with right-click (pickup order)
+      const taker = this.units.find((u) => !u.dead && !u.tower && !u.brainwashed && this.teams[u.team]?.isAI && u.items.includes(null) && Math.hypot(u.pos.x - L.x, u.pos.z - L.z) < 1.2);
+      if (taker) this.pickupLoot(taker, L);
+    }
+  }
+  /** `u` takes loot `L`. Returns false if its inventory is full. */
+  pickupLoot(u, L) {
+    if (L.taken || u.dead) return false;
+    if (u.addItem(L.id) < 0) { if (u.team === this.playerTeam) this.emit('invFull', u); return false; }
+    L.taken = true;
+    this.scene.remove(L.mesh);
+    this.loot.splice(this.loot.indexOf(L), 1);
+    this.burst({ x: L.x, z: L.z }, 8, [0xffffff, 0xfff3b0], 2, 0.5);
+    this.emit('pickup', u, L.id);
+    return true;
+  }
+  lootNear(p, r = 1.3) {
+    let best = null, bd = r;
+    for (const L of this.loot) { const d = Math.hypot(L.x - p.x, L.z - p.z); if (d < bd) { bd = d; best = L; } }
+    return best;
+  }
+  /** Banshee's Brainwash: the troop switches sides for a while, attacks its former allies, then despawns. */
+  brainwash(caster, t, A) {
+    const orig = t.team;
+    t.brainwashed = { t: A.duration, orig };
+    t.team = 1 - orig;
+    t._waiting = false; t._jungle = null; t._homing = false;
+    t.pendingHit = null; t.target = null; t.selected = false;
+    t.interrupt?.();
+    t.command({ type: 'charge' });
+    const purple = 0xb070ff;
+    t.ring.material = new THREE.MeshBasicMaterial({ color: purple, transparent: true, opacity: 0.9, depthWrite: false });
+    t.fill.material = new THREE.MeshBasicMaterial({ color: purple, depthWrite: false });
+    t.ring.visible = false;
+    this.burst(t.pos, 16, [0x9a6ad8, 0xd8c8ff, 0x5a3aa0], 3, 0.8);
+    if (this.audible(t.pos.x)) sfx('whiff', 40);
+    this.emit('brainwash', t, orig);
+  }
+  despawnBrainwashed(u) {
+    u.hp = 0;
+    u.die(null);
+    u.obj.visible = false; u.deathT = 2.6;
+  }
+
+  // ---------------- queries ----------------
+  findNearestEnemy(u, range) {
+    let best = null, bd = range * range;
+    for (const o of this.units) {
+      if (o.dead || o.team === u.team || o.tower) continue;
+      if (o.team === NEUTRAL_TEAM && o.aggroTeam !== u.team) continue;   // leave peaceful camps alone
+      const dx = o.pos.x - u.pos.x, dz = o.pos.z - u.pos.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bd) { bd = d2; best = o; }
+    }
+    return best;
+  }
+  baseTarget(team) { return this.bases[team]; }
+  baseClosestPoint(u, team) {
+    const b = this.bases[team];
+    return {
+      x: Math.max(b.x - GAME.baseHalfX, Math.min(b.x + GAME.baseHalfX, u.pos.x)),
+      z: Math.max(-GAME.baseHalfZ, Math.min(GAME.baseHalfZ, u.pos.z)),
+    };
+  }
+  distToBase(u, team) {
+    const p = this.baseClosestPoint(u, team);
+    return Math.hypot(p.x - u.pos.x, p.z - u.pos.z) - u.radius;
+  }
+  baseApproachPoint(u, team) {
+    const b = this.bases[team];
+    const faceX = team === 0 ? b.x + GAME.baseHalfX : b.x - GAME.baseHalfX;
+    return { x: faceX + (team === 0 ? 0.6 : -0.6), z: Math.max(-GAME.baseHalfZ + 0.8, Math.min(GAME.baseHalfZ - 0.8, u.pos.z * 0.98)) };
+  }
+
+  audible(x) { return Math.abs(x - this.getViewX()) < 34; }
+
+  // ---------------- combat callbacks ----------------
+  // ---------------- projectiles ----------------
+  fireProjectile(src, target) {
+    const pdef = src.def.projectile;
+    const mesh = pdef.kind === 'arrow' ? buildArrow() : pdef.kind === 'wisp' ? buildWisp() : buildBullet();
+    if (pdef.kind === 'sniper') mesh.scale.set(1.4, 1.4, 2.6);
+    const f = src.facing;
+    const start = new THREE.Vector3(src.pos.x + Math.sin(f) * 0.9, src.muzzleY + (src.yOff || 0), src.pos.z + Math.cos(f) * 0.9);
+    mesh.position.copy(start);
+    this.scene.add(mesh);
+    const end = this.projectileAim(target, src);
+    const dist0 = Math.max(0.5, start.distanceTo(end));
+    const dmg = src.rollDamage(), crit = src.lastCrit;
+    if (crit) mesh.scale.multiplyScalar(1.6);
+    this.projectiles.push({ mesh, src, target, start, end, dist0, u: 0, speed: pdef.speed, arc: pdef.arc, kind: pdef.kind, team: src.team, dmg, crit });
+    if (this.audible(src.pos.x)) sfx(pdef.kind === 'arrow' ? 'bow' : pdef.kind === 'sniper' ? 'snipe' : 'gun', 35);
+  }
+  projectileAim(target, src) {
+    if (target.isBase) { const p = this.baseClosestPoint(src, target.team); return new THREE.Vector3(p.x, 2.2, p.z); }
+    return new THREE.Vector3(target.pos.x, 1.4, target.pos.z);
+  }
+  // ---------------- evasion / abilities ----------------
+  onDodge(attacker, victim, kind) {
+    this.emit('dodge', victim.pos, kind, victim.team);
+    if (this.audible(victim.pos.x)) sfx('whiff', 60);
+  }
+
+  enemiesInRadius(src, r) {
+    return this.units.filter((o) => !o.dead && !o.tower && o.team !== src.team && Math.hypot(o.pos.x - src.pos.x, o.pos.z - src.pos.z) - o.radius <= r);
+  }
+
+  /** Execute an active ability. Returns false if it couldn't be cast. */
+  castAbility(u, A) {
+    if (A.id === 'snipeStance') {
+      const ok = u.toggleStance();
+      if (ok && u.team === this.playerTeam) sfx(u.stance === 'stand' ? 'click' : 'order');
+      return ok;
+    }
+    if (A.id === 'brainwash') {
+      const t = u.bwTarget; u.bwTarget = null;
+      if (!t || t.dead || t.brainwashed || t.tower || t.invulnerable) return false;
+      this.brainwash(u, t, A);
+      return true;
+    }
+    if (A.id === 'flurry' || A.id === 'suppressiveFire') {
+      const a = u.ability(A.id);
+      a.st.buffT = A.duration;
+      if (this.audible(u.pos.x)) sfx(A.id === 'flurry' ? 'bow' : 'gun', 40);
+      this.burst(u.pos, 8, A.id === 'flurry' ? [0x9ad87a, 0xffffff] : [0xffd040, 0xff7a2e], 2, 0.5, 0.8);
+      return true;
+    }
+    if (A.id === 'splatter') {
+      this.splatterBlast(u, A);
+      // self-destruct: no bounty for the enemy, model vanishes instantly
+      u._exploded = true;
+      u.hp = 0;
+      u.die(null);
+      u.obj.visible = false;
+      u.deathT = 2.6;
+      return true;
+    }
+    return false;
+  }
+
+  /** Splatter damage + slow (scales with Organic Matter). Used by the active and by Death Splatter. */
+  splatterBlast(u, A) {
+    const om = UPGRADES.organicMatter, lvl = this.upLevel(u.team, 'organicMatter');
+    const dmg = A.damage + (lvl ? om.values.damage[lvl - 1] : 0);
+    const hits = this.enemiesInRadius(u, A.radius);
+    for (const t of hits) {
+      const dealt = t.takeDamage(dmg, u, A.damageType);   // abilities can't be evaded
+      u.damageDealt += dealt;
+      if (lvl) t.addSlow(om.values.slow[lvl - 1], om.values.slowTime);
+    }
+    for (const b of this.bases) if (b.team !== u.team && this.distToBase(u, b.team) <= A.radius) this.damageBase(b.team, dmg, u, { x: u.pos.x, z: u.pos.z });
+    this.splatFX(u.pos, A.radius);
+    if (this.audible(u.pos.x)) sfx('splat', 30);
+    this.emit('ability', u, A, hits.length);
+    return hits.length;
+  }
+
+  /** Organic explosion: goo chunks + a gore splat on the ground that fades out. */
+  splatFX(p, r) {
+    const goo = [0x8a1c1c, 0xb8342a, 0x5c0f14, 0x7fbf3a, 0x4e7a1e, 0xd9c23a];
+    this.burst(p, 46, goo, 7, 1.4, 1.5);
+    this.burst(p, 18, [0xff4a2e, 0xffd23a], 4, 0.5, 0.9);
+    const g = new THREE.Group();
+    const n = Math.round(r * 9);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+      const s = 0.25 + Math.random() * 0.55;
+      const m = new THREE.Mesh(boxGeo(1, 1, 1), new THREE.MeshLambertMaterial({ color: goo[i % 4], transparent: true }));
+      m.scale.set(s, 0.04, s);
+      m.position.set(Math.cos(a) * d, 0.04 + i * 0.001, Math.sin(a) * d);
+      m.rotation.y = Math.random() * Math.PI;
+      g.add(m);
+    }
+    g.position.set(p.x, 0, p.z);
+    this.scene.add(g);
+    this.decals.push({ g, t: 0, life: 6 });
+  }
+
+  updateProjectiles(dt) {
+    const nxt = new THREE.Vector3();
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i];
+      const t = p.target;
+      if (!t.isBase && !t.dead) p.end.copy(this.projectileAim(t, p.src)); // homing until impact
+      p.u = Math.min(1, p.u + (p.speed * dt) / p.dist0);
+      const at = (u, out) => out.lerpVectors(p.start, p.end, u).setY(THREE.MathUtils.lerp(p.start.y, p.end.y, u) + p.arc * p.dist0 * 4 * u * (1 - u));
+      at(p.u, p.mesh.position);
+      at(Math.min(1, p.u + 0.02), nxt);
+      if (nxt.distanceToSquared(p.mesh.position) > 1e-6) p.mesh.lookAt(nxt);
+      if (p.u >= 1) {
+        if (t.isBase) { this.damageBase(t.team, p.dmg, p.src.dead ? null : p.src, p.end); if (p.crit) this.emit('crit', p.end, p.dmg); }
+        else if (!t.dead) {
+          const dodge = t.dodgeCheck(p.src);
+          if (dodge) { this.onDodge(p.src, t, dodge); this.scene.remove(p.mesh); this.projectiles.splice(i, 1); continue; }
+          const dealt = t.takeDamage(p.dmg, p.src, p.src.def.damageType || 'physical', { attack: true, ranged: true });
+          p.src.damageDealt += dealt;
+          p.src.onAttackLanded(t, dealt, p.dmg);
+          this.onHit(p.src, t);
+          if (p.crit) { this.emit('crit', t.pos, dealt); this.burst(t.pos, 6, [0xf7c948, 0xffe27a], 2.5, 0.5); }
+        }
+        this.scene.remove(p.mesh);
+        this.projectiles.splice(i, 1);
+      }
+    }
+  }
+
+  onHit(attacker, victim) {
+    const hs = { viking: 'hitAxe', police: 'hitBaton', archer: 'hitArrow', gunner: 'hitBullet', sniper: 'hitBullet', imp: 'hitAxe' };
+    if (this.audible(victim.pos.x)) sfx(hs[attacker.def.id] || 'hitAxe', 45);
+    this.burst(victim.pos, 3, [0xffffff, 0xffd0a0], 1.4, 0.35);
+  }
+
+  onUnitDeath(u, killer) {
+    if (u.brainwashed) {   // no bounty, no drops, no stats: it was never really theirs
+      if (!u._exploded) { this.burst(u.pos, 14, [0x9a6ad8, 0xd8c8ff, 0x3a2a5a], 4, 1.1); if (this.audible(u.pos.x)) sfx('death', 80); }
+      this.emit('death', u); return;
+    }
+    if (this.teams[u.team]) this.teams[u.team].stats.lost++;
+    if (u.team === NEUTRAL_TEAM && Math.random() < CAMP_RULES.dropChance) {
+      const pool = u.camp?.drops || Object.keys(ITEMS);
+      this.spawnLoot(pool[Math.floor(Math.random() * pool.length)], u.pos);
+    }
+    if (killer && !killer.brainwashed && this.teams[killer.team] && killer.team !== u.team) {   // brainwashed killers earn nobody gold
+      const T = this.teams[killer.team];
+      T.stats.kills++;
+      // kill bounty: % of the victim's hiring cost (neutrals have a fixed bounty)
+      const bounty = u.team === NEUTRAL_TEAM ? u.def.bounty || 0 : Math.round((u.paid ?? u.def.cost) * GAME.bountyPct);
+      T.gold += bounty; T.stats.bounty = (T.stats.bounty || 0) + bounty;
+      this.emit('bounty', u.pos, bounty, killer.team);
+    }
+    if (!u._exploded && u.ability('deathSplatter')) {   // Organic Matter max level
+      u._exploded = true;
+      this.splatterBlast(u, ABILITIES.splatter);
+      u.obj.visible = false; u.deathT = 2.6;
+    }
+    if (u.def.id === 'police' && this.upLevel(u.team, 'riotTraining') >= UPGRADES.riotTraining.max) {
+      for (const o of this.units) if (!o.dead && o !== u && o.team === u.team && o.def.id === 'police' && Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z) <= 10) {
+        o.hp = Math.min(o.maxHp, o.hp + UPGRADES.riotTraining.values.backupHeal);
+        this.burst(o.pos, 4, [0x5ce36f, 0xffffff], 1.5, 0.5);
+      }
+    }
+    if (u._exploded) { this.emit('death', u); return; }   // Splatter handles its own FX
+    if (this.audible(u.pos.x)) sfx('death', 80);
+    const cols = { viking: [0x7a2e22, 0xc8642a, 0x9aa3ab, 0xcdb995], police: [0x22325c, 0x1a2440, 0xf2c94c, 0x9ad0ff],
+      archer: [0x4e6b2e, 0x3d5a24, 0x7a5532, 0x8a5a2b], gunner: [0x3b4652, 0x1d2329, 0x4a5560, 0x7fd4ff],
+      imp: [0xb8342a, 0x7a1f1a, 0x3a2a2a, 0xffd23a], sniper: [0x4a5a3a, 0x2f3a26, 0x1a1d22, 0x6b7b4a],
+      direBear: [0x5a3a22, 0x3a2414, 0x8a6a4a], blueBear: [0x4a6a9a, 0x2f4a70, 0x9ab0d0],
+      banshee: [0x8a7ab8, 0xd8d0f0, 0x9af0ff], smallBanshee: [0xa89ad0, 0xd8d0f0, 0x9af0ff],
+      alphaThug: [0xa02a2a, 0xf2c94c, 0x1a1a22], hooligan: [0x2f6b3a, 0xf0f0f0, 0x2f2f2f], outlaw: [0x2a1a10, 0x8a2a2a, 0x9aa3ab] }[u.def.id] || [0x888888];
+    this.burst(u.pos, 14, cols, 4, 1.1);
+    this.emit('death', u);
+  }
+
+  damageBase(team, raw, src, at = null) {
+    const b = this.bases[team];
+    if (b.dead || this.over) return;
+    const dmg = raw * defenseMult(GAME.baseArmor);
+    b.hp = Math.max(0, b.hp - dmg);
+    b.shake = 0.18;
+    if (src) { src.damageDealt += dmg; this.teams[src.team].stats.baseDamage += dmg; }
+    if (this.audible(b.x)) sfx('baseHit', 220);
+    this.burst(at || { x: src ? src.pos.x + (team === 0 ? -0.6 : 0.6) : b.x, z: src ? src.pos.z : 0 }, 4,
+      team === 0 ? [0x8d8f93, 0x6e7075] : [0xb8bcc2, 0x4fa8e0], 2.5, 0.7, 1.3);
+    if (team === this.playerTeam) this.emit('baseHit');
+    if (b.hp <= 0) this.destroyBase(team);
+  }
+
+  destroyBase(team) {
+    const b = this.bases[team];
+    b.dead = true;
+    this.over = true;
+    for (const u of this.units) if (u.tower && u.team === team) u.obj.visible = false;
+    this.winner = 1 - team;
+    const cols = team === 0 ? [0x8d8f93, 0x6b2a24, 0x7a7c80] : [0xb8bcc2, 0x4fa8e0, 0x9ea2a8];
+    for (let k = 0; k < 6; k++) this.burst({ x: b.x + (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 10 }, 20, cols, 7, 2.2, 6);
+    this.emit('baseDestroyed', team);
+  }
+
+  // ---------------- AI ----------------
+  /** AI Barracks: occasionally picks an upgrade goal and saves gold for it (max ~30s), weighted by usefulness. */
+  aiPickUpgrade(T) {
+    const myUnits = this.units.filter((u) => u.team === T.team && !u.dead && !u.tower);
+    const b = this.bases[T.team];
+    const opts = upgradesFor(T.faction).map((U) => {
+      const lvl = this.upLevel(T.team, U.id);
+      if (lvl >= U.max) return null;
+      const price = upgradePrice(U, lvl);
+      let w = 1;
+      if (U.unit) w = 0.4 + myUnits.filter((u) => u.def.id === U.unit).length * 0.6;
+      if (U.id === 'finance') w = lvl === 0 ? 4 : 0.3;
+      if (U.id === 'reinforce') w = (1 - b.hp / b.maxHp) * 6;
+      if (U.effects?.[0]?.type === 'towers') w = 1.5;
+      w /= 1 + price / 300;          // prefer cheaper steps
+      return w > 0 ? { U, w } : null;
+    }).filter(Boolean);
+    if (!opts.length) return null;
+    let r = Math.random() * opts.reduce((a, o) => a + o.w, 0);
+    for (const o of opts) { r -= o.w; if (r <= 0) return o.U.id; }
+    return opts[0].U.id;
+  }
+  aiResearch(T, think) {
+    if (T.research) return;
+    if (!T.aiGoal) {
+      if (Math.random() < this.diff.researchRate * 0.25) { T.aiGoal = this.aiPickUpgrade(T); T.aiGoalT = 0; }
+      return;
+    }
+    const U = UPGRADES[T.aiGoal];
+    T.aiGoalT += think;
+    if (T.gold >= upgradePrice(U, this.upLevel(T.team, U.id))) { this.research(T.team, U.id); T.aiGoal = null; }
+    else if (T.aiGoalT > 30) T.aiGoal = null;
+  }
+  /** True while the AI is saving for an upgrade and buying this troop would break the plan. */
+  aiSaving(T, unitCost) {
+    if (!T.aiGoal) return false;
+    const threat = this.units.some((u) => u.team !== T.team && !u.dead && Math.abs(u.pos.x - this.bases[T.team].x) < 25);
+    if (threat) return false;
+    const U = UPGRADES[T.aiGoal];
+    return T.gold - unitCost < upgradePrice(U, this.upLevel(T.team, U.id));
+  }
+
+  aiRepair(T) {
+    const B = this.bases[T.team], f = B.hp / B.maxHp;
+    if (!T.repairOn && f < 0.65 && T.gold > 40) T.repairOn = true;
+    else if (T.repairOn && (f > 0.95 || T.gold < 15)) T.repairOn = false;
+  }
+
+  updateAI(T, dt) {
+    T.aiT -= dt;
+    if (T.aiT > 0) return;
+    T.aiT = this.diff.thinkEvery * (0.7 + Math.random() * 0.6);
+    if (Math.random() < this.diff.hesitate) return;
+    const roster = FACTIONS[T.faction].units.map((id) => UNITS[id]);
+    const melees = roster.filter((d) => d.type === 'melee').sort((a, b) => a.cost - b.cost);
+    const rangeds = roster.filter((d) => d.type === 'ranged').sort((a, b) => a.cost - b.cost);
+    const ranged = rangeds.length > 1 && Math.random() < 0.25 ? rangeds[1 + Math.floor(Math.random() * (rangeds.length - 1))] : rangeds[0];
+    // mostly the cheap core melee, sometimes a specialist (e.g. Imp)
+    const melee = melees.length > 1 && Math.random() < 0.2 ? melees[1 + Math.floor(Math.random() * (melees.length - 1))] : melees[0];
+    const mine = [...this.units.filter((u) => u.team === T.team && !u.dead).map((u) => u.def), ...T.queue.map((id) => UNITS[id])];
+    const nM = mine.filter((d) => d.type === 'melee').length, nR = mine.length - nM;
+    // keep roughly 1 ranged per 2 melee, always open with a melee body in front
+    // commit to a pick until it's affordable (otherwise expensive specialists never get saved up for)
+    T.aiNext ||= (ranged && nM >= 2 && nR < nM / 2 ? ranged : melee).id;
+    this.aiResearch(T, this.diff.thinkEvery);
+    this.aiRepair(T);
+    const uc = this.unitCost(T.team, T.aiNext);
+    if (T.gold >= uc && T.queue.length < 2 && !this.aiSaving(T, uc) && !this.train(T.team, T.aiNext)) T.aiNext = null;
+
+    // AI groups up at home and launches waves (wave size per difficulty) — lets packs/auras work
+    const threat = this.units.some((u) => u.team !== T.team && u.team !== NEUTRAL_TEAM && !u.dead && !u.tower && Math.abs(u.pos.x - this.bases[T.team].x) < 25);
+    if (this.diff.waveSize > 1) {
+      const home = this.units.filter((u) => u.team === T.team && !u.dead && u.order.type === 'idle' && u._waiting);
+      if (home.length >= this.diff.waveSize || (threat && home.length)) home.forEach((u) => { u._waiting = false; u.command({ type: 'charge' }); });
+    }
+    this.aiJungle(T, threat);
+  }
+
+  /**
+   * AI jungling: now and then the troops waiting at home go clear a camp on their own side,
+   * grab any drop, and walk back. Recalled instantly if the base is threatened.
+   */
+  aiJungle(T, threat) {
+    const mine = this.units.filter((u) => u.team === T.team && !u.dead && !u.tower && !u.brainwashed);
+    const dir = T.team === 0 ? 1 : -1;
+    const rally = { x: this.bases[T.team].x + dir * (GAME.baseHalfX + 3), z: 0 };
+    const campAlive = (c) => this.units.filter((n) => !n.dead && n.team === NEUTRAL_TEAM && n.camp === c);
+    for (const u of mine) {
+      if (u._jungle) {
+        const c = CAMPS.find((k) => k.id === u._jungle);
+        if (threat) { u._jungle = null; u.command({ type: 'charge' }); continue; }
+        const alive = campAlive(c);
+        if (alive.length) {
+          if (u.order.type !== 'attack' || u.order.target?.dead) {
+            alive.sort((a, b) => Math.hypot(a.pos.x - u.pos.x, a.pos.z - u.pos.z) - Math.hypot(b.pos.x - u.pos.x, b.pos.z - u.pos.z));
+            u.command({ type: 'attack', target: alive[0] });
+          }
+          continue;
+        }
+        if (u.order.type === 'pickup') continue;
+        const L = u.items.includes(null) && this.loot.find((l) => !l.taken && Math.hypot(l.x - c.x, l.z - c.z) < 9 && !mine.some((o) => o.order.type === 'pickup' && o.order.loot === l));
+        if (L) { u.command({ type: 'pickup', loot: L }); continue; }
+        u._jungle = null; u._homing = true;
+        u.command({ type: 'move', point: { x: rally.x + (Math.random() - 0.5) * 2, z: (Math.random() - 0.5) * 6 } });
+      } else if (u._homing && u.order.type === 'idle') { u._homing = false; u._waiting = this.diff.waveSize > 1; if (!u._waiting) u.command({ type: 'charge' }); }
+    }
+    if (threat || this.time - (T.jungleT ?? -999) < 20) return;
+    T.jungleT = this.time;
+    if (Math.random() > 0.6) return;                                   // not every chance: keeps it unpredictable
+    const waiting = mine.filter((u) => u._waiting && u.order.type === 'idle');
+    // easy AI (waveSize 1) never waits at home, so it pulls a couple of fresh troops instead
+    const crew = waiting.length >= 2 ? waiting : (this.diff.waveSize <= 1 ? mine.filter((u) => !u._jungle && !u._homing && Math.abs(u.pos.x - this.bases[T.team].x) < 18).slice(0, 2) : []);
+    if (crew.length < 2) return;
+    const camps = CAMPS.filter((c) => c.side === T.faction && campAlive(c).length);
+    if (!camps.length) return;
+    const c = camps[Math.floor(Math.random() * camps.length)];
+    crew.forEach((u) => { u._waiting = false; u._jungle = c.id; u.command({ type: 'idle' }); });
+    this.emit('aiJungle', T.team, c);
+  }
+
+  // ---------------- FX ----------------
+  burst(p, n, colors, speed = 3, life = 1, size = 1) {
+    for (let i = 0; i < n; i++) {
+      const s = (0.12 + Math.random() * 0.14) * size;
+      const m = new THREE.Mesh(boxGeo(1, 1, 1), sharedMat(colors[i % colors.length]));
+      m.scale.setScalar(s);
+      m.position.set(p.x, 0.8 + Math.random() * 0.8, p.z);
+      this.scene.add(m);
+      this.particles.push({
+        m, s, life, max: life,
+        v: new THREE.Vector3((Math.random() - 0.5) * speed, Math.random() * speed * 0.9 + 1, (Math.random() - 0.5) * speed),
+        spin: new THREE.Vector3(Math.random() * 8, Math.random() * 8, 0),
+      });
+    }
+  }
+
+  marker(point, color) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.7, 4, 1), new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.rotation.z = Math.PI / 4;
+    m.position.set(point.x, 0.08, point.z);
+    this.scene.add(m);
+    this.markers.push({ m, t: 0 });
+  }
+
+  // ---------------- main tick ----------------
+  update(dt, camQuat) {
+    this.time += this.over ? 0 : dt;
+
+    if (!this.over) {
+      for (const T of this.teams) {
+        T.gold += T.income * dt;
+        // base repair toggle: heal for gold, only drains while the base is damaged
+        const B = this.bases[T.team];
+        if (T.repairOn && B.hp < B.maxHp && !B.dead) {
+          const r = this.repairRates(T.team);
+          if (T.gold >= r.drain * dt) { T.gold -= r.drain * dt; B.hp = Math.min(B.maxHp, B.hp + r.heal * dt); T.stats.repaired = (T.stats.repaired || 0) + r.heal * dt; }
+          else { T.repairOn = false; this.emit('repair', T.team, false, 'gold'); }
+        }
+        if (T.queue.length) {
+          const def = UNITS[T.queue[0]];
+          T.trainT += dt;
+          if (T.trainT >= def.trainTime * this.speedMult(T.team)) {
+            T.trainT = 0;
+            const u = this.spawn(T.team, T.queue.shift());
+            u.paid = T.queuePaid.shift() ?? u.def.cost;
+            if (T.isAI && this.diff.waveSize > 1) { u._waiting = true; u.command({ type: 'idle' }); }
+          }
+        } else T.trainT = 0;
+        if (T.research) {
+          T.research.t += dt;
+          if (T.research.t >= T.research.total) { const id = T.research.id; T.research = null; this.applyUpgrade(T.team, id); }
+        }
+        if (T.isAI) this.updateAI(T, dt);
+      }
+    } else this.overT += dt;
+
+    for (let i = this.units.length - 1; i >= 0; i--) {
+      const u = this.units[i];
+      const remove = u.update(dt, camQuat);
+      if (u.dead && remove) { u.dispose(); this.units.splice(i, 1); }
+    }
+
+    // base shake + collapse
+    for (const b of this.bases) {
+      if (b.shake > 0) {
+        b.shake -= dt;
+        b.obj.position.x = b.x + (Math.random() - 0.5) * 0.25 * (b.shake / 0.18);
+      } else b.obj.position.x = b.x;
+      if (b.dead) {
+        b.obj.position.y = Math.max(-14, b.obj.position.y - dt * 4);
+        b.obj.rotation.z = Math.sin(this.overT * 30) * 0.01;
+      }
+    }
+
+    this.updateProjectiles(dt);
+    if (!this.over) { this.updateCamps(); this.updateLoot(dt); }
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
+      p.v.y -= 14 * dt;
+      p.m.position.addScaledVector(p.v, dt);
+      if (p.m.position.y < 0.08) { p.m.position.y = 0.08; p.v.y *= -0.3; p.v.x *= 0.6; p.v.z *= 0.6; }
+      p.m.rotation.x += p.spin.x * dt; p.m.rotation.y += p.spin.y * dt;
+      p.m.scale.setScalar(p.s * Math.max(0, p.life / p.max));
+      if (p.life <= 0) { this.scene.remove(p.m); this.particles.splice(i, 1); }
+    }
+    for (let i = this.decals.length - 1; i >= 0; i--) {
+      const d = this.decals[i];
+      d.t += dt;
+      const f = Math.max(0, 1 - Math.max(0, d.t - d.life * 0.5) / (d.life * 0.5));
+      d.g.children.forEach((m) => (m.material.opacity = f));
+      if (d.t > d.life) { this.scene.remove(d.g); d.g.children.forEach((m) => m.material.dispose()); this.decals.splice(i, 1); }
+    }
+    for (let i = this.markers.length - 1; i >= 0; i--) {
+      const k = this.markers[i];
+      k.t += dt;
+      k.m.scale.setScalar(1.4 - k.t * 1.5);
+      k.m.material.opacity = 1 - k.t / 0.6;
+      if (k.t > 0.6) { this.scene.remove(k.m); k.m.geometry.dispose(); k.m.material.dispose(); this.markers.splice(i, 1); }
+    }
+  }
+
+  dispose() {
+    this.units.forEach((u) => u.dispose());
+    this.particles.forEach((p) => this.scene.remove(p.m));
+    this.decals.forEach((d) => this.scene.remove(d.g)); this.decals = [];
+    this.loot.forEach((L) => this.scene.remove(L.mesh)); this.loot = [];
+    this.markers.forEach((k) => this.scene.remove(k.m));
+    this.projectiles.forEach((p) => this.scene.remove(p.mesh));
+    this.units = []; this.particles = []; this.markers = []; this.projectiles = [];
+    this.bases.forEach((b) => { b.obj.position.set(b.x, 0, 0); b.obj.rotation.set(0, 0, 0); });
+  }
+}

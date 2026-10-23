@@ -1,0 +1,168 @@
+// ============================================================
+//  BARRACKS UPGRADES — per match only (reset every game).
+//  max: number of levels (Infinity = unlimited)
+//  price / time: array (per level) or { base, step } (base + step * currentLevel)
+//  effects: declarative, applied by Game.applyUpgrade(). Passive tweaks read their level
+//           at runtime through game.upLevel(team, id) (see unit.js).
+//  icon: SVG symbol id in index.html (every upgrade has its own)
+// ============================================================
+
+const BASE_TIME = { base: 6, step: 1.5, cap: 30 };   // unlimited stat upgrades: 6s, +1.5s per level, max 30s
+
+export const UPGRADES = {
+  // ===================== MEDIEVAL =====================
+  oneManArmy: {
+    id: 'oneManArmy', faction: 'medieval', category: 'troop', unit: 'viking', icon: 'u-onemanarmy',
+    name: 'One Man Army', max: 5,
+    price: [50, 100, 200, 400, 600], time: [8, 12, 16, 20, 25],
+    values: { damage: [1, 2, 3, 4, 5], hpRegen: [0.1, 0.2, 0.3, 0.4, 0.5], armor: [0.5, 1, 1.5, 2, 2.5], lifestealAtMax: 20 },
+    desc: 'Improves <b>Lone Wolf</b>: extra damage, HP regen and armor while it\'s active. Max level: Lone Wolf also grants <b>20% lifesteal</b>.',
+    levelText: (l, U) => `Lone Wolf +${U.values.damage[l - 1]} dmg, +${U.values.hpRegen[l - 1]} regen, +${U.values.armor[l - 1]} armor${l === 5 ? ', 20% lifesteal' : ''}`,
+  },
+  proteinBoost: {
+    id: 'proteinBoost', faction: 'medieval', category: 'troop', unit: 'viking', icon: 'u-protein',
+    name: 'Protein Boost', max: Infinity,
+    price: { base: 100, step: 10 }, time: BASE_TIME,
+    effects: [{ type: 'unitStats', unit: 'viking', perLevel: { hp: 5, armor: 0.1, damage: 0.3, hpRegen: 0.1 }, costPerLevel: 5 }],
+    desc: 'Every Viking: <b>+5 HP, +0.1 armor, +0.3 damage, +0.1 HP regen</b>. Vikings cost +5g per level.',
+    levelText: (l) => `+${5 * l} HP, +${(0.1 * l).toFixed(1)} armor, +${(0.3 * l).toFixed(1)} dmg · cost +${5 * l}g`,
+  },
+  flurry: {
+    id: 'flurry', faction: 'medieval', category: 'troop', unit: 'archer', icon: 'u-flurry',
+    name: 'Flurry', max: 5,
+    price: [100, 250, 400, 550, 700], time: [10, 14, 18, 22, 26],
+    effects: [{ type: 'grantAbility', unit: 'archer', ability: 'flurry' }],
+    desc: 'Archers gain the active <b>Flurry</b> (Q-slot after their passive): +60/90/120/150/180 attack speed for 4s.',
+    levelText: (l) => `Flurry: +${[60, 90, 120, 150, 180][l - 1]} attack speed for 4s`,
+  },
+  accuracyTraining: {
+    id: 'accuracyTraining', faction: 'medieval', category: 'troop', unit: 'archer', icon: 'u-accuracy',
+    name: 'Accuracy Training', max: Infinity,
+    price: { base: 100, step: 10 }, time: BASE_TIME,
+    effects: [{ type: 'unitStats', unit: 'archer', perLevel: { hp: 3, damage: 0.6, hpRegen: 0.05 }, costPerLevel: 7.5 }],
+    desc: 'Every Archer (incl. Battlement archers): <b>+3 HP, +0.6 damage, +0.05 HP regen</b>. Archers cost +7.5g per level.',
+    levelText: (l) => `+${3 * l} HP, +${(0.6 * l).toFixed(1)} dmg · cost +${(7.5 * l).toFixed(1)}g`,
+  },
+  organicMatter: {
+    id: 'organicMatter', faction: 'medieval', category: 'troop', unit: 'imp', icon: 'u-organic',
+    name: 'Organic Matter', max: 5,
+    price: [80, 160, 260, 400, 600], time: [10, 14, 18, 22, 28],
+    values: { damage: [10, 20, 30, 40, 50], slow: [10, 15, 20, 25, 30], slowTime: 3 },
+    effects: [{ type: 'grantAtMax', unit: 'imp', ability: 'deathSplatter' }],
+    desc: 'Improves <b>Splatter</b>: +10–50 damage and a 10–30% slow for 3s. Max level: Imps gain <b>Death Splatter</b> (auto-explode on death).',
+    levelText: (l, U) => `Splatter +${U.values.damage[l - 1]} dmg, ${U.values.slow[l - 1]}% slow 3s${l === 5 ? ', Death Splatter' : ''}`,
+  },
+  hellWorkout: {
+    id: 'hellWorkout', faction: 'medieval', category: 'troop', unit: 'imp', icon: 'u-hellwork',
+    name: 'Hell Workout', max: Infinity,
+    price: { base: 90, step: 10 }, time: BASE_TIME,
+    effects: [{ type: 'unitStats', unit: 'imp', perLevel: { hp: 4, damage: 0.4, hpRegen: 0.15 }, costPerLevel: 9 }],
+    desc: 'Every Imp: <b>+4 HP, +0.4 damage, +0.15 HP regen</b>. Imps cost +9g per level.',
+    levelText: (l) => `+${4 * l} HP, +${(0.4 * l).toFixed(1)} dmg · cost +${9 * l}g`,
+  },
+  battlement: {
+    id: 'battlement', faction: 'medieval', category: 'base', icon: 'u-battlement',
+    name: 'Battlement', max: 5,
+    price: [100, 200, 400, 800, 1600], time: [12, 16, 20, 25, 30],
+    effects: [{ type: 'towers', unit: 'archer', rangeBonus: 15 }],
+    desc: 'Adds <b>+1 Archer on the castle walls</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Archer upgrades.',
+    levelText: (l) => `${l} wall archer${l > 1 ? 's' : ''}`,
+  },
+
+  // ===================== MODERN =====================
+  riotTraining: {
+    id: 'riotTraining', faction: 'modern', category: 'troop', unit: 'police', icon: 'u-riot',
+    name: 'Riot Training', max: 5,
+    price: [60, 120, 220, 400, 600], time: [8, 12, 16, 20, 25],
+    values: { armorPerOfficer: [0.5, 0.875, 1.25, 1.625, 2], backupHeal: 25 },
+    desc: 'Improves <b>Thin Blue Line</b>: each nearby officer also gives +0.5–2 armor. Max level: <b>Backup</b> — when an officer dies, officers within 10 range heal 25 HP.',
+    levelText: (l, U) => `+${U.values.armorPerOfficer[l - 1]} armor per nearby officer${l === 5 ? ', Backup heal' : ''}`,
+  },
+  kevlar: {
+    id: 'kevlar', faction: 'modern', category: 'troop', unit: 'police', icon: 'u-kevlar',
+    name: 'Kevlar Program', max: Infinity,
+    price: { base: 100, step: 10 }, time: BASE_TIME,
+    effects: [{ type: 'unitStats', unit: 'police', perLevel: { hp: 6, armor: 0.15, damage: 0.15, hpRegen: 0.1 }, costPerLevel: 5 }],
+    desc: 'Every Police Officer: <b>+6 HP, +0.15 armor, +0.15 damage, +0.1 HP regen</b>. Officers cost +5g per level.',
+    levelText: (l) => `+${6 * l} HP, +${(0.15 * l).toFixed(2)} armor · cost +${5 * l}g`,
+  },
+  suppressiveFire: {
+    id: 'suppressiveFire', faction: 'modern', category: 'troop', unit: 'gunner', icon: 'u-suppress',
+    name: 'Suppressive Fire', max: 5,
+    price: [100, 250, 400, 550, 700], time: [10, 14, 18, 22, 26],
+    effects: [{ type: 'grantAbility', unit: 'gunner', ability: 'suppressiveFire' }],
+    desc: 'Gunners gain the active <b>Suppressive Fire</b>: for 4s their shots deal +2–10 damage and knock the target back 0.3–0.5.',
+    levelText: (l) => `Suppressive Fire: +${[2, 4, 6, 8, 10][l - 1]} dmg, ${[0.3, 0.35, 0.4, 0.45, 0.5][l - 1]} knockback`,
+  },
+  drills: {
+    id: 'drills', faction: 'modern', category: 'troop', unit: 'gunner', icon: 'u-drills',
+    name: 'Marksmanship Drills', max: Infinity,
+    price: { base: 100, step: 10 }, time: BASE_TIME,
+    effects: [{ type: 'unitStats', unit: 'gunner', perLevel: { hp: 3, damage: 0.4, hpRegen: 0.05 }, costPerLevel: 7.5 }],
+    desc: 'Every Gunner (incl. Overwatch gunners): <b>+3 HP, +0.4 damage, +0.05 HP regen</b>. Gunners cost +7.5g per level.',
+    levelText: (l) => `+${3 * l} HP, +${(0.4 * l).toFixed(1)} dmg · cost +${(7.5 * l).toFixed(1)}g`,
+  },
+  hollowPoints: {
+    id: 'hollowPoints', faction: 'modern', category: 'troop', unit: 'sniper', icon: 'u-hollow',
+    name: 'Hollow Points', max: 5,
+    price: [75, 150, 250, 375, 550], time: [10, 14, 18, 22, 28],
+    values: { critBonus: [0.1, 0.2, 0.3, 0.4, 0.5] },
+    desc: 'Improves <b>Bull\'s Eye</b>: crit damage +10–50% (up to +120%). Max level: crits every <b>3rd</b> attack instead of 4th.',
+    levelText: (l, U) => `Bull's Eye crit +${70 + U.values.critBonus[l - 1] * 100}%${l === 5 ? ', every 3rd shot' : ''}`,
+  },
+  ghillie: {
+    id: 'ghillie', faction: 'modern', category: 'troop', unit: 'sniper', icon: 'u-ghillie',
+    name: 'Ghillie Conditioning', max: Infinity,
+    price: { base: 110, step: 12 }, time: BASE_TIME,
+    effects: [{ type: 'unitStats', unit: 'sniper', perLevel: { hp: 4, damage: 0.6, hpRegen: 0.05 }, costPerLevel: 10 }],
+    desc: 'Every Sniper: <b>+4 HP, +0.6 damage, +0.05 HP regen</b>. Snipers cost +10g per level.',
+    levelText: (l) => `+${4 * l} HP, +${(0.6 * l).toFixed(1)} dmg · cost +${10 * l}g`,
+  },
+  overwatch: {
+    id: 'overwatch', faction: 'modern', category: 'base', icon: 'u-overwatch',
+    name: 'Rooftop Overwatch', max: 5,
+    price: [100, 200, 400, 800, 1600], time: [12, 16, 20, 25, 30],
+    effects: [{ type: 'towers', unit: 'gunner', rangeBonus: 15 }],
+    desc: 'Adds <b>+1 Gunner on the HQ roof</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Gunner upgrades.',
+    levelText: (l) => `${l} rooftop gunner${l > 1 ? 's' : ''}`,
+  },
+
+  // ===================== SHARED (both factions) =====================
+  repairCrews: {
+    id: 'repairCrews', faction: 'both', category: 'base', icon: 'u-repair',
+    name: 'Repair Crews', max: Infinity,
+    price: { base: 100, step: 100 }, time: { base: 8, step: 2, cap: 30 },
+    desc: 'Base <b>Repair</b> heals +6 HP/s more per level, but drains +3 gold/s more.',
+    levelText: (l) => `Repair: ${10 + 6 * l} HP/s for ${5 + 3 * l} gold/s`,
+  },
+  logistics: {
+    id: 'logistics', faction: 'both', category: 'base', icon: 'u-logistics',
+    name: 'Logistics', max: 5,
+    price: [150, 300, 500, 750, 1000], time: [15, 20, 25, 32, 40],
+    values: { speed: [0.08, 0.16, 0.24, 0.32, 0.4] },
+    desc: '<b>Research and troop training</b> are 8% faster per level (up to 40%).',
+    levelText: (l) => `Research & training ${8 * l}% faster`,
+  },
+  reinforce: {
+    id: 'reinforce', faction: 'both', category: 'base', icon: 'u-reinforce',
+    name: 'Reinforce', max: Infinity,
+    price: { base: 200, step: 100 }, time: { base: 8, step: 2, cap: 30 },
+    effects: [{ type: 'baseHP', perLevel: 100 }],
+    desc: 'Your base gains <b>+100 max HP</b> (and is healed by 100).',
+    levelText: (l) => `+${100 * l} base HP`,
+  },
+  finance: {
+    id: 'finance', faction: 'both', category: 'base', icon: 'u-finance',
+    name: 'Finance', max: Infinity,
+    price: { base: 100, step: 400 }, time: { base: 10, step: 5, cap: 30 },
+    effects: [{ type: 'income', perLevel: 0.5 }],
+    desc: 'Passive income <b>+0.5 gold per second</b>.',
+    levelText: (l) => `+${(0.5 * l).toFixed(1)} gold/s`,
+  },
+};
+
+const pick = (v, lvl) => (Array.isArray(v) ? v[lvl] : Math.min(v.cap ?? Infinity, v.base + v.step * lvl));
+/** Price of the NEXT level when the current level is `lvl` (0 = not bought). */
+export const upgradePrice = (U, lvl) => pick(U.price, lvl);
+export const upgradeTime = (U, lvl) => pick(U.time, lvl);
+export const upgradesFor = (factionId) => Object.values(UPGRADES).filter((u) => u.faction === factionId || u.faction === 'both');

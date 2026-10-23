@@ -1,0 +1,256 @@
+// ============================================================
+//  PATCH NOTES — newest first. Every update to the game adds an entry here.
+//  version: MAJOR.MINOR.PATCH  (minor = new features/troops, patch = balance & small fixes)
+//  date: ISO with timezone (Asia/Manila)
+//  sections: { title, items: [string] }   — items may contain <b>, <em>
+// ============================================================
+export const PATCH_NOTES = [
+  {
+    version: '0.8.1', date: '2026-10-23T21:36:00+08:00', title: 'The real jungle',
+    sections: [
+      { title: 'New — Neutral roster (replaces the placeholders)', items: [
+        '<b>Bear den</b> (medieval top): <b>Dire Bear</b> + 2 <b>Blue Bears</b>. Dire Bear passive <b>Resentment</b>: after taking 30 damage, +5 damage and +30 attack speed for 3s.',
+        '<b>Wraith grove</b> (medieval bottom): <b>Banshee</b> + <b>Small Banshee</b>, ranged. Banshee passive <b>Immaterial</b>: 50% evasion. Active <b>Brainwash</b> (20s cooldown, cast at random while fighting): one troop it is fighting switches sides for 15s, attacks its former allies, then despawns.',
+        '<b>Thug corner</b> (modern top): <b>Alpha Thug</b> + 2 <b>Hooligans</b>. Alpha Thug passive <b>Morale Aura</b>: allies (and itself) within 4 range get +2 armor.',
+        '<b>Outlaw yard</b> (modern bottom): 2 <b>Outlaws</b>. Passive <b>Cleave</b>: melee attacks also hit enemies in a cone behind the target for 40% of the damage.',
+      ] },
+      { title: 'New — Camp behaviour', items: [
+        '<b>Day:</b> camps attack anyone who walks within <b>2 range</b>, or who attacks them.',
+        '<b>Night:</b> camps <b>sleep</b> (Zzz) and ignore passers-by; attacking one wakes the whole camp.',
+        'Creeps stay engaged while they are hitting you, not only while being hit.',
+      ] },
+      { title: 'New — Items', items: [
+        'Drop chance raised from 10% to <b>20%</b> per creep. Medieval camps drop medieval items, modern camps drop modern items.',
+        'Pick up by <b>selecting a troop and right-clicking the item</b> (closest selected troop with a free slot goes). Hover an item on the ground to see what it is. Items are lost when the carrier dies.',
+        'Medieval: <b>Rustic Sword</b> (+6 damage), <b>Old Man Shield</b> (blocks 5–7 damage from every basic attack), <b>Sash</b> (+1 move speed), <b>Quiver</b> (ranged troops only: +1 range, +30 attack speed).',
+        'Modern: <b>Shoulder Guard</b> (+2 armor, +2 ward), <b>Shackles</b> (melee: 20% on hit to <b>disarm</b> for 3s), <b>Riot Helmet</b> (+3 armor for 3s after being hit by a ranged attack), <b>Pocket Knife</b> (+4 damage; on hit, 3 damage to every enemy within 3 range).',
+        'New debuff <b>Disarm</b>: the troop can\'t start attacks (shown in the selection panel).',
+      ] },
+      { title: 'New — AI', items: [
+        'The AI now <b>farms the camps on its own side</b> now and then with the troops waiting at home, grabs the drops, and walks back. Recalled instantly if its base is threatened.',
+      ] },
+      { title: 'Balance', items: [
+        '<b>Repair Crews</b> is now <b>unlimited</b> (price +100 per level, research time grows to max 30s).',
+        'Kill bounty still follows what was actually paid, so troops made pricier by Barracks upgrades give the enemy more gold.',
+        'Brainwashed troops give no bounty when they die or when they kill.',
+      ] },
+    ],
+  },
+  {
+    version: '0.8.0', date: '2026-10-23T21:09:00+08:00', title: 'Jungle, night & repairs',
+    sections: [
+      { title: 'New — Neutral camps', items: [
+        'The map now extends above and below the lane: a <b>forest</b> on the medieval side and <b>back alleys</b> between buildings on the modern side, with 4 neutral camps.',
+        'Camps spawn at every full minute if their spawn ring is empty — so you can <b>pull and stack</b> them Dota-style.',
+        'Creeps only fight when attacked, chase up to 11 range, then walk home and heal. Some have passives and actives they cast on their own.',
+        'Each creep has a <b>10% chance to drop an item</b>; any troop with a free slot that walks over it picks it up.',
+        'Placeholder roster: Centaur Scout, Centaur Brute, Street Thug, Gang Boss. Placeholder items: 6.',
+        'New Help tab: Neutrals.',
+      ] },
+      { title: 'New — Day & night', items: [
+        '5 minutes of day, then 5 minutes of night, alternating. Sun/moon timer next to the match clock.',
+        'Medieval side now has a row of <b>torches</b> matching the modern street lamps; both light up the lane at night.',
+      ] },
+      { title: 'New — Repair (H)', items: [
+        'Toggle button next to the training queue: heals your base <b>+10 HP/s</b> for <b>5 gold/s</b> (only drains while damaged).',
+        'Barracks: <b>Repair Crews</b> (5 lv) — +6 HP/s and +3 gold/s drain per level.',
+        'Barracks: <b>Logistics</b> (5 lv) — research and troop training 8% faster per level (up to 40%).',
+      ] },
+      { title: 'New — Selection', items: [
+        'Click a <b>base</b> (yours or the enemy\'s) to see its HP, income, towers, repair state, current research and every upgrade it has.',
+        'Hovering a troop shows a highlight ring. Bigger click area, including prone Snipers.',
+      ] },
+      { title: 'Balance', items: [
+        'Base HP increased from 1500 to <b>2500</b>.',
+        '<b>Riot Training</b>: armor per nearby officer 0.3–1.5 → <b>0.5–2</b>.',
+        '<b>Suppressive Fire</b> reworked: no more slow or free Fervor; shots now deal <b>+2–10 damage</b> and <b>knock back 0.3–0.5</b>.',
+        '<b>Hollow Points</b> price 80/160/260/400/600 → <b>75/150/250/375/550</b>.',
+        'Unlimited upgrades now take longer per level (+1.5s per level, max 30s).',
+      ] },
+      { title: 'Fixes', items: ['Stats show at most 2 decimals.', 'Long upgrade names in the Barracks no longer overlap.', 'HUD no longer overlaps at smaller window widths.'] },
+    ],
+  },
+  {
+    version: '0.7.0', date: '2026-10-23T20:26:00+08:00', title: 'The Barracks',
+    sections: [
+      { title: 'New — Barracks (V)', items: [
+        'New building button next to the Shop. Spend gold on upgrades that last for the current match.',
+        'Upgrades have levels (fixed or unlimited), rising prices and a research time. One research at a time; click it again to cancel for a full refund.',
+        'Every upgrade has its own pixel icon; hover for every level\'s price and effect.',
+        'The AI now saves up for and researches upgrades too.',
+      ] },
+      { title: 'Medieval upgrades', items: [
+        '<b>One Man Army</b> (5 lv): Lone Wolf +1–5 dmg, +0.1–0.5 regen, +0.5–2.5 armor; max: 20% lifesteal.',
+        '<b>Protein Boost</b> (∞): Vikings +5 HP, +0.1 armor, +0.3 dmg, +0.1 regen per level; +5g cost.',
+        '<b>Flurry</b> (5 lv): Archers gain the active Flurry (+60–180 attack speed for 4s, 14s cooldown).',
+        '<b>Accuracy Training</b> (∞): Archers +3 HP, +0.6 dmg, +0.05 regen; +7.5g cost.',
+        '<b>Organic Matter</b> (5 lv): Splatter +10–50 dmg and a 10–30% slow; max: Death Splatter.',
+        '<b>Hell Workout</b> (∞): Imps +4 HP, +0.4 dmg, +0.15 regen; +9g cost.',
+        '<b>Battlement</b> (5 lv): +1 invulnerable archer on the castle wall per level (+15 range).',
+      ] },
+      { title: 'Modern upgrades', items: [
+        '<b>Riot Training</b> (5 lv): Thin Blue Line also gives +0.3–1.5 armor per nearby officer; max: Backup (officers heal 25 when an ally officer dies).',
+        '<b>Kevlar Program</b> (∞): Police +6 HP, +0.15 armor, +0.15 dmg, +0.1 regen; +5g cost.',
+        '<b>Suppressive Fire</b> (5 lv): Gunners gain an active: 4s of slowing shots (15–35%) + instant Fervor stacks.',
+        '<b>Marksmanship Drills</b> (∞): Gunners +3 HP, +0.4 dmg, +0.05 regen; +7.5g cost.',
+        '<b>Hollow Points</b> (5 lv): Bull\'s Eye crit +10–50%; max: crits every 3rd shot.',
+        '<b>Ghillie Conditioning</b> (∞): Snipers +4 HP, +0.6 dmg, +0.05 regen; +10g cost.',
+        '<b>Rooftop Overwatch</b> (5 lv): +1 invulnerable gunner on the HQ roof per level (+15 range).',
+      ] },
+      { title: 'Both sides', items: ['<b>Reinforce</b> (∞): base +100 max HP.', '<b>Finance</b> (∞): +0.5 gold/s.'] },
+      { title: 'New mechanics', items: ['<b>Lifesteal</b>: attacks heal for a % of post-mitigation damage dealt.', '<b>Slows</b>: movement-speed debuffs (strongest applies; spawn-shielded troops are immune).'] },
+      { title: 'Balance', items: ['<b>Imp Warrior</b>: Splatter damage 40 → <b>70</b>.', 'Kill bounty now uses what the victim actually cost (includes upgrade cost increases).'] },
+    ],
+  },
+  {
+    version: '0.6.2', date: '2026-10-23T18:59:00+08:00', title: 'Balance pass & Patch Notes',
+    sections: [
+      { title: 'New', items: [
+        'Patch Notes screen on the main menu (you are reading it).',
+        'Help → Troops: each card has a <b>Matchups</b> button that shows DPS and time-to-kill against every enemy troop (replaces the always-visible lines).',
+      ] },
+      { title: 'Police Officer', items: ['<b>Thin Blue Line</b>: damage per nearby officer increased from +1 to <b>+3.5</b> (still max 3 officers → up to +10.5).'] },
+      { title: 'Imp Warrior', items: [
+        'Cost reduced from 100g to <b>90g</b>.',
+        '<b>Splatter</b>: damage increased from 20 to <b>40</b>.',
+        '<b>Swift Step</b>: evasion while moving increased from 30% to <b>40%</b>.',
+      ] },
+      { title: 'Sniper', items: [
+        'Base range increased from 10 to <b>12</b>.',
+        'Damage increased from 15 to <b>16</b>.',
+        '<b>Snipe Stance</b>: setup channel 0.8s → <b>1s</b>. Range bonus +5 → <b>+6</b> (18 total).',
+        '<b>Snipe Stance</b> NEW: while prone, attacks <b>ignore 2 armor</b>.',
+        '<b>Snipe Stance</b>: standing back up is now a <b>1s channel</b> (can\'t move or shoot), then the ability goes on a <b>5s cooldown</b>.',
+      ] },
+      { title: 'UI', items: ['The Shop window now opens in the center of the screen.'] },
+    ],
+  },
+  {
+    version: '0.6.1', date: '2026-10-23T18:37:00+08:00', title: 'Sniper fixes',
+    sections: [
+      { title: 'Changes', items: [
+        '<b>S</b> now interrupts channels and attack wind-ups (Dota-style). Cancelling Snipe Stance setup refunds the cooldown.',
+        'Prone Snipers now look down the scope instead of face-planting into the ground.',
+        'Snipe Stance setup reduced from 3s to <b>0.8s</b>.',
+      ] },
+    ],
+  },
+  {
+    version: '0.6.0', date: '2026-10-23T18:21:00+08:00', title: 'The Sniper',
+    sections: [
+      { title: 'New troop — Sniper (Modern, Marksman)', items: [
+        '120g · 40 HP · 15 dmg · 30 attack speed · 1 armor · 1.4 move speed · range 10.',
+        '<b>Bull\'s Eye</b> (passive): every 4th attack crits for +70% damage.',
+        '<b>Snipe Stance</b> (Q): channel, then lie prone — 0 move speed, +5 range, +3 damage, takes double damage. Recast to stand.',
+      ] },
+      { title: 'AI', items: [
+        'AI Snipers go prone when targets are in long range and nothing is close; they stand up when threatened.',
+        'Fix: the AI now saves up for the troop it picked, so expensive troops (Imp, Sniper) actually get bought.',
+      ] },
+    ],
+  },
+  {
+    version: '0.5.1', date: '2026-10-23T18:07:00+08:00', title: 'Spawn shield',
+    sections: [
+      { title: 'New', items: ['Every troop is <b>invulnerable for 5s</b> after spawning (white shield bubble). It can be targeted but takes no damage and can\'t be crowd-controlled.'] },
+      { title: 'Viking Warrior', items: ['<b>Lone Wolf</b> now also grants <b>+3 armor</b>.'] },
+    ],
+  },
+  {
+    version: '0.5.0', date: '2026-10-23T17:44:00+08:00', title: 'Abilities, Imps & bounties',
+    sections: [
+      { title: 'New troop — Imp Warrior (Medieval, Melee)', items: [
+        '100g · 40 HP · 12 dmg · 65 attack speed · 2 armor · 4.5 move speed.',
+        '<b>Swift Step</b> (passive): +30% evasion while moving.',
+        '<b>Splatter</b> (Q): self-destruct, 20 magic damage in a 2.2 radius.',
+      ] },
+      { title: 'Systems', items: [
+        '<b>Ability system</b>: up to 4 slots per troop (any mix of passives/actives), cast with Q W E R or by clicking.',
+        '<b>Evasion & miss</b> (Dota-style). Abilities can\'t be dodged.',
+        '<b>Kill bounty</b>: killing a troop pays 40% of its cost. Passive income reduced from 5 to <b>2.5 gold/s</b>.',
+        'HP regen added to all troops (Viking 1, Police 1, Archer 0.5, Gunner 0.5, Imp 0.1).',
+      ] },
+      { title: 'Controls', items: [
+        'Buy keys only work while the Shop is open (defaults 1/2/3), per-troop and rebindable. Esc closes the Shop first.',
+        'Key bindings split into sections; keys only clash within the same section.',
+        'The Army button now tells you when there are no troops to select.',
+      ] },
+    ],
+  },
+  {
+    version: '0.4.0', date: '2026-10-23T16:43:00+08:00', title: 'Damage types rework',
+    sections: [
+      { title: 'Systems', items: [
+        'Three damage types: <b>Physical</b> (vs Armor), <b>Magic</b> (vs Ward), <b>True</b> (ignores both).',
+        'Armor and Ward now use Dota scaling: 2 → 10.7%, 5 → 23%, 10 → 37.5%.',
+        'Removed the 5 elemental resistances.',
+      ] },
+      { title: 'Viking Warrior', items: ['<b>Lone Wolf</b> reworked: +5 damage and +1 HP regen while no other <em>Viking</em> is within 9 range (other troop types no longer break it).'] },
+    ],
+  },
+  {
+    version: '0.3.2', date: '2026-10-23T16:36:00+08:00', title: 'HP regen & resistances',
+    sections: [
+      { title: 'Systems', items: ['Added HP regen stat.', 'Added 5 elemental resistances (later replaced in 0.4.0).'] },
+    ],
+  },
+  {
+    version: '0.3.1', date: '2026-10-23T16:29:00+08:00', title: 'Families',
+    sections: [
+      { title: 'Systems', items: [
+        'Every troop belongs to a family: <b>Melee</b> (Viking, Police) or <b>Marksman</b> (Archer, Gunner).',
+        'Family-wide upgrade hook for the future Barracks.',
+        'Shop renamed to War Camp / Recruitment.',
+      ] },
+    ],
+  },
+  {
+    version: '0.3.0', date: '2026-10-23T16:05:00+08:00', title: 'Passives',
+    sections: [
+      { title: 'New passives', items: [
+        'Viking — <b>Lone Wolf</b>: +5 damage with no ally within 9 range.',
+        'Police — <b>Thin Blue Line</b>: +1 damage per officer within 10 range (max +3).',
+        'Archer — <b>Eagle Eye</b>: 20% chance for +5 damage.',
+        'Gunner — <b>Fervor</b>: +6 attack speed per consecutive hit on the same target (max 10).',
+      ] },
+      { title: 'Systems', items: [
+        'Attack speed is now in attacks <b>per minute</b>.',
+        'Passive icons with hover tooltips, crit damage numbers.',
+        'Troops stick to their current target. AI attacks in groups.',
+      ] },
+      { title: 'Balance', items: ['Police damage 11 → 9. Gunner attack speed 75 → 60, HP 62.'] },
+    ],
+  },
+  {
+    version: '0.2.0', date: '2026-10-23T15:36:00+08:00', title: 'Ranged troops & the Shop',
+    sections: [
+      { title: 'New troops', items: ['<b>Archer</b> (Medieval) and <b>Gunner</b> (Modern) — ranged attackers with projectiles.'] },
+      { title: 'New', items: [
+        'Shop window (B) for buying troops, training queue with cancel/refund.',
+        'Attack-range circle when one troop is selected.',
+        '6 item slots per troop (placeholder for future drops).',
+        'Semi-pixel UI redesign, bigger main menu, UI scale option.',
+      ] },
+      { title: 'Fixes', items: ['Dragging on the minimap no longer starts a box selection.'] },
+    ],
+  },
+  {
+    version: '0.1.0', date: '2026-10-23T14:36:00+08:00', title: 'First playable',
+    sections: [
+      { title: 'New', items: [
+        'Player vs AI 1v1 lane battle: Medieval (left) vs Modern (right), 3 AI difficulties.',
+        'Starter troops: <b>Viking Warrior</b> and <b>Police Officer</b>.',
+        'Dota-style controls: box select, right-click move/attack, A-click attack, S stop, edge-pan camera.',
+        'Main menu, pause, options (key bindings, audio, graphics), help.',
+        'Voxel graphics, procedural sound and music, minimap, selection panel.',
+      ] },
+    ],
+  },
+];
+
+export const CURRENT_VERSION = PATCH_NOTES[0].version;
+
+export function formatPatchDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' (PHT)';
+}
