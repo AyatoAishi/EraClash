@@ -424,9 +424,10 @@ export class UI {
   buildHelp() {
     const troops = $('#help-troops');
     troops.innerHTML = '';
-    for (const u of Object.values(UNITS).filter((x) => x.faction !== 'neutral')) {
-      const f = FACTIONS[u.faction];
-      const enemies = Object.values(UNITS).filter((o) => o.faction !== u.faction && o.faction !== 'neutral');
+    // troops tab = every faction's hiring roster (units themselves don't belong to a faction)
+    const entries = Object.values(FACTIONS).flatMap((f) => f.units.map((id) => [UNITS[id], f]));
+    for (const [u, f] of entries) {
+      const enemies = Object.values(FACTIONS).filter((o) => o.id !== f.id).flatMap((o) => o.units.map((id) => UNITS[id]));
       // matchup table (hidden behind a button): your DPS/TTK vs theirs, base stats
       const rows = enemies.map((en) => {
         const mine = dps(u, en), theirs = dps(en, u);
@@ -437,7 +438,7 @@ export class UI {
         <div class="mu"><table><tr><th>vs</th><th>Your DPS</th><th>You kill it</th><th>Its DPS</th><th>It kills you</th></tr>${rows}</table>
         <div class="muted">Base stats only — abilities, passives and upgrades not included.</div></div>`;
       const c = document.createElement('div');
-      c.className = 'tcard ' + u.faction;
+      c.className = 'tcard ' + f.id;
       c.innerHTML = `
         <img src="${PORTRAITS[u.id].full}" alt="">
         <div class="tbody">
@@ -473,7 +474,7 @@ export class UI {
     const camps = CAMPS.map((c) => `<div><b>${c.name} (${c.z < 0 ? 'top' : 'bottom'}, ${c.side} side)</b>: ${c.units.map((id) => UNITS[id].name).join(' + ')} · drops ${c.drops.map((d) => `<span class="hitem" data-tip="item:${d}"><svg class="ico"><use href="#${ITEMS[d].sprite}"/></svg>${ITEMS[d].name}</span>`).join(', ')}</div>`).join('');
     const creeps = [...new Set(CAMPS.flatMap((c) => c.units))].map((id) => {
       const u = UNITS[id];
-      return `<div class="tcard neutral"><img src="${PORTRAITS[id].full}" alt=""><div class="tbody"><div class="tfac">Neutral · ${u.bounty}g bounty</div><h3>${u.name} <small>${u.role}</small></h3><p>${u.lore}</p>
+      return `<div class="tcard neutral"><img src="${PORTRAITS[id].full}" alt=""><div class="tbody"><div class="tfac">Neutral · ${fmt(u.cost * GAME.bountyPct)}g bounty</div><h3>${u.name} <small>${u.role}</small></h3><p>${u.lore}</p>
         <div class="stats"><div><span>HP</span><b>${u.hp}</b></div><div><span>Regen</span><b>${fmt(u.hpRegen)}/s</b></div><div><span>Damage</span><b>${u.damage}</b></div><div><span>Atk spd</span><b>${u.attackSpeed}/min</b></div><div><span>Armor</span><b>${u.armor}</b></div><div><span>Ward</span><b>${u.ward}</b></div><div><span>Move</span><b>${fmt(u.moveSpeed)}</b></div><div><span>Range</span><b>${u.type === 'ranged' ? u.range : 'Melee'}</b></div></div>
         ${u.abilities.map((a) => `<div class="tpass">${pIcon(a)}<div><b>${ABILITIES[a].name} <small class="${ABILITIES[a].kind}">${ABILITIES[a].kind}</small></b><span>${ABILITIES[a].desc}</span></div></div>`).join('')}</div></div>`;
     }).join('');

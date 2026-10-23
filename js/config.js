@@ -7,7 +7,7 @@
 export const GAME = {
   startGold: 100,
   incomePerSec: 2.5,
-  bountyPct: 0.4,        // killing an enemy troop pays 40% of its hiring cost
+  bountyPct: 0.4,        // killing any unit (troop or creep) pays 40% of its hiring cost (what was paid)
   baseHP: 2500,
   repair: { heal: 10, drain: 5, healPerLevel: 6, drainPerLevel: 3 },   // base repair toggle
   baseArmor: 0,
@@ -88,7 +88,12 @@ export const FAMILIES = {
 };
 
 /*
-  UNIT TEMPLATE
+  UNIT TEMPLATE — every unit (faction troops AND neutral creeps) uses the same schema.
+  Units don't belong to anyone: who can hire them is decided by FACTIONS[x].units (rosters),
+  who spawns them as creeps by CAMPS in neutrals.js. Any unit can be on team 0, 1 or 2 (neutral).
+  theme      = 'medieval' | 'modern' (visual/UI flavour only)
+  cost       = hiring cost; kill bounty is always GAME.bountyPct (40%) of what was paid (creeps: of cost)
+  vision     = [day, night]
   range      = reach measured edge-to-edge (melee ~1.2-1.3)
   aggro      = how far the troop "sees" enemies while charging
   evasion    = % chance to dodge an incoming ATTACK (abilities can't be evaded)
@@ -98,7 +103,7 @@ export const FAMILIES = {
 */
 export const UNITS = {
   viking: {
-    id: 'viking', name: 'Viking Warrior', faction: 'medieval', family: 'melee', role: 'Melee bruiser', type: 'melee',
+    id: 'viking', name: 'Viking Warrior', theme: 'medieval', family: 'melee', role: 'Melee bruiser', type: 'melee',
     cost: 50, trainTime: 1.5,
     hp: 115, hpRegen: 1, damage: 15, damageType: 'physical', attackSpeed: 54,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
@@ -107,7 +112,7 @@ export const UNITS = {
     lore: 'A horned raider from the frozen north. Hits hard, swings slow, and refuses to share the spotlight with another Viking.',
   },
   archer: {
-    id: 'archer', name: 'Archer', faction: 'medieval', family: 'marksman', role: 'Ranged marksman', type: 'ranged',
+    id: 'archer', name: 'Archer', theme: 'medieval', family: 'marksman', role: 'Ranged marksman', type: 'ranged',
     cost: 75, trainTime: 2.0,
     hp: 70, hpRegen: 0.5, damage: 16, damageType: 'physical', attackSpeed: 45,
     armor: 0, ward: 0, evasion: 0, missChance: 0,
@@ -117,7 +122,7 @@ export const UNITS = {
     lore: 'Longbow, green hood, steady hands. Big slow arrows that punch through armor better than fast weapons do. Dies fast if anything reaches her.',
   },
   imp: {
-    id: 'imp', name: 'Imp Warrior', faction: 'medieval', family: 'melee', role: 'Suicide skirmisher', type: 'melee',
+    id: 'imp', name: 'Imp Warrior', theme: 'medieval', family: 'melee', role: 'Suicide skirmisher', type: 'melee',
     cost: 90, trainTime: 1,
     hp: 40, hpRegen: 0.1, damage: 20, damageType: 'physical', attackSpeed: 65,
     armor: 2, ward: 1, evasion: 0, missChance: 0,
@@ -126,7 +131,7 @@ export const UNITS = {
     lore: 'A cackling little demon bound to the Keep. Fast, slippery while it runs, and more than happy to pop itself over a crowd.',
   },
   police: {
-    id: 'police', name: 'Police Officer', faction: 'modern', family: 'melee', role: 'Melee skirmisher', type: 'melee',
+    id: 'police', name: 'Police Officer', theme: 'modern', family: 'melee', role: 'Melee skirmisher', type: 'melee',
     cost: 50, trainTime: 1.5,
     hp: 117, hpRegen: 1, damage: 9, damageType: 'physical', attackSpeed: 81,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
@@ -135,7 +140,7 @@ export const UNITS = {
     lore: 'Standard-issue riot officer. Faster on foot and quicker with the baton. Alone he hits like a wet towel; in a squad he hits like a truck.',
   },
   gunner: {
-    id: 'gunner', name: 'Gunner', faction: 'modern', family: 'marksman', role: 'Ranged rifleman', type: 'ranged',
+    id: 'gunner', name: 'Gunner', theme: 'modern', family: 'marksman', role: 'Ranged rifleman', type: 'ranged',
     cost: 75, trainTime: 2.0,
     hp: 62, hpRegen: 0.5, damage: 9, damageType: 'physical', attackSpeed: 60,
     armor: 1, ward: 0, evasion: 0, missChance: 0,
@@ -145,7 +150,7 @@ export const UNITS = {
     lore: 'Tactical rifleman in a light vest. Out-ranges the archer. Starts slow, but the longer he holds one target the faster he fires.',
   },
   sniper: {
-    id: 'sniper', name: 'Sniper', faction: 'modern', family: 'marksman', role: 'Long-range specialist', type: 'ranged',
+    id: 'sniper', name: 'Sniper', theme: 'modern', family: 'marksman', role: 'Long-range specialist', type: 'ranged',
     cost: 120, trainTime: 2.5,
     hp: 40, hpRegen: 0.1, damage: 24, damageType: 'physical', attackSpeed: 30,
     armor: 1, ward: 0, evasion: 0, missChance: 0,
@@ -156,35 +161,74 @@ export const UNITS = {
   },
 };
 
-// ---------- NEUTRAL CREEPS (team 2) ----------
-const NEU = (o) => ({ faction: 'neutral', cost: 0, trainTime: 0, damageType: 'physical', evasion: 0, missChance: 0, aggro: 8, vision: [8, 4], ...o });
+// ---------- creeps: ordinary units too (hireable by any roster, spawned by camps in neutrals.js) ----------
 Object.assign(UNITS, {
-  // --- medieval forest ---
-  direBear: NEU({ id: 'direBear', name: 'Dire Bear', family: 'melee', role: 'Forest brute', type: 'melee', bounty: 60,
-    hp: 120, hpRegen: 2, damage: 16, attackSpeed: 45, armor: 3, ward: 4, moveSpeed: 3.4, range: 1.4, radius: 0.75,
-    abilities: ['resentment'], lore: 'The old bear of the pack. The more it bleeds, the angrier it swings.' }),
-  blueBear: NEU({ id: 'blueBear', name: 'Blue Bear', family: 'melee', role: 'Forest cub', type: 'melee', bounty: 30,
-    hp: 70, hpRegen: 1, damage: 8, attackSpeed: 30, armor: 2, ward: 1, moveSpeed: 3.1, range: 1.2, radius: 0.55,
-    abilities: [], lore: 'Smaller, bluer, and very loyal to the Dire Bear.' }),
-  banshee: NEU({ id: 'banshee', name: 'Banshee', family: 'marksman', role: 'Wraith caster', type: 'ranged', bounty: 60,
-    hp: 90, hpRegen: 2, damage: 20, attackSpeed: 50, armor: 4, ward: -1, moveSpeed: 3, range: 8, radius: 0.5,
-    projectile: { kind: 'wisp', speed: 16, arc: 0.05 }, abilities: ['immaterial', 'brainwash'],
-    lore: 'A wailing spirit. Blades pass straight through it, and its whisper turns soldiers against their own.' }),
-  smallBanshee: NEU({ id: 'smallBanshee', name: 'Small Banshee', family: 'marksman', role: 'Wraith', type: 'ranged', bounty: 30,
-    hp: 45, hpRegen: 1, damage: 10, attackSpeed: 40, armor: 4, ward: -1, moveSpeed: 3, range: 6, radius: 0.4,
-    projectile: { kind: 'wisp', speed: 16, arc: 0.05 }, abilities: [], lore: 'A younger wraith, still learning how to haunt.' }),
-  // --- modern back alleys ---
-  alphaThug: NEU({ id: 'alphaThug', name: 'Alpha Thug', family: 'melee', role: 'Gang leader', type: 'melee', bounty: 65,
-    hp: 90, hpRegen: 2, damage: 17, attackSpeed: 60, armor: 4, ward: 1, moveSpeed: 2.8, range: 1.3, radius: 0.6,
-    abilities: ['moraleAura'], lore: 'Runs the block. His crew fights harder when he is watching.' }),
-  hooligan: NEU({ id: 'hooligan', name: 'Hooligan', family: 'melee', role: 'Gang member', type: 'melee', bounty: 30,
-    hp: 80, hpRegen: 1.2, damage: 15, attackSpeed: 50, armor: 3, ward: 0, moveSpeed: 2.2, range: 1.3, radius: 0.5,
-    abilities: [], lore: 'Track suit, broken bottle, short temper.' }),
-  outlaw: NEU({ id: 'outlaw', name: 'Outlaw', family: 'melee', role: 'Biker outlaw', type: 'melee', bounty: 75,
-    hp: 120, hpRegen: 1.5, damage: 20, attackSpeed: 70, armor: 5, ward: 2, moveSpeed: 2.7, range: 1.4, radius: 0.6,
-    abilities: ['cleave'], lore: 'Leather, chains and a crowbar that hits everyone standing behind you too.' }),
+  direBear: {
+    id: 'direBear', name: 'Dire Bear', theme: 'medieval', family: 'melee', role: 'Forest brute', type: 'melee',
+    cost: 150, trainTime: 2.5,
+    hp: 120, hpRegen: 2, damage: 16, damageType: 'physical', attackSpeed: 45,
+    armor: 3, ward: 4, evasion: 0, missChance: 0,
+    moveSpeed: 3.4, range: 1.4, vision: [30, 16], aggro: 8, radius: 0.75,
+    abilities: ['resentment'],
+    lore: 'The old bear of the pack. The more it bleeds, the angrier it swings.',
+  },
+  blueBear: {
+    id: 'blueBear', name: 'Blue Bear', theme: 'medieval', family: 'melee', role: 'Forest cub', type: 'melee',
+    cost: 75, trainTime: 1.5,
+    hp: 70, hpRegen: 1, damage: 8, damageType: 'physical', attackSpeed: 30,
+    armor: 2, ward: 1, evasion: 0, missChance: 0,
+    moveSpeed: 3.1, range: 1.2, vision: [30, 16], aggro: 8, radius: 0.55,
+    abilities: [],
+    lore: 'Smaller, bluer, and very loyal to the Dire Bear.',
+  },
+  banshee: {
+    id: 'banshee', name: 'Banshee', theme: 'medieval', family: 'marksman', role: 'Wraith caster', type: 'ranged',
+    cost: 150, trainTime: 2.5,
+    hp: 90, hpRegen: 2, damage: 20, damageType: 'physical', attackSpeed: 50,
+    armor: 4, ward: -1, evasion: 0, missChance: 0,
+    moveSpeed: 3, range: 8, vision: [30, 16], aggro: 8, radius: 0.5,
+    projectile: { kind: 'wisp', speed: 16, arc: 0.05 },
+    abilities: ['immaterial', 'brainwash'],
+    lore: 'A wailing spirit. Blades pass straight through it, and its whisper turns soldiers against their own.',
+  },
+  smallBanshee: {
+    id: 'smallBanshee', name: 'Small Banshee', theme: 'medieval', family: 'marksman', role: 'Wraith', type: 'ranged',
+    cost: 75, trainTime: 1.5,
+    hp: 45, hpRegen: 1, damage: 10, damageType: 'physical', attackSpeed: 40,
+    armor: 4, ward: -1, evasion: 0, missChance: 0,
+    moveSpeed: 3, range: 6, vision: [30, 16], aggro: 8, radius: 0.4,
+    projectile: { kind: 'wisp', speed: 16, arc: 0.05 },
+    abilities: [],
+    lore: 'A younger wraith, still learning how to haunt.',
+  },
+  alphaThug: {
+    id: 'alphaThug', name: 'Alpha Thug', theme: 'modern', family: 'melee', role: 'Gang leader', type: 'melee',
+    cost: 162.5, trainTime: 2.5,
+    hp: 90, hpRegen: 2, damage: 17, damageType: 'physical', attackSpeed: 60,
+    armor: 4, ward: 1, evasion: 0, missChance: 0,
+    moveSpeed: 2.8, range: 1.3, vision: [30, 16], aggro: 8, radius: 0.6,
+    abilities: ['moraleAura'],
+    lore: 'Runs the block. His crew fights harder when he is watching.',
+  },
+  hooligan: {
+    id: 'hooligan', name: 'Hooligan', theme: 'modern', family: 'melee', role: 'Gang member', type: 'melee',
+    cost: 75, trainTime: 1.5,
+    hp: 80, hpRegen: 1.2, damage: 15, damageType: 'physical', attackSpeed: 50,
+    armor: 3, ward: 0, evasion: 0, missChance: 0,
+    moveSpeed: 2.2, range: 1.3, vision: [30, 16], aggro: 8, radius: 0.5,
+    abilities: [],
+    lore: 'Track suit, broken bottle, short temper.',
+  },
+  outlaw: {
+    id: 'outlaw', name: 'Outlaw', theme: 'modern', family: 'melee', role: 'Biker outlaw', type: 'melee',
+    cost: 187.5, trainTime: 2.5,
+    hp: 120, hpRegen: 1.5, damage: 20, damageType: 'physical', attackSpeed: 70,
+    armor: 5, ward: 2, evasion: 0, missChance: 0,
+    moveSpeed: 2.7, range: 1.4, vision: [30, 16], aggro: 8, radius: 0.6,
+    abilities: ['cleave'],
+    lore: 'Leather, chains and a crowbar that hits everyone standing behind you too.',
+  },
 });
-
 /*
   ABILITIES — modular. kind: 'passive' | 'active'. A troop may have up to GAME.maxAbilities (4)
   in any mix (4 actives, 2+2, 1+3 ...). Logic lives in unit.js (passives) and game.js (actives: castAbility).

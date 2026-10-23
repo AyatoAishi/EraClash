@@ -6,6 +6,17 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.10.2', date: '2026-10-24T02:48:00+08:00', title: 'One unit system',
+    sections: [
+      { title: 'Changes', items: [
+        'Every unit — faction troops and neutral creeps — now uses the <b>same stat sheet</b> (cost, train time, vision day/night, stats, abilities). Units no longer belong to a faction: factions just have a hiring roster, and camps have a spawn list. Any unit can fight for the left side, the right side or the neutrals.',
+        'Creeps now have a hiring cost and train time (not buyable yet): Dire Bear 150, Blue Bear 75, Banshee 150, Small Banshee 75, Alpha Thug 162.5, Hooligan 75, Outlaw 187.5. Vision 30/16 like everyone else.',
+        'Kill bounty is now one rule for everything: <b>40% of the unit\'s cost</b> (what was paid). Creep bounties are unchanged: 60 / 30 / 60 / 30 / 65 / 30 / 75.',
+        'Brainwash works for any owner: a hired Banshee can cast it on a random visible enemy troop within 8 range.',
+      ] },
+    ],
+  },
+  {
     version: '0.10.1', date: '2026-10-24T02:37:00+08:00', title: 'Stat boost pricing',
     sections: [
       { title: 'Balance', items: [

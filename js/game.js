@@ -439,7 +439,12 @@ export class Game {
       return ok;
     }
     if (A.id === 'brainwash') {
-      const t = u.bwTarget; u.bwTarget = null;
+      // works for any caster: neutral creeps pick their target in their brain; hired casters pick a random visible enemy troop in range
+      let t = u.bwTarget; u.bwTarget = null;
+      if (!t) {
+        const pool = this.units.filter((o) => !o.dead && !o.tower && !o.invulnerable && !o.brainwashed && o.team <= 1 && o.team !== u.team && this.canSee(u.team, o) && u.edgeDist(o) <= A.castRange);
+        t = pool[Math.floor(Math.random() * pool.length)];
+      }
       if (!t || t.dead || t.brainwashed || t.tower || t.invulnerable) return false;
       this.brainwash(u, t, A);
       return true;
@@ -552,8 +557,8 @@ export class Game {
     if (killer && !killer.brainwashed && this.teams[killer.team] && killer.team !== u.team) {   // brainwashed killers earn nobody gold
       const T = this.teams[killer.team];
       T.stats.kills++;
-      // kill bounty: % of the victim's hiring cost (neutrals have a fixed bounty)
-      const bounty = u.team === NEUTRAL_TEAM ? u.def.bounty || 0 : Math.round((u.paid ?? u.def.cost) * GAME.bountyPct);
+      // kill bounty: % of what the victim cost (what was paid; camp creeps / free spawns = their listed cost)
+      const bounty = Math.round((u.paid ?? u.def.cost) * GAME.bountyPct);
       T.gold += bounty; T.stats.bounty = (T.stats.bounty || 0) + bounty;
       this.emit('bounty', u.pos, bounty, killer.team);
     }

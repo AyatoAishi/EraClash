@@ -100,3 +100,7 @@ Systems are split so new features plug in without touching each other:
 ## Research queue & stat boosts (v0.10.0)
 - `team.research` = running entry, `team.rqueue` = queued `{id, price, level}` (max `GAME.researchQueueMax`). `Game.pendingLevel(team,id)` counts queued levels; `cancelResearch(team, slot)` (-1 = running) refunds that entry and later levels of the same upgrade.
 - Stat boost upgrades: `kind: 'statBoost'`, effect `{ type: 'statBoost', unit, pct }`. `Game.statMult(team, unitId)` = 1 + pct x level; `Unit.recalcStats()` multiplies the def's base stats in `STAT_BOOST.stats` (hp, armor, ward, damage, hpRegen) and stores them in `unit.base`; items/other flat effects go to `unit.bonus`. Price/time use `{ base, pct }` in `upgradePrice/upgradeTime`.
+
+## Units are ownerless (v0.10.2)
+- `UNITS` holds every unit with one schema (no `faction` field; `theme` is cosmetic). Who can hire what = `FACTIONS[x].units`; what camps spawn = `CAMPS[i].units`. A future card mini-game / Enchantress-style recruit just picks unit ids and calls `game.spawn(team, id)` (any team 0/1/2).
+- Bounty = `GAME.bountyPct x (unit.paid ?? def.cost)` for every kill.
