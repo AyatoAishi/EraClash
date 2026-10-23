@@ -6,6 +6,15 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.10.1', date: '2026-10-24T02:37:00+08:00', title: 'Stat boost pricing',
+    sections: [
+      { title: 'Balance', items: [
+        'Stat boost upgrades now start at <b>2x the troop\'s base hiring cost</b> (still +10% per level): Protein Boost / Kevlar 100g, Accuracy Training / Drills 150g, Hell Workout 180g, Ghillie Conditioning 240g.',
+        'Stat boost research time: <b>2s</b> at Lv 1, <b>+0.2s</b> (+10%) per level.',
+      ] },
+    ],
+  },
+  {
     version: '0.10.0', date: '2026-10-24T02:25:00+08:00', title: 'Bulk research & stat boosts',
     sections: [
       { title: 'New — Research queue', items: [

@@ -1,3 +1,4 @@
+import { UNITS } from './config.js';
 // ============================================================
 //  BARRACKS UPGRADES — per match only (reset every game).
 //  max: number of levels (Infinity = unlimited)
@@ -9,8 +10,14 @@
 
 const BASE_TIME = { base: 6, step: 1.5, cap: 30 };   // unlimited upgrades: 6s, +1.5s per level, max 30s
 /** Stat boost upgrades: base + 10% per level on the troop's BASE stats, its hiring cost, the upgrade price and research time. */
-export const STAT_BOOST = { pct: 0.10, stats: ['hp', 'armor', 'ward', 'damage', 'hpRegen'] };
-const STAT_BOOST_TIME = { base: 6, pct: STAT_BOOST.pct };
+export const STAT_BOOST = {
+  pct: 0.10,                                       // +10% per level (stats, troop cost, upgrade price, research time)
+  stats: ['hp', 'armor', 'ward', 'damage', 'hpRegen'],
+  priceMult: 2,                                    // Lv 1 price = troop's base hiring cost x this (set 3 for pricier boosts)
+  baseTime: 2,                                     // Lv 1 research time (s); +10% (0.2s) per level
+};
+const STAT_BOOST_TIME = { base: STAT_BOOST.baseTime, pct: STAT_BOOST.pct };
+const boostPrice = (unitId) => ({ base: UNITS[unitId].cost * STAT_BOOST.priceMult, pct: STAT_BOOST.pct });
 
 export const UPGRADES = {
   // ===================== MEDIEVAL =====================
@@ -25,9 +32,9 @@ export const UPGRADES = {
   proteinBoost: {
     id: 'proteinBoost', faction: 'medieval', category: 'troop', unit: 'viking', icon: 'u-protein', kind: 'statBoost',
     name: 'Protein Boost', max: Infinity,
-    price: { base: 100, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    price: boostPrice('viking'), time: STAT_BOOST_TIME,
     effects: [{ type: 'statBoost', unit: 'viking', pct: STAT_BOOST.pct }],
-    desc: 'Stat boost: every Viking gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Viking cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    desc: 'Stat boost: every Viking gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Viking cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
 
@@ -42,9 +49,9 @@ export const UPGRADES = {
   accuracyTraining: {
     id: 'accuracyTraining', faction: 'medieval', category: 'troop', unit: 'archer', icon: 'u-accuracy', kind: 'statBoost',
     name: 'Accuracy Training', max: Infinity,
-    price: { base: 100, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    price: boostPrice('archer'), time: STAT_BOOST_TIME,
     effects: [{ type: 'statBoost', unit: 'archer', pct: STAT_BOOST.pct }],
-    desc: 'Stat boost: every Archer (incl. Battlement archers) gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Archer cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    desc: 'Stat boost: every Archer (incl. Battlement archers) gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Archer cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
 
@@ -60,9 +67,9 @@ export const UPGRADES = {
   hellWorkout: {
     id: 'hellWorkout', faction: 'medieval', category: 'troop', unit: 'imp', icon: 'u-hellwork', kind: 'statBoost',
     name: 'Hell Workout', max: Infinity,
-    price: { base: 90, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    price: boostPrice('imp'), time: STAT_BOOST_TIME,
     effects: [{ type: 'statBoost', unit: 'imp', pct: STAT_BOOST.pct }],
-    desc: 'Stat boost: every Imp gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Imp cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    desc: 'Stat boost: every Imp gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Imp cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
 
@@ -87,9 +94,9 @@ export const UPGRADES = {
   kevlar: {
     id: 'kevlar', faction: 'modern', category: 'troop', unit: 'police', icon: 'u-kevlar', kind: 'statBoost',
     name: 'Kevlar Program', max: Infinity,
-    price: { base: 100, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    price: boostPrice('police'), time: STAT_BOOST_TIME,
     effects: [{ type: 'statBoost', unit: 'police', pct: STAT_BOOST.pct }],
-    desc: 'Stat boost: every Police Officer gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Police Officer cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    desc: 'Stat boost: every Police Officer gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Police Officer cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
 
@@ -104,9 +111,9 @@ export const UPGRADES = {
   drills: {
     id: 'drills', faction: 'modern', category: 'troop', unit: 'gunner', icon: 'u-drills', kind: 'statBoost',
     name: 'Marksmanship Drills', max: Infinity,
-    price: { base: 100, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    price: boostPrice('gunner'), time: STAT_BOOST_TIME,
     effects: [{ type: 'statBoost', unit: 'gunner', pct: STAT_BOOST.pct }],
-    desc: 'Stat boost: every Gunner (incl. Overwatch gunners) gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Gunner cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    desc: 'Stat boost: every Gunner (incl. Overwatch gunners) gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Gunner cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
 
@@ -121,9 +128,9 @@ export const UPGRADES = {
   ghillie: {
     id: 'ghillie', faction: 'modern', category: 'troop', unit: 'sniper', icon: 'u-ghillie', kind: 'statBoost',
     name: 'Ghillie Conditioning', max: Infinity,
-    price: { base: 110, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    price: boostPrice('sniper'), time: STAT_BOOST_TIME,
     effects: [{ type: 'statBoost', unit: 'sniper', pct: STAT_BOOST.pct }],
-    desc: 'Stat boost: every Sniper gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Sniper cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    desc: 'Stat boost: every Sniper gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Sniper cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
 
