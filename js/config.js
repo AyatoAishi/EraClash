@@ -176,7 +176,7 @@ Object.assign(UNITS, {
   hooligan: NEU({ id: 'hooligan', name: 'Hooligan', family: 'melee', role: 'Gang member', type: 'melee', bounty: 30,
     hp: 80, hpRegen: 1.2, damage: 15, attackSpeed: 50, armor: 3, ward: 0, moveSpeed: 2.2, range: 1.3, radius: 0.5,
     abilities: [], lore: 'Track suit, broken bottle, short temper.' }),
-  outlaw: NEU({ id: 'outlaw', name: 'Outlaw', family: 'melee', role: 'Biker outlaw', type: 'melee', bounty: 60,
+  outlaw: NEU({ id: 'outlaw', name: 'Outlaw', family: 'melee', role: 'Biker outlaw', type: 'melee', bounty: 75,
     hp: 120, hpRegen: 1.5, damage: 20, attackSpeed: 70, armor: 5, ward: 2, moveSpeed: 2.7, range: 1.4, radius: 0.6,
     abilities: ['cleave'], lore: 'Leather, chains and a crowbar that hits everyone standing behind you too.' }),
 });
@@ -235,8 +235,8 @@ export const ABILITIES = {
   resentment: { id: 'resentment', kind: 'passive', name: 'Resentment', icon: 'a-resent', threshold: 30, bonusDamage: 5, bonusAS: 30, duration: 3,
     desc: 'After taking 30 damage, gains +5 damage and +30 attack speed for 3 seconds.' },
   immaterial: { id: 'immaterial', kind: 'passive', name: 'Immaterial', icon: 'a-immaterial', static: { bonusEvasion: 50 }, desc: '50% chance to evade attacks.' },
-  brainwash: { id: 'brainwash', kind: 'active', name: 'Brainwash', icon: 'a-brainwash', cooldown: 20, castRange: 8, duration: 15, castChance: 0.12,
-    desc: 'Randomly while fighting (20s cooldown): one enemy troop it is fighting loses its will for 15s — it switches sides, attacks its former allies, then despawns (no bounty).' },
+  brainwash: { id: 'brainwash', kind: 'active', name: 'Brainwash', icon: 'a-brainwash', cooldown: 20, castRange: 8, duration: 15, castChance: 0.25,
+    desc: 'Each fight (and each time the 20s cooldown ends mid-fight) the Banshee has a 25% chance to cast it, a few seconds in: one enemy troop it is fighting loses its will for 15s — it switches sides, attacks its former allies, then despawns (no bounty).' },
   moraleAura: { id: 'moraleAura', kind: 'passive', name: 'Morale Aura', icon: 'a-morale', aura: { radius: 4, bonusArmor: 2 },
     desc: 'Allies within 4 range (including itself) gain +2 armor.' },
   cleave: { id: 'cleave', kind: 'passive', name: 'Cleave', icon: 'a-cleave', pct: 0.4, radius: 2.2, cone: 0.8,
@@ -277,12 +277,12 @@ for (const u of Object.values(UNITS)) {
 export const ITEMS = {
   // --- medieval camp drops ---
   rusticSword:  { id: 'rusticSword', sprite: 'it-sword',  name: 'Rustic Sword',   icon: '#9aa3ab', desc: '+6 damage', stats: { damage: 6 } },
-  oldManShield: { id: 'oldManShield', sprite: 'it-shield', name: 'Old Man Shield', icon: '#8a5a2b', desc: 'Passive: blocks a random 5–7 damage from every basic attack you take.', block: [5, 7] },
+  oldManShield: { id: 'oldManShield', sprite: 'it-shield', name: 'Old Man Shield', icon: '#8a5a2b', desc: 'Passive: 50% chance to block a random 5–7 damage from a basic attack you take.', block: [5, 7], blockChance: 0.5 },
   sash:         { id: 'sash', sprite: 'it-sash',         name: 'Sash',           icon: '#c0392b', desc: '+1 move speed', stats: { moveSpeed: 1 } },
-  quiver:       { id: 'quiver', sprite: 'it-quiver',       name: 'Quiver',         icon: '#6b4423', desc: 'Passive: on a ranged troop, +1 attack range and +30 attack speed (no effect on melee).', rangedStats: { range: 1, attackSpeed: 30 } },
+  quiver:       { id: 'quiver', sprite: 'it-quiver',       name: 'Quiver',         icon: '#6b4423', desc: 'Passive: on a ranged troop, +1 attack range and +20 attack speed (no effect on melee).', rangedStats: { range: 1, attackSpeed: 20 } },
   // --- modern camp drops ---
   shoulderGuard:{ id: 'shoulderGuard', sprite: 'it-shoulder',name: 'Shoulder Guard', icon: '#3b4652', desc: '+2 armor, +2 ward', stats: { armor: 2, ward: 2 } },
-  shackles:     { id: 'shackles', sprite: 'it-shackles',     name: 'Shackles',       icon: '#5a5f69', desc: 'Passive: on a melee troop, 20% chance on hit to DISARM the target for 3s (it can\'t start attacks).', disarm: { chance: 0.2, duration: 3 } },
+  shackles:     { id: 'shackles', sprite: 'it-shackles',     name: 'Shackles',       icon: '#5a5f69', desc: 'Passive: on a melee troop, 20% chance on hit to DISARM the target for 3s (it can\'t start attacks). Doesn\'t stack: an already-disarmed target can\'t be disarmed again or refreshed.', disarm: { chance: 0.2, duration: 3 } },
   riotHelmet:   { id: 'riotHelmet', sprite: 'it-helmet',   name: 'Riot Helmet',    icon: '#2f4a8a', desc: 'Passive: gain +3 armor for 3s after being hit by a ranged attack.', helmet: { armor: 3, duration: 3 } },
   pocketKnife:  { id: 'pocketKnife', sprite: 'it-knife',  name: 'Pocket Knife',   icon: '#c9d1d8', desc: '+4 damage. On hit, deals +3 damage to every enemy within 3 range of you.', stats: { damage: 4 }, splash: { damage: 3, radius: 3 } },
 };

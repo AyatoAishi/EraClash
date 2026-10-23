@@ -6,6 +6,19 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.8.2', date: '2026-10-23T23:06:00+08:00', title: 'Jungle balance pass',
+    sections: [
+      { title: 'Balance', items: [
+        '<b>Old Man Shield</b>: block is now a <b>50% chance</b> per basic attack (still 5–7 damage).',
+        '<b>Outlaw</b> bounty 60 → <b>75</b> gold.',
+        '<b>Quiver</b>: attack speed bonus +30 → <b>+20</b> (range bonus unchanged).',
+        '<b>Shackles</b> no longer stacks: a target that is already disarmed can\'t be disarmed again or have the timer refreshed (multiple carriers can\'t chain it). Two Shackles on one troop still roll once.',
+        '<b>Brainwash</b> is now a gamble: each fight, the Banshee gets <b>one 25% roll</b> (plus one more each time the 20s cooldown ends mid-fight). A winning roll casts 1–4s into the fight; a losing roll means no Brainwash that fight.',
+        '<b>Banshee</b> evasion stays at 50%.',
+      ] },
+    ],
+  },
+  {
     version: '0.8.1', date: '2026-10-23T21:36:00+08:00', title: 'The real jungle',
     sections: [
       { title: 'New — Neutral roster (replaces the placeholders)', items: [

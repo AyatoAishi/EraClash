@@ -207,7 +207,7 @@ export class Unit {
     if (opts?.attack) {
       // Old Man Shield: flat block on basic attacks, before armor
       const sh = ITEMS.oldManShield;
-      if (this.hasItem('oldManShield')) raw = Math.max(0, raw - (sh.block[0] + Math.random() * (sh.block[1] - sh.block[0])));
+      if (this.hasItem('oldManShield') && Math.random() < sh.blockChance) raw = Math.max(0, raw - (sh.block[0] + Math.random() * (sh.block[1] - sh.block[0])));
       // Riot Helmet: armor burst after being shot (applies from the NEXT hit)
       if (opts.ranged && this.hasItem('riotHelmet')) { this.helmetT = ITEMS.riotHelmet.helmet.duration; this.helmetArmor = ITEMS.riotHelmet.helmet.armor; }
     }
@@ -361,7 +361,7 @@ export class Unit {
     if (this.pas.lifesteal && dealt > 0 && !this.dead) this.hp = Math.min(this.maxHp, this.hp + dealt * this.pas.lifesteal / 100);
     const g = this.game;
     // Shackles (melee carriers): chance to disarm
-    if (!this.ranged && this.hasItem('shackles') && !tg.dead && !tg.invulnerable && !tg.tower && Math.random() < ITEMS.shackles.disarm.chance) {
+    if (!this.ranged && this.hasItem('shackles') && !tg.dead && !tg.invulnerable && !tg.tower && !tg.disarmed && Math.random() < ITEMS.shackles.disarm.chance) {
       tg.disarmT = ITEMS.shackles.disarm.duration; tg.pendingHit = null;
       g.emit('disarm', tg);
     }
@@ -622,15 +622,18 @@ export class Unit {
       if (!tg || tg.dead) {   // look for another enemy of the same team nearby
         tg = this.nTarget = g.units.find((o) => !o.dead && !o.tower && o.team === this.aggroTeam && this.edgeDist(o) < 7) || null;
       }
-      if (!tg || fromHome > R.leash || g.time - this.lastHitT > R.giveUpAfter) { this.nState = 'return'; this.nTarget = null; this.aggroTeam = null; }
+      if (!tg || fromHome > R.leash || g.time - this.lastHitT > R.giveUpAfter) { this.nState = 'return'; this.nTarget = null; this.aggroTeam = null; for (const x of this.abil) x.st.roll = undefined; }
       else {
         // actives: cast on their own when useful
         for (let i = 0; i < this.abil.length; i++) {
           const { def: A, st } = this.abil[i];
           if (A.kind !== 'active' || st.cd > 0) continue;
-          if (A.id === 'brainwash' && Math.random() < A.castChance * dt) {   // "randomly while fighting"
+          if (A.id === 'brainwash') {
+            // one 25% roll per chance (fight start / cooldown ready); a winning roll casts 1–4s later
+            if (st.roll === undefined) { st.roll = Math.random() < A.castChance; st.delay = 1 + Math.random() * 3; }
+            if (!st.roll || (st.delay -= dt) > 0) continue;
             const pool = g.units.filter((o) => !o.dead && !o.tower && !o.invulnerable && !o.brainwashed && o.team === this.aggroTeam && this.edgeDist(o) <= A.castRange);
-            if (pool.length) { this.bwTarget = pool[Math.floor(Math.random() * pool.length)]; this.castAbility(i); }
+            if (pool.length) { this.bwTarget = pool[Math.floor(Math.random() * pool.length)]; if (this.castAbility(i)) st.roll = undefined; }
           }
         }
         if (this.edgeDist(tg) <= this.effRange) {
