@@ -749,7 +749,7 @@ export class UI {
       const grid = $('#sp-grid');
       grid.style.display = 'grid';
       grid.classList.add('basegrid');
-      grid.innerHTML = !I.seen ? '<div class="more" style="grid-column:1/-1">Not scouted</div>'
+      grid.innerHTML = !I.seen ? ''
         : ups.length ? ups.map(([id, l]) => `<div class="cell upcell" data-tip="upgrade:${id}:${b.team}:${l}"><svg><use href="#${UPGRADES[id].icon}"/></svg><em>${l}</em></div>`).join('')
         : '<div class="more" style="grid-column:1/-1">No upgrades researched yet</div>';
       $('#sp-abil').innerHTML = ''; $('#sp-inv').classList.remove('on'); $('#sp-inv').innerHTML = '';

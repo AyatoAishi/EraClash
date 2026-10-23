@@ -17,7 +17,7 @@ import { GAME } from './config.js';
 import { TERRAIN } from './terrain.js';
 
 export const VISION = {
-  tick: 0.15,          // seconds between recomputes
+  tick: 0.1,           // seconds between recomputes (teams alternate, so each team refreshes every 0.2s)
   revealOnAttack: 1.5, // attacker stays visible to the victim's team this long
 };
 
@@ -72,7 +72,8 @@ export class Vision {
     this.t -= dt;
     if (this.t > 0 && !force) return;
     this.t = VISION.tick;
-    for (const team of [0, 1]) this.compute(team);
+    if (force) { this.compute(0); this.compute(1); }
+    else { this.turn = 1 - (this.turn || 0); this.compute(this.turn); }
     this.updateIntel();
   }
 
@@ -80,7 +81,13 @@ export class Vision {
     const W = this.W, H = this.H, vc = TERRAIN.visCell, x0 = TERRAIN.visMinX, z0 = TERRAIN.visMinZ;
     const vis = this.vis[team], T = this.terrain, lvl = this.cellLevel;
     vis.fill(0);
+    // troops standing in the same cell see the same thing: keep only the biggest radius per cell
+    const best = new Map();
     for (const s of this.sources(team)) {
+      const k = Math.floor((s.x - x0) / vc) * 4096 + Math.floor((s.z - z0) / vc) * 2 + s.level;
+      const b = best.get(k); if (!b || b.r < s.r) best.set(k, s);
+    }
+    for (const s of best.values()) {
       const sx = (s.x - x0) / vc, sz = (s.z - z0) / vc;
       const rc = s.r / vc;
       const ix0 = Math.max(0, Math.floor(sx - rc)), ix1 = Math.min(W - 1, Math.floor(sx + rc));

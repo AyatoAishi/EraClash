@@ -6,6 +6,16 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.9.1', date: '2026-10-24T01:55:00+08:00', title: 'Vision tuning',
+    sections: [
+      { title: 'Balance', items: [
+        'Base vision 20/12 → <b>35 day / 20 night</b>.',
+        'All troops\' vision → <b>30 day / 16 night</b> (Sniper still +3 while prone). Every troop keeps its own value in its stats, so they can be tuned individually later.',
+      ] },
+      { title: 'UI', items: ['Removed the "Not scouted" text on an unscouted enemy base (the panel just stays empty).'] },
+    ],
+  },
+  {
     version: '0.9.0', date: '2026-10-24T01:24:00+08:00', title: 'Terrain, river & fog of war',
     sections: [
       { title: 'New — Solid terrain', items: [

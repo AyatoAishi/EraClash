@@ -21,8 +21,8 @@ export const GAME = {
   baseHalfX: 6,          // base footprint (AABB)
   baseHalfZ: 7,
   highGround: { uphillMiss: 0.5 },   // ranged attack from low ground (river) at a target on high ground
-  baseVision: [20, 12],              // [day, night] vision of a base
-  defaultVision: [10, 6],
+  baseVision: [35, 20],              // [day, night] vision of a base
+  defaultVision: [30, 16],
   dmgVariance: 1,        // each hit rolls damage +/- this much
   invSlots: 6,           // item slots per troop
   maxAbilities: 4,       // passives + actives combined, per troop
@@ -101,7 +101,7 @@ export const UNITS = {
     cost: 50, trainTime: 1.5,
     hp: 115, hpRegen: 1, damage: 15, damageType: 'physical', attackSpeed: 54,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
-    moveSpeed: 3.0, range: 1.3, vision: [10, 6], aggro: 9, radius: 0.5,
+    moveSpeed: 3.0, range: 1.3, vision: [30, 16], aggro: 9, radius: 0.5,
     abilities: ['loneWolf'],
     lore: 'A horned raider from the frozen north. Hits hard, swings slow, and refuses to share the spotlight with another Viking.',
   },
@@ -110,7 +110,7 @@ export const UNITS = {
     cost: 75, trainTime: 2.0,
     hp: 70, hpRegen: 0.5, damage: 16, damageType: 'physical', attackSpeed: 45,
     armor: 0, ward: 0, evasion: 0, missChance: 0,
-    moveSpeed: 3.0, range: 9, vision: [12, 7], aggro: 12, radius: 0.45,
+    moveSpeed: 3.0, range: 9, vision: [30, 16], aggro: 12, radius: 0.45,
     projectile: { kind: 'arrow', speed: 20, arc: 0.18 },
     abilities: ['eagleEye'],
     lore: 'Longbow, green hood, steady hands. Big slow arrows that punch through armor better than fast weapons do. Dies fast if anything reaches her.',
@@ -120,7 +120,7 @@ export const UNITS = {
     cost: 90, trainTime: 1,
     hp: 40, hpRegen: 0.1, damage: 12, damageType: 'physical', attackSpeed: 65,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
-    moveSpeed: 4.5, range: 1.2, vision: [11, 6], aggro: 9, radius: 0.4,
+    moveSpeed: 4.5, range: 1.2, vision: [30, 16], aggro: 9, radius: 0.4,
     abilities: ['splatter', 'swiftStep'],          // Splatter first -> Q
     lore: 'A cackling little demon bound to the Keep. Fast, slippery while it runs, and more than happy to pop itself over a crowd.',
   },
@@ -129,7 +129,7 @@ export const UNITS = {
     cost: 50, trainTime: 1.5,
     hp: 117, hpRegen: 1, damage: 9, damageType: 'physical', attackSpeed: 81,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
-    moveSpeed: 3.3, range: 1.3, vision: [10, 6], aggro: 9, radius: 0.5,
+    moveSpeed: 3.3, range: 1.3, vision: [30, 16], aggro: 9, radius: 0.5,
     abilities: ['blueLine'],
     lore: 'Standard-issue riot officer. Faster on foot and quicker with the baton. Alone he hits like a wet towel; in a squad he hits like a truck.',
   },
@@ -138,7 +138,7 @@ export const UNITS = {
     cost: 75, trainTime: 2.0,
     hp: 62, hpRegen: 0.5, damage: 9, damageType: 'physical', attackSpeed: 60,
     armor: 1, ward: 0, evasion: 0, missChance: 0,
-    moveSpeed: 3.1, range: 10, vision: [12, 7], aggro: 13, radius: 0.45,
+    moveSpeed: 3.1, range: 10, vision: [30, 16], aggro: 13, radius: 0.45,
     projectile: { kind: 'bullet', speed: 60, arc: 0 },
     abilities: ['fervor'],
     lore: 'Tactical rifleman in a light vest. Out-ranges the archer. Starts slow, but the longer he holds one target the faster he fires.',
@@ -148,7 +148,7 @@ export const UNITS = {
     cost: 120, trainTime: 2.5,
     hp: 40, hpRegen: 0.1, damage: 16, damageType: 'physical', attackSpeed: 30,
     armor: 1, ward: 0, evasion: 0, missChance: 0,
-    moveSpeed: 1.4, range: 12, vision: [14, 8], aggro: 14, radius: 0.45,
+    moveSpeed: 1.4, range: 12, vision: [30, 16], aggro: 14, radius: 0.45,
     projectile: { kind: 'sniper', speed: 90, arc: 0 },
     abilities: ['snipeStance', 'bullsEye'],        // Snipe Stance first -> Q
     lore: 'Ghillie hood, long rifle, zero patience for close quarters. Lies down, waits, and deletes whatever wanders into the crosshair.',
