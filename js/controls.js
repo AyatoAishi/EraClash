@@ -72,9 +72,10 @@ export class Controls {
     this.updateRange(dt);
     this.updateHover();
     // prune dead units out of selection
-    if (this.selection.some((u) => u.dead)) {
-      this.selection.forEach((u) => { if (u.dead) u.selected = false; });
-      this.selection = this.selection.filter((u) => !u.dead);
+    const gone = (u) => u.dead || (u.team !== this.team && !u.obj.visible);   // enemies that slip into the fog drop out of selection
+    if (this.selection.some(gone)) {
+      this.selection.forEach((u) => { if (gone(u)) u.selected = false; });
+      this.selection = this.selection.filter((u) => !gone(u));
       this.hooks.onSelectionChange?.();
     }
   }
@@ -136,7 +137,7 @@ export class Controls {
     if (!this.game) return null;
     let best = null, bd = (36 * 30 / this.height) ** 2;
     for (const u of this.game.units) {
-      if (u.dead || u.tower || u.untargetableUI) continue;
+      if (u.dead || u.tower || u.untargetableUI || !u.obj.visible) continue;
       const pts = [[0, 1.0], [0, 0.3]];
       if (u.immobile) pts.push([0.7, 0.35], [1.4, 0.35]);            // prone: body lies forward
       for (const [fwd, y] of pts) {
@@ -457,6 +458,7 @@ export class Controls {
       else if (e.code === k.shop) this.hooks.toggleShop?.();
       else if (e.code === k.barracks) this.hooks.toggleBarracks?.();
       else if (e.code === k.repair) this.hooks.toggleRepair?.();
+      else if (e.code === k.autoLoot) this.hooks.toggleAutoLoot?.();
       else if (e.code === k.selectAll) this.selectAll();
       else if (e.code === k.centerBase) { e.preventDefault(); this.hooks.onCenter?.(); }
       if (e.code.startsWith('Arrow')) e.preventDefault();

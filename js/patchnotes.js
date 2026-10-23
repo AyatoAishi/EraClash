@@ -6,6 +6,34 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.9.0', date: '2026-10-24T01:24:00+08:00', title: 'Terrain, river & fog of war',
+    sections: [
+      { title: 'New — Solid terrain', items: [
+        'Trees, rocks, buildings, fences, barrels, dumpsters, lamps and torches are now <b>obstacles</b>. Troops walk around them using real pathfinding instead of passing through.',
+        'The forest rings around the medieval camps now open toward the lane (they were facing sideways).',
+      ] },
+      { title: 'New — River & high ground', items: [
+        'A shallow <b>river</b> now runs down the middle where the two sides meet. It is <b>low ground</b>.',
+        'Ranged attacks from low ground at a target on high ground <b>miss 50%</b> of the time ("MISS ▲"). Melee is unaffected.',
+      ] },
+      { title: 'New — Fog of war', items: [
+        'You only see what your troops and base see. Base vision <b>20 day / 12 night</b>. Viking/Police 10/6, Archer/Gunner 12/7, Imp 11/6, Sniper 14/8 (+3 while prone), creeps 8/4.',
+        'Trees and buildings block sight. Troops in the river can\'t see up onto the banks. A troop that attacks is revealed to its victim\'s side for 1.5s.',
+        'Troops can\'t auto-target what their side can\'t see; an attack order on a target that disappears into the fog becomes an attack-move to its last seen spot.',
+        '<b>Scouting:</b> the enemy base panel shows only what you saw the last time you had vision on it (upgrades, research, towers, repair, income). Never seen = "Not scouted".',
+        'The AI plays by the same fog.',
+        'Minimap shows the fog and the river.',
+      ] },
+      { title: 'New — Auto-loot (L)', items: [
+        'Floating toggle above the command card. <b>ON</b>: the troop that kills a creep gets its drop straight into a free slot (drops on the ground if full or if a tower got the kill). <b>OFF</b>: drops land on the ground as before.',
+      ] },
+      { title: 'Fixes', items: [
+        'Dropped items are now drawn on top of trees, with a taller beam and a ground marker, so you can always spot them.',
+        'Move orders onto a tree or off the map snap to the nearest walkable spot.',
+      ] },
+    ],
+  },
+  {
     version: '0.8.2', date: '2026-10-23T23:06:00+08:00', title: 'Jungle balance pass',
     sections: [
       { title: 'Balance', items: [

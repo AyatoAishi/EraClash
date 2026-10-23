@@ -191,6 +191,12 @@ export class Unit {
 
   command(order) {
     if (this.dead) return;
+    const T = this.game.terrain;
+    if (T && order.point) {
+      const lim = GAME.baseX - GAME.baseHalfX - this.radius;
+      const px = Math.max(-lim, Math.min(lim, order.point.x)), pz = Math.max(-GAME.mapHalfWidth + 0.5, Math.min(GAME.mapHalfWidth - 0.5, order.point.z));
+      order = { ...order, point: T.nearestFree(px, pz) };
+    }   // can't stand inside a tree
     this.order = order;
     this.target = null;
     this.retarget = 0;
@@ -330,6 +336,7 @@ export class Unit {
 
   /** Called when a swing/shot starts against `tg`. */
   onAttackStart(tg) {
+    if (tg && tg.team !== undefined) this.game.vision?.reveal(this, tg.team);   // attacking gives your position away
     const f = this.ability('fervor');
     if (f) { if (f.st.target !== tg) { f.st.target = tg; f.st.stacks = 0; } f.st.sinceAttack = 0; }
   }
@@ -392,6 +399,8 @@ export class Unit {
   /** Dota-style hit check for an ATTACK from `attacker`: returns 'miss' | 'evade' | null (hit). */
   dodgeCheck(attacker) {
     if (attacker?.stats?.missChance && Math.random() * 100 < attacker.stats.missChance) return 'miss';
+    // high ground: ranged attacks from the river up onto the banks can miss
+    if (attacker?.ranged && !attacker.tower && attacker.groundLevel < this.groundLevel && Math.random() < GAME.highGround.uphillMiss) return 'uphill';
     const ev = this.effEvasion;
     if (ev > 0 && Math.random() * 100 < ev) return 'evade';
     return null;
@@ -504,6 +513,7 @@ export class Unit {
     const o = this.order;
     if (o.type === 'attack') {
       if (!o.target || o.target.dead) this.order = { type: 'idle' };
+      else if (!o.target.isBase && !g.canSee(this.team, o.target)) this.command({ type: 'attackMove', point: { x: o.target.pos.x, z: o.target.pos.z } });   // lost in the fog: go to the last seen spot
       else engage = o.target;
     }
     if (this.order.type === 'move') {
@@ -519,7 +529,7 @@ export class Unit {
       if (this.retarget <= 0) {
         const see = this.order.type === 'idle' ? Math.max(this.rangeRadius + 1, this.def.aggro * 0.75) : Math.max(this.def.aggro, this.effRange + 2);
         // sticky targeting: keep the current target while it's alive and still in sight (matters for Fervor)
-        const keep = this.target && !this.target.dead && this.edgeDist(this.target) <= see + 2;
+        const keep = this.target && !this.target.dead && this.edgeDist(this.target) <= see + 2 && g.canSee(this.team, this.target);
         if (!keep) this.target = g.findNearestEnemy(this, see);
         this.retarget = 0.25 + Math.random() * 0.1;
       }
@@ -558,7 +568,8 @@ export class Unit {
     // movement + separation
     let vx = 0, vz = 0;
     if (goal && !attacking) {
-      const dx = goal.x - this.pos.x, dz = goal.z - this.pos.z;
+      const wp = this.steer(goal, dt);
+      const dx = wp.x - this.pos.x, dz = wp.z - this.pos.z;
       const len = Math.hypot(dx, dz);
       if (len > 0.05) {
         const sp = Math.min(this.effMoveSpeed, len / dt);
@@ -583,6 +594,7 @@ export class Unit {
     const lim = GAME.baseX - GAME.baseHalfX - this.radius;
     this.pos.x = Math.max(-lim, Math.min(lim, this.pos.x));
     this.pos.z = Math.max(-GAME.mapHalfWidth, Math.min(GAME.mapHalfWidth, this.pos.z));
+    this.groundPos();
     const spd = Math.hypot(vx, vz);
     this.moving = spd > 0.3;
     if (this.moving) this.faceTowards(vx, vz, dt, 10);
@@ -657,7 +669,8 @@ export class Unit {
 
     let vx = 0, vz = 0;
     if (goal && !attacking) {
-      const dx = goal.x - this.pos.x, dz = goal.z - this.pos.z, len = Math.hypot(dx, dz);
+      const wp = this.steer(goal, dt);
+      const dx = wp.x - this.pos.x, dz = wp.z - this.pos.z, len = Math.hypot(dx, dz);
       if (len > 0.05) { const sp = Math.min(this.effMoveSpeed * speedMult, len / dt); vx = dx / len * sp; vz = dz / len * sp; }
     }
     let sx = 0, sz = 0;
@@ -669,6 +682,7 @@ export class Unit {
     const k = attacking ? 3 : 6;
     this.pos.x += (vx + sx * k) * dt; this.pos.z += (vz + sz * k) * dt;
     this.pos.z = Math.max(-GAME.mapHalfWidth, Math.min(GAME.mapHalfWidth, this.pos.z));
+    this.groundPos();
     const spd = Math.hypot(vx, vz);
     this.moving = spd > 0.3;
     if (this.moving) this.faceTowards(vx, vz, dt, 10);
@@ -721,6 +735,40 @@ export class Unit {
     this.shield.scale.setScalar((this.rig.scale || 1) * pulse);
     if (t <= 0) this.shield.visible = false;
   }
+
+  /** Next point to walk toward on the way to `goal`: straight if the line is clear, else an A* path (cached, re-planned when the goal moves or the map changes). */
+  steer(goal, dt) {
+    const T = this.game.terrain; if (!T) return goal;
+    const p = this.pos;
+    const nav = this.nav || (this.nav = { gx: 1e9, gz: 1e9, path: null, t: 0, ver: -1, direct: true });
+    nav.t -= dt;
+    if (Math.hypot(goal.x - nav.gx, goal.z - nav.gz) > 1.2 || nav.t <= 0 || nav.ver !== T.version) {
+      nav.gx = goal.x; nav.gz = goal.z; nav.ver = T.version;
+      nav.direct = T.clearLine(p.x, p.z, goal.x, goal.z);
+      nav.path = nav.direct ? null : T.findPath(p.x, p.z, goal.x, goal.z);
+      nav.t = nav.direct ? 0.35 : 0.9 + Math.random() * 0.4;
+    }
+    if (nav.direct || !nav.path || !nav.path.length) return goal;
+    while (nav.path.length > 1 && Math.hypot(nav.path[0].x - p.x, nav.path[0].z - p.z) < 0.7) nav.path.shift();
+    if (nav.path.length === 1 && T.clearLine(p.x, p.z, goal.x, goal.z)) return goal;
+    return nav.path[0];
+  }
+  /** Keep out of obstacles and stand on the terrain (river = low ground). */
+  groundPos() {
+    const T = this.game.terrain; if (!T) return;
+    T.resolve(this.pos, this.radius * 0.9);
+    this.pos.y = T.heightAt(this.pos.x);
+  }
+  /** Vision radius right now (nightF 0 = day, 1 = night). */
+  visionRadius(nightF = 0) {
+    const v = this.def.vision || GAME.defaultVision;
+    let r = v[0] + (v[1] - v[0]) * nightF;
+    if (this.stance === 'prone') r += 3;
+    if (this.tower) r = Math.max(r, this.effRange + 1);   // towers watch their whole range
+    return r;
+  }
+  /** 0 = low ground (river), 1 = high ground */
+  get groundLevel() { return this.game.terrain ? this.game.terrain.level(this.pos.x) : 1; }
 
   faceTowards(dx, dz, dt, rate) {
     if (Math.abs(dx) + Math.abs(dz) < 1e-4) return;

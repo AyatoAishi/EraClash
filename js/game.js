@@ -7,6 +7,7 @@ import { ABILITIES, ITEMS } from './config.js';
 import { NEUTRAL_TEAM, CAMP_RULES, CAMPS } from './neutrals.js';
 import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot } from './models.js';
 import { sfx } from './audio.js';
+import { Vision } from './vision.js';
 
 const FACTION_BY_TEAM = ['medieval', 'modern'];
 
@@ -68,6 +69,24 @@ export class Game {
       dead: false,
     }));
     this.bases.forEach((b) => { b.obj.position.set(b.x, 0, 0); b.obj.rotation.set(0, 0, 0); });
+    // map / systems (modular): terrain = obstacles + nav + height, structures = future buildables, vision = fog of war
+    this.terrain = world?.terrain || null;
+    this.structures = [];
+    this.teams.forEach((T) => (T.autoLoot = false));
+    this.vision = this.terrain ? new Vision(this) : null;
+  }
+  /** Can the local viewer see world point p? (spectator sees everything) */
+  seenByViewer(p) { return !this.vision || this.vision.seen(this.playerTeam, p); }
+  canSee(team, u) { return !this.vision || this.vision.canSee(team, u); }
+  /** Hide whatever the viewer can't see (enemy troops, creeps, projectiles, loot). */
+  applyFog() {
+    const v = this.playerTeam;
+    for (const u of this.units) {
+      if (u.hideModel) { u.obj.visible = false; continue; }
+      u.obj.visible = u.team === v || this.canSee(v, u);
+    }
+    for (const p of this.projectiles) p.mesh.visible = p.team === v || this.seenByViewer(p.mesh.position);
+    for (const L of this.loot) L.mesh.visible = this.seenByViewer(L);
   }
 
   /** Day/night: 5 min day then 5 min night, alternating, with a short fade. */
@@ -91,6 +110,7 @@ export class Game {
   speedMult(team) {
     if (!this.teams[team]) return 1; const L = this.upLevel(team, 'logistics'); return L ? 1 - UPGRADES.logistics.values.speed[L - 1] : 1; }
   repairRates(team) { const L = this.upLevel(team, 'repairCrews'), R = GAME.repair; return { heal: R.heal + R.healPerLevel * L, drain: R.drain + R.drainPerLevel * L }; }
+  setAutoLoot(team, on) { const T = this.teams[team]; if (T) { T.autoLoot = !!on; this.emit('autoLoot', team, T.autoLoot); } }
   setRepair(team, on) {
     const T = this.teams[team];
     if (on && T.gold < 1) return 'Not enough gold';
@@ -313,7 +333,7 @@ export class Game {
   despawnBrainwashed(u) {
     u.hp = 0;
     u.die(null);
-    u.obj.visible = false; u.deathT = 2.6;
+    u.obj.visible = false; u.hideModel = true; u.deathT = 2.6;
   }
 
   // ---------------- queries ----------------
@@ -322,6 +342,7 @@ export class Game {
     for (const o of this.units) {
       if (o.dead || o.team === u.team || o.tower) continue;
       if (o.team === NEUTRAL_TEAM && o.aggroTeam !== u.team) continue;   // leave peaceful camps alone
+      if (u.team <= 1 && !this.canSee(u.team, o)) continue;              // fog of war: can't target what you can't see
       const dx = o.pos.x - u.pos.x, dz = o.pos.z - u.pos.z;
       const d2 = dx * dx + dz * dz;
       if (d2 < bd) { bd = d2; best = o; }
@@ -355,7 +376,7 @@ export class Game {
     const mesh = pdef.kind === 'arrow' ? buildArrow() : pdef.kind === 'wisp' ? buildWisp() : buildBullet();
     if (pdef.kind === 'sniper') mesh.scale.set(1.4, 1.4, 2.6);
     const f = src.facing;
-    const start = new THREE.Vector3(src.pos.x + Math.sin(f) * 0.9, src.muzzleY + (src.yOff || 0), src.pos.z + Math.cos(f) * 0.9);
+    const start = new THREE.Vector3(src.pos.x + Math.sin(f) * 0.9, src.muzzleY + (src.yOff || 0) + (src.pos.y || 0), src.pos.z + Math.cos(f) * 0.9);
     mesh.position.copy(start);
     this.scene.add(mesh);
     const end = this.projectileAim(target, src);
@@ -367,7 +388,7 @@ export class Game {
   }
   projectileAim(target, src) {
     if (target.isBase) { const p = this.baseClosestPoint(src, target.team); return new THREE.Vector3(p.x, 2.2, p.z); }
-    return new THREE.Vector3(target.pos.x, 1.4, target.pos.z);
+    return new THREE.Vector3(target.pos.x, 1.4 + (target.pos.y || 0), target.pos.z);
   }
   // ---------------- evasion / abilities ----------------
   onDodge(attacker, victim, kind) {
@@ -405,7 +426,7 @@ export class Game {
       u._exploded = true;
       u.hp = 0;
       u.die(null);
-      u.obj.visible = false;
+      u.obj.visible = false; u.hideModel = true;
       u.deathT = 2.6;
       return true;
     }
@@ -492,7 +513,10 @@ export class Game {
     if (this.teams[u.team]) this.teams[u.team].stats.lost++;
     if (u.team === NEUTRAL_TEAM && Math.random() < CAMP_RULES.dropChance) {
       const pool = u.camp?.drops || Object.keys(ITEMS);
-      this.spawnLoot(pool[Math.floor(Math.random() * pool.length)], u.pos);
+      const id = pool[Math.floor(Math.random() * pool.length)];
+      // Auto-loot (per team toggle): the troop that landed the kill gets it straight into a free slot
+      if (killer && !killer.dead && !killer.tower && !killer.brainwashed && this.teams[killer.team]?.autoLoot && killer.addItem(id) >= 0) this.emit('pickup', killer, id);
+      else this.spawnLoot(id, u.pos);
     }
     if (killer && !killer.brainwashed && this.teams[killer.team] && killer.team !== u.team) {   // brainwashed killers earn nobody gold
       const T = this.teams[killer.team];
@@ -505,7 +529,7 @@ export class Game {
     if (!u._exploded && u.ability('deathSplatter')) {   // Organic Matter max level
       u._exploded = true;
       this.splatterBlast(u, ABILITIES.splatter);
-      u.obj.visible = false; u.deathT = 2.6;
+      u.obj.visible = false; u.hideModel = true; u.deathT = 2.6;
     }
     if (u.def.id === 'police' && this.upLevel(u.team, 'riotTraining') >= UPGRADES.riotTraining.max) {
       for (const o of this.units) if (!o.dead && o !== u && o.team === u.team && o.def.id === 'police' && Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z) <= 10) {
@@ -543,7 +567,7 @@ export class Game {
     const b = this.bases[team];
     b.dead = true;
     this.over = true;
-    for (const u of this.units) if (u.tower && u.team === team) u.obj.visible = false;
+    for (const u of this.units) if (u.tower && u.team === team) { u.obj.visible = false; u.hideModel = true; }
     this.winner = 1 - team;
     const cols = team === 0 ? [0x8d8f93, 0x6b2a24, 0x7a7c80] : [0xb8bcc2, 0x4fa8e0, 0x9ea2a8];
     for (let k = 0; k < 6; k++) this.burst({ x: b.x + (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 10 }, 20, cols, 7, 2.2, 6);
@@ -620,7 +644,7 @@ export class Game {
     if (T.gold >= uc && T.queue.length < 2 && !this.aiSaving(T, uc) && !this.train(T.team, T.aiNext)) T.aiNext = null;
 
     // AI groups up at home and launches waves (wave size per difficulty) — lets packs/auras work
-    const threat = this.units.some((u) => u.team !== T.team && u.team !== NEUTRAL_TEAM && !u.dead && !u.tower && Math.abs(u.pos.x - this.bases[T.team].x) < 25);
+    const threat = this.units.some((u) => u.team !== T.team && u.team !== NEUTRAL_TEAM && !u.dead && !u.tower && Math.abs(u.pos.x - this.bases[T.team].x) < 25 && this.canSee(T.team, u));
     if (this.diff.waveSize > 1) {
       const home = this.units.filter((u) => u.team === T.team && !u.dead && u.order.type === 'idle' && u._waiting);
       if (home.length >= this.diff.waveSize || (threat && home.length)) home.forEach((u) => { u._waiting = false; u.command({ type: 'charge' }); });
@@ -672,6 +696,7 @@ export class Game {
 
   // ---------------- FX ----------------
   burst(p, n, colors, speed = 3, life = 1, size = 1) {
+    if (!this.seenByViewer(p)) return;   // no free intel through the fog
     for (let i = 0; i < n; i++) {
       const s = (0.12 + Math.random() * 0.14) * size;
       const m = new THREE.Mesh(boxGeo(1, 1, 1), sharedMat(colors[i % colors.length]));
@@ -746,6 +771,8 @@ export class Game {
 
     this.updateProjectiles(dt);
     if (!this.over) { this.updateCamps(); this.updateLoot(dt); }
+    this.vision?.update(dt);
+    this.applyFog();
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;

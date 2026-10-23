@@ -306,12 +306,17 @@ export function buildSniper() {
 // ---------- neutral creeps ----------
 /** Floating loot cube on the ground. */
 export function buildLoot(color) {
+  // drawn on top of everything (depthTest off) so drops stay visible under tree canopies
   const g = new THREE.Group();
-  const core = new THREE.Mesh(boxGeo(0.45, 0.45, 0.45), new THREE.MeshLambertMaterial({ color, emissive: new THREE.Color(color).multiplyScalar(0.4) }));
-  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(0.55, 0.55, 0.55)), new THREE.LineBasicMaterial({ color: 0xffffff }));
-  const beam = new THREE.Mesh(boxGeo(0.12, 2.2, 0.12), new THREE.MeshBasicMaterial({ color: 0xfff3b0, transparent: true, opacity: 0.35, depthWrite: false }));
-  beam.position.y = 1.1;
-  g.add(core, edge, beam);
+  const top = { depthTest: false, depthWrite: false, transparent: true };
+  const core = new THREE.Mesh(boxGeo(0.45, 0.45, 0.45), new THREE.MeshBasicMaterial({ color, ...top, opacity: 0.95 }));
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(0.55, 0.55, 0.55)), new THREE.LineBasicMaterial({ color: 0xffffff, ...top }));
+  const beam = new THREE.Mesh(boxGeo(0.14, 5, 0.14), new THREE.MeshBasicMaterial({ color: 0xfff3b0, ...top, opacity: 0.45 }));
+  beam.position.y = 2.5;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.75, 4, 1), new THREE.MeshBasicMaterial({ color: 0xfff3b0, ...top, opacity: 0.8 }));
+  ring.rotation.x = -Math.PI / 2; ring.rotation.z = Math.PI / 4; ring.position.y = -0.45;
+  for (const m of [core, edge, beam, ring]) { m.renderOrder = 20; m.castShadow = false; }
+  g.add(core, edge, beam, ring);
   g.userData.spin = [core, edge];
   return g;
 }

@@ -86,3 +86,13 @@ Opening index.html directly via file:// will NOT work (ES modules need a server)
 - Every troop has `unit.items` (6 slots). `unit.addItem(id)` / `removeItem(slot)` call `recalcStats()`, which adds each item's flat `stats` (and `rangedStats` on ranged troops) to the base def.
 - `ITEMS` in config.js: `sprite` = pixel icon id in index.html, `icon` = loot cube color. Passive fields: `block` (Old Man Shield, basic attacks only via `takeDamage(..., {attack})`), `disarm` (Shackles → `unit.disarmT`), `helmet` (Riot Helmet, ranged hits), `splash` (Pocket Knife).
 - Player pickup: right-click → `Controls.issuePickup` → `{type:'pickup', loot}` order. AI troops auto-grab loot they walk over. Items vanish when the carrier dies.
+
+## Terrain, vision & extending the map (v0.9.0)
+Systems are split so new features plug in without touching each other:
+- `js/terrain.js` — `createTerrain()` (owned by the world): height/level (`heightAt`, `level` → river = low ground), obstacles (`addObstacle({x,z,r}|{x,z,hw,hd}, blocksMove, blocksVision)` / `removeObstacle(id)`), nav grid + A* (`findPath`, `clearLine`, `nearestFree`), collision push-out (`resolve`). Every change bumps `terrain.version`, so cached unit paths re-plan automatically.
+- `Unit.steer(goal, dt)` — all movement goes through it (straight line if clear, else cached A* path). `Unit.groundPos()` resolves collisions + sets height.
+- `js/vision.js` — `Vision` per match: per-team visibility grid from `sources(team)` = troops (`def.vision`), bases (`GAME.baseVision`) and `game.structures`. Trees/buildings block LOS, low ground can't see high ground, attackers get revealed (`reveal`). `game.intel[team]` = last-seen snapshot of the enemy base.
+- `js/fow.js` — fog rendering, injected into every material via `Material.prototype.onBeforeCompile` (opt-out: `material.userData.noFow = true`).
+- **Future buildings / turrets:** push into `game.structures` an object `{ team, pos:{x,z}, dead, visionRadius(nightF) }` and register its footprint with `terrain.addObstacle(...)` (remove on death). Pathing, collision and fog pick it up with no other changes. Turrets that shoot can reuse the tower path (`unit.tower = true`).
+- Uphill miss: `GAME.highGround.uphillMiss` (checked in `Unit.dodgeCheck`).
+- Auto-loot: `team.autoLoot` / `Game.setAutoLoot(team, on)`; handled in `Game.onUnitDeath`.

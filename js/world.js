@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GAME } from './config.js';
 import { CAMPS } from './neutrals.js';
 import * as M from './models.js';
+import { createTerrain, TERRAIN } from './terrain.js';
 
 function rand(seed) { // deterministic so the map looks the same every match
   let s = seed;
@@ -14,6 +15,8 @@ const NIGHT = { sky: new THREE.Color(0x0d1530), hemiSky: new THREE.Color(0x3a4f8
 
 export function createWorld(scene) {
   const r = rand(1337);
+  const terrain = createTerrain();
+  const RV = TERRAIN.river, riverW = RV.half + RV.ramp;
   scene.background = DAY.sky.clone();
   scene.fog = new THREE.Fog(DAY.sky.clone(), 75, 160);
 
@@ -46,12 +49,15 @@ export function createWorld(scene) {
       const camp = CAMPS.find((c) => Math.hypot(c.x - x, c.z - z) < 7);
       const edge = (x + (r() - 0.5) * 10) > 0;
       let palette;
-      if (camp) palette = camp.side === 'medieval' ? dirt : darkLot;
+      const riverbed = [0x6b5a3a, 0x5f5234, 0x75633f];
+      if (Math.abs(x) < riverW) palette = riverbed;
+      else if (camp) palette = camp.side === 'medieval' ? dirt : darkLot;
       else if (!edge) palette = inLane ? (r() < 0.75 ? dirt : grass) : (Math.abs(z) > 18 ? jungle : grass);
       else palette = inLane ? asphalt : concrete;
       col.setHex(palette[Math.floor(r() * palette.length)]);
       const walkable = Math.abs(z) < GAME.mapHalfWidth + 2;
-      const h = inLane || camp ? -0.5 + r() * 0.05 : -0.5 + r() * (walkable ? 0.08 : 0.35);
+      let h = inLane || camp ? -0.5 + r() * 0.05 : -0.5 + r() * (walkable ? 0.08 : 0.35);
+      if (Math.abs(x) < riverW) h = -0.5 + terrain.heightAt(x);      // low ground: the river bed
       mtx.makeTranslation(x, h, z);
       tiles.setMatrixAt(i, mtx); tiles.setColorAt(i, col); i++;
     }
@@ -61,6 +67,9 @@ export function createWorld(scene) {
     const d = new THREE.Mesh(M.boxGeo(1.8, 0.05, 0.3), M.sharedMat(0xf2c94c));
     d.position.set(x, 0.03, 0); d.receiveShadow = true; scene.add(d);
   }
+  // shallow water over the river bed (walkable, purely visual)
+  const water = new THREE.Mesh(new THREE.BoxGeometry(RV.half * 2 - 0.6, 0.3, nz * T), new THREE.MeshLambertMaterial({ color: 0x3a7ab8, transparent: true, opacity: 0.55, depthWrite: false }));
+  water.position.set(0, -RV.depth + 0.12, 0); water.renderOrder = 1; scene.add(water);
   const far = new THREE.Mesh(new THREE.PlaneGeometry(600, 400), new THREE.MeshLambertMaterial({ color: 0x3f6a2a }));
   far.rotation.x = -Math.PI / 2; far.position.y = -0.6; scene.add(far);
 
@@ -71,7 +80,17 @@ export function createWorld(scene) {
   hq.position.set(GAME.baseX, 0, 0); scene.add(hq);
 
   // ---------- props ----------
-  const place = (obj, x, z, ry = r() * Math.PI * 2) => { obj.position.set(x, 0, z); obj.rotation.y = ry; scene.add(obj); return obj; };
+  const place = (obj, x, z, ry = r() * Math.PI * 2, solid = null) => {
+    obj.position.set(x, 0, z); obj.rotation.y = ry; scene.add(obj);
+    if (solid) {   // register as an obstacle (boxes follow 90° rotations)
+      const q = Math.round(ry / (Math.PI / 2)) % 2 !== 0;
+      const shape = solid.r !== undefined ? { r: solid.r } : { hw: q ? solid.hd : solid.hw, hd: q ? solid.hw : solid.hd };
+      obj.userData.obstacle = terrain.addObstacle({ x, z, ...shape, blocksVision: !!solid.vision, kind: solid.kind });
+    }
+    return obj;
+  };
+  const inRiver = (x, pad = 0) => Math.abs(x) < riverW + pad;
+  const TREE = (s) => ({ r: 0.7 * s, vision: true, kind: 'tree' });
   const nearCamp = (x, z, d) => CAMPS.some((c) => Math.hypot(c.x - x, c.z - z) < d);
   // a walkable corridor from each camp to the lane (kept free of obstacles)
   const inCorridor = (x, z) => CAMPS.some((c) => Math.abs(x - c.x) < 4 && Math.sign(z) === Math.sign(c.z) && Math.abs(z) < Math.abs(c.z));
@@ -81,67 +100,79 @@ export function createWorld(scene) {
     const side = r() < 0.5 ? -1 : 1;
     const z = side * (GAME.laneHalfWidth + 3 + r() * 20);
     const x = -78 + r() * 76;
-    if (nearCamp(x, z, 8.5) || inCorridor(x, z)) continue;
-    place(r() < 0.5 ? M.buildTree(0.8 + r() * 0.6, k) : M.buildPine(0.9 + r() * 0.7), x, z, Math.floor(r() * 4) * Math.PI / 2);
+    if (nearCamp(x, z, 8.5) || inCorridor(x, z) || inRiver(x, 1)) continue;
+    const ts = r() < 0.5 ? ['t', 0.8 + r() * 0.6] : ['p', 0.9 + r() * 0.7];
+    place(ts[0] === 't' ? M.buildTree(ts[1], k) : M.buildPine(ts[1]), x, z, Math.floor(r() * 4) * Math.PI / 2, TREE(ts[1] * (ts[0] === 'p' ? 0.85 : 1)));
   }
   // dense tree ring around medieval camps, open toward the lane
   for (const c of CAMPS.filter((c) => c.side === 'medieval')) {
-    const open = Math.atan2(-Math.sign(c.z), 0);   // direction pointing at the lane
+    const open = Math.atan2(0, -Math.sign(c.z));   // ring angle (x = sin a, z = cos a) pointing at the lane
     for (let a = 0; a < Math.PI * 2; a += 0.42) {
       let da = Math.atan2(Math.sin(a - open), Math.cos(a - open));
       if (Math.abs(da) < 0.75) continue;
       const rr = 8.5 + r() * 2.5;
-      place(r() < 0.6 ? M.buildPine(1 + r() * 0.5) : M.buildTree(0.9 + r() * 0.5, Math.floor(r() * 4)), c.x + Math.sin(a) * rr, c.z + Math.cos(a) * rr, Math.floor(r() * 4) * Math.PI / 2);
+      const pine = r() < 0.6, sc = pine ? 1 + r() * 0.5 : 0.9 + r() * 0.5;
+      place(pine ? M.buildPine(sc) : M.buildTree(sc, Math.floor(r() * 4)), c.x + Math.sin(a) * rr, c.z + Math.cos(a) * rr, Math.floor(r() * 4) * Math.PI / 2, TREE(sc * (pine ? 0.85 : 1)));
     }
-    for (let k = 0; k < 5; k++) place(M.buildRock(0.5 + r() * 0.7), c.x + (r() - 0.5) * 10, c.z + (r() - 0.5) * 10 * 0.6 + Math.sign(c.z) * 3);
+    for (let k = 0; k < 5; k++) {
+      const sc = 0.5 + r() * 0.7, rx = c.x + (r() - 0.5) * 10, rz = c.z + (r() - 0.5) * 10 * 0.6 + Math.sign(c.z) * 3;
+      if (Math.hypot(rx - c.x, rz - c.z) < 3.2) continue;      // keep the spawn ring itself free
+      place(M.buildRock(sc), rx, rz, undefined, { r: 0.65 * sc, kind: 'rock' });
+    }
     // stone circle marks the spawn box
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 5) {
       const s = new THREE.Mesh(M.boxGeo(0.5, 0.3, 0.5), M.sharedMat(0x7d7f84));
       s.position.set(c.x + Math.cos(a) * 4, 0.15, c.z + Math.sin(a) * 4); s.castShadow = true; scene.add(s);
     }
   }
-  for (let k = 0; k < 10; k++) place(M.buildRock(0.6 + r()), -50 + r() * 48, (r() < 0.5 ? -1 : 1) * (GAME.laneHalfWidth + 1 + r() * 3));
+  for (let k = 0; k < 10; k++) {
+    const sc = 0.6 + r(), x = -50 + r() * 48, z = (r() < 0.5 ? -1 : 1) * (GAME.laneHalfWidth + 1 + r() * 3);
+    if (inRiver(x, 1)) continue;
+    place(M.buildRock(sc), x, z, undefined, { r: 0.65 * sc, kind: 'rock' });
+  }
 
   // ---------- light sources: modern street lamps + medieval torches in mirrored rows ----------
   const glowSources = [];   // { lightPos, flames? }
   for (let x = 8; x < 52; x += 9) {
-    place(M.buildLamp(), x, -(GAME.laneHalfWidth + 1.5), 0);
+    place(M.buildLamp(), x, -(GAME.laneHalfWidth + 1.5), 0, { r: 0.3, kind: 'lamp' });
     glowSources.push({ x: x + 1, y: 4.1, z: -(GAME.laneHalfWidth + 1.5), color: 0xffd98a });
-    place(M.buildLamp(), x + 4.5, GAME.laneHalfWidth + 1.5, Math.PI);
+    place(M.buildLamp(), x + 4.5, GAME.laneHalfWidth + 1.5, Math.PI, { r: 0.3, kind: 'lamp' });
     glowSources.push({ x: x + 3.5, y: 4.1, z: GAME.laneHalfWidth + 1.5, color: 0xffd98a });
   }
   const flames = [...castle.userData.torches];
   for (let x = -8; x > -54; x -= 9) {
     for (const [zz, off] of [[-(GAME.laneHalfWidth + 1.5), 0], [GAME.laneHalfWidth + 1.5, -4.5]]) {
-      const t = place(M.buildTorch(), x + off, zz, 0);
+      const t = place(M.buildTorch(), x + off, zz, 0, { r: 0.3, kind: 'torch' });
       flames.push(...t.userData.flames);
       glowSources.push({ x: x + off, y: 3.4, z: zz, color: 0xff9a40, flicker: true });
     }
   }
 
   // ---------- modern city blocks + gang hideouts ----------
-  for (let k = 0; k < 8; k++) place(M.buildBarrier(), 10 + r() * 40, (r() < 0.5 ? -1 : 1) * (GAME.laneHalfWidth + 3 + r() * 2), Math.floor(r() * 2) * Math.PI / 2);
+  for (let k = 0; k < 8; k++) place(M.buildBarrier(), 10 + r() * 40, (r() < 0.5 ? -1 : 1) * (GAME.laneHalfWidth + 3 + r() * 2), Math.floor(r() * 2) * Math.PI / 2, { hw: 1.2, hd: 0.35, kind: 'barrier' });
   const bcols = [0x7d8794, 0x9a8f86, 0x6f7a86, 0xb0a99f, 0x8a7f78];
   for (let k = 0; k < 22; k++) {
     const side = k % 2 ? -1 : 1;
     const x = 4 + (k >> 1) * 7 + r() * 2, z = side * (GAME.laneHalfWidth + 8 + r() * 16);
-    if (nearCamp(x, z, 9.5) || inCorridor(x, z)) continue;
-    const b = M.buildBuilding(4 + Math.floor(r() * 4), 6 + Math.floor(r() * 12), 4 + Math.floor(r() * 3), bcols[k % 5]);
-    place(b, x, z, side > 0 ? Math.PI : 0);
+    const bw = 4 + Math.floor(r() * 4), bh = 6 + Math.floor(r() * 12), bd = 4 + Math.floor(r() * 3);
+    if (nearCamp(x, z, 9.5) || inCorridor(x, z) || x - bw / 2 < riverW + 1) continue;
+    const b = M.buildBuilding(bw, bh, bd, bcols[k % 5]);
+    place(b, x, z, side > 0 ? Math.PI : 0, { hw: bw / 2, hd: bd / 2, vision: true, kind: 'building' });
   }
   for (const c of CAMPS.filter((c) => c.side === 'modern')) {
     const s = -Math.sign(c.z);   // toward lane
     // buildings walling the alley on three sides, open toward the lane
-    place(M.buildBuilding(6, 10, 5, 0x6f6660), c.x, c.z - s * 9.5, s > 0 ? 0 : Math.PI);
-    place(M.buildBuilding(5, 8, 6, 0x7d8794), c.x - 9.5, c.z - s * 3, Math.PI / 2);
-    place(M.buildBuilding(5, 12, 6, 0x8a7f78), c.x + 9.5, c.z - s * 3, -Math.PI / 2);
-    place(M.buildDumpster(), c.x - 5, c.z - s * 5.5, 0);
-    const bf = place(M.buildBarrel(true), c.x + 4.5, c.z - s * 5.5, 0); flames.push(...bf.userData.flames);
+    const BLD = (w, d) => ({ hw: w / 2, hd: d / 2, vision: true, kind: 'building' });
+    place(M.buildBuilding(6, 10, 5, 0x6f6660), c.x, c.z - s * 9.5, s > 0 ? 0 : Math.PI, BLD(6, 5));
+    place(M.buildBuilding(5, 8, 6, 0x7d8794), c.x - 9.5, c.z - s * 3, Math.PI / 2, BLD(5, 6));
+    place(M.buildBuilding(5, 12, 6, 0x8a7f78), c.x + 9.5, c.z - s * 3, -Math.PI / 2, BLD(5, 6));
+    place(M.buildDumpster(), c.x - 5, c.z - s * 5.5, 0, { hw: 1.15, hd: 0.65, kind: 'dumpster' });
+    const bf = place(M.buildBarrel(true), c.x + 4.5, c.z - s * 5.5, 0, { r: 0.45, kind: 'barrel' }); flames.push(...bf.userData.flames);
     glowSources.push({ x: c.x + 4.5, y: 1.6, z: c.z - s * 5.5, color: 0xff7a2e, flicker: true });
-    place(M.buildBarrel(), c.x + 5.6, c.z - s * 4.6, 0);
-    place(M.buildCrate(), c.x - 6.5, c.z - s * 3.5, 0.3);
-    place(M.buildFence(5), c.x - 6.5, c.z + s * 1.5, Math.PI / 2);
-    place(M.buildFence(5), c.x + 6.5, c.z + s * 1.5, Math.PI / 2);
+    place(M.buildBarrel(), c.x + 5.6, c.z - s * 4.6, 0, { r: 0.45, kind: 'barrel' });
+    place(M.buildCrate(), c.x - 6.5, c.z - s * 3.5, 0.3, { r: 0.55, kind: 'crate' });
+    place(M.buildFence(5), c.x - 6.5, c.z + s * 1.5, Math.PI / 2, { hw: 2.5, hd: 0.12, kind: 'fence' });
+    place(M.buildFence(5), c.x + 6.5, c.z + s * 1.5, Math.PI / 2, { hw: 2.5, hd: 0.12, kind: 'fence' });
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 5) {     // painted spawn-box ring
       const m = new THREE.Mesh(M.boxGeo(0.7, 0.04, 0.25), M.sharedMat(0xf2c94c));
       m.position.set(c.x + Math.cos(a) * 4, 0.03, c.z + Math.sin(a) * 4); m.rotation.y = -a; scene.add(m);
@@ -162,7 +193,7 @@ export function createWorld(scene) {
   let t = 0, nightF = 0;
   const tmpC = new THREE.Color();
   return {
-    sun, tiles, castle, hq,
+    sun, tiles, castle, hq, terrain,
     get night() { return nightF; },
     /** 0 = full day, 1 = full night */
     setNight(f) {

@@ -4,6 +4,7 @@ import * as CFG from './config.js';
 import { FACTIONS, GAME } from './config.js';
 import { settings } from './settings.js';
 import { createWorld } from './world.js';
+import { installFogShader, updateFogTexture, FOW } from './fow.js';
 import { Game } from './game.js';
 import { Controls } from './controls.js';
 import { UI, makePortraits } from './ui.js';
@@ -26,6 +27,7 @@ view.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.5, 400);
 const world = createWorld(scene);
+installFogShader(world.terrain.VW, world.terrain.VH);   // fog of war darkening for every material
 
 app.applyGraphics = () => {
   const q = settings.graphics.quality;
@@ -68,6 +70,7 @@ app.controls = new Controls(() => renderer.domElement, camera, {
   toggleShop: () => app.ui.toggleShop(),
   toggleBarracks: () => app.ui.toggleBarracks(),
   toggleRepair: () => app.ui.toggleRepair(),
+  toggleAutoLoot: () => app.ui.toggleAutoLoot(),
   shopOpen: () => app.ui.shopOpen(),
   roster: () => (app.playerFaction ? FACTIONS[app.playerFaction].units : []),
   buy: (id, many) => { const i = FACTIONS[app.playerFaction].units.indexOf(id); for (let k = 0; k < (many ? 5 : 1); k++) if (!app.trainSlot(i, k > 0)) break; },
@@ -113,15 +116,15 @@ app.startMatch = (faction, difficulty) => {
   g.on('upgrade', (team, id, lvl) => { if (team === app.playerTeam) { app.ui.toast(`Upgrade complete: ${app.ui.upgradeName(id)} Lv ${lvl}`); sfx('train'); } });
   g.on('pickup', (u, id) => { if (u.team === app.playerTeam) { app.ui.floatText(u.pos, CFG.ITEMS[id].name, 'gold'); sfx('coin', 80); app.ui.refreshSelection(true); } });
   g.on('invFull', () => app.ui.toast('Inventory full', 'err'));
-  g.on('disarm', (u) => app.ui.floatText(u.pos, 'DISARMED', 'miss'));
+  g.on('disarm', (u) => { if (g.seenByViewer(u.pos)) app.ui.floatText(u.pos, 'DISARMED', 'miss'); });
   g.on('brainwash', (u, orig) => {
-    app.ui.floatText(u.pos, 'BRAINWASHED', 'crit');
+    if (g.seenByViewer(u.pos)) app.ui.floatText(u.pos, 'BRAINWASHED', 'crit');
     const c = app.controls;
     if (c.selection.includes(u)) { u.selected = false; c.setSelection(c.selection.filter((x) => x !== u)); }
     if (orig === app.playerTeam) app.ui.toast(`A Banshee turned your ${u.def.name} against you!`, 'err');
   });
-  g.on('crit', (pos, dmg) => app.ui.floatText(pos, Math.round(dmg) + '!', 'crit'));
-  g.on('dodge', (pos, kind) => app.ui.floatText(pos, kind === 'miss' ? 'MISS' : 'EVADE', 'miss'));
+  g.on('crit', (pos, dmg) => { if (g.seenByViewer(pos)) app.ui.floatText(pos, Math.round(dmg) + '!', 'crit'); });
+  g.on('dodge', (pos, kind) => { if (g.seenByViewer(pos)) app.ui.floatText(pos, kind === 'evade' ? 'EVADE' : kind === 'uphill' ? 'MISS ▲' : 'MISS', 'miss'); });
   g.on('bounty', (pos, gold, team) => { if (team === app.playerTeam) { app.ui.floatText(pos, '+' + gold, 'gold'); sfx('coin', 80); } });
   g.on('baseDestroyed', (team) => {
     app.controls.enabled = false;
@@ -196,6 +199,8 @@ function frame() {
     if (g.over) { demoRestart += dt; if (demoRestart > 4) { demoRestart = 0; startDemo(); } }
   }
   if (app.state !== 'paused') g.update(dt, camera.quaternion);
+  FOW.on.value = g && g.vision && g.playerTeam !== null ? 1 : 0;
+  if (FOW.on.value) updateFogTexture(g.vision.vis[g.playerTeam], dt);
   if (g) world.setNight(g.dayNight.f);
   world.update(dt);
   app.controls.update(dt);

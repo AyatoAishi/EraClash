@@ -140,6 +140,7 @@ export class UI {
     $('#btn-barracks').addEventListener('click', () => this.toggleBarracks());
     $('#barracks-close').addEventListener('click', () => this.toggleBarracks(false));
     $('#btn-repair').addEventListener('click', () => this.toggleRepair());
+    $('#btn-autoloot').addEventListener('click', () => this.toggleAutoLoot());
 
     $$('.tabs').forEach((tabs) => {
       tabs.addEventListener('click', (e) => {
@@ -185,6 +186,11 @@ export class UI {
         ? `<div class="tip-m">${A.cooldown ? `Cooldown ${A.cooldown}s` : 'No cooldown'}${A.radius ? ` · Radius ${A.radius}` : ''}${A.damage ? ` · ${A.damage} ${DAMAGE_TYPES[A.damageType].name.toLowerCase()} dmg` : ''}${el.dataset.key ? ` · Key <kbd>${el.dataset.key}</kbd>` : ''}</div>` : '';
       html = `<div class="tip-h"><svg class="ico"><use href="#${A.icon}"/></svg><b>${A.name}</b><small class="${A.kind}">${A.kind.toUpperCase()}</small></div>
         <p>${A.desc}</p>${meta}${status ? `<div class="tip-s ${status.on ? 'on' : ''}">${status.text}</div>` : ''}`;
+    } else if (kind === 'autoloot') {
+      const on = this.app.game?.teams[this.app.playerTeam]?.autoLoot;
+      html = `<div class="tip-h"><svg class="ico"><use href="#i-autoloot"/></svg><b>Auto-loot</b><small>TOGGLE</small></div>
+        <p><b>ON:</b> when one of your troops kills a creep that drops an item, the item goes straight into that troop's inventory. If its slots are full (or a tower got the kill) the item drops on the ground as usual.</p>
+        <p><b>OFF:</b> items drop on the ground; select a troop and right-click the item to pick it up.</p><div class="tip-s ${on ? 'on' : ''}">${on ? 'ON' : 'OFF'}</div>`;
     } else if (kind === 'repair') {
       const g = this.app.game, t = this.app.playerTeam;
       const r = g ? g.repairRates(t) : { heal: 10, drain: 5 };
@@ -197,7 +203,8 @@ export class UI {
       const U = UPGRADES[id], g = this.app.game;
       const tt = el.dataset.tip.split(':')[2];
       const team = tt !== undefined ? +tt : this.app.playerTeam;
-      const lvl = g && team !== null ? g.upLevel(team, id) : 0;
+      const lv4 = el.dataset.tip.split(':')[3];
+      const lvl = lv4 !== undefined ? +lv4 : g && team !== null ? g.upLevel(team, id) : 0;
       const rows = U.max === Infinity
         ? `<div class="tip-m">Unlimited levels · current: ${lvl ? U.levelText(lvl, U) : 'none'}</div>`
         : `<div class="tip-m">${Array.from({ length: U.max }, (_, k) => `<div class="${k < lvl ? 'on' : ''}">Lv ${k + 1} · ${upgradePrice(U, k)}g · ${U.levelText(k + 1, U)}</div>`).join('')}</div>`;
@@ -482,6 +489,7 @@ export class UI {
         <div><kbd>${keyLabel(k.stop)}</kbd> stop: cancel the current action and hold position. <kbd>${keyLabel(k.charge)}</kbd> charge: back to auto-attacking the enemy base.</div>
         <div><kbd>${keyLabel(k.shop)}</kbd> open the Shop. While it's open, each troop's buy key (default <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>) buys it, <kbd>Shift</kbd> buys 5, <kbd>Esc</kbd> closes it. <kbd>${keyLabel(k.selectAll)}</kbd> selects all your troops.</div>
         <div><kbd>${keyLabel(k.abil1)}</kbd> <kbd>${keyLabel(k.abil2)}</kbd> <kbd>${keyLabel(k.abil3)}</kbd> <kbd>${keyLabel(k.abil4)}</kbd> use ability slots 1–4 of the selected troop (every selected troop of that type casts). You can also click the ability icon.</div>
+        <div><kbd>RMB</kbd> on a dropped item = closest selected troop picks it up. <kbd>${keyLabel(k.autoLoot)}</kbd> toggles <b>Auto-loot</b> (creep drops go straight to the killer's inventory).</div>
         <div><kbd>Ctrl+1-9</kbd> save group, <kbd>1-9</kbd> recall, double-tap to jump camera.</div>
         <div>Push the mouse against a screen edge or use the arrow keys to scroll. <kbd>${keyLabel(k.centerBase)}</kbd> jumps home. Minimap: <kbd>LMB</kbd> jump/drag camera, <kbd>RMB</kbd> move troops.</div>
       </div>`;
@@ -533,6 +541,22 @@ export class UI {
   }
 
   // ======================= REPAIR =======================
+  toggleAutoLoot() {
+    const g = this.app.game, pt = this.app.playerTeam;
+    if (!g || pt === null) return;
+    g.setAutoLoot(pt, !g.teams[pt].autoLoot);
+    sfx(g.teams[pt].autoLoot ? 'order' : 'click');
+    this.toast(`Auto-loot ${g.teams[pt].autoLoot ? 'ON — kills put drops straight in the killer\'s bag' : 'OFF — drops land on the ground'}`);
+    this.renderAutoLoot();
+  }
+  renderAutoLoot() {
+    const T = this.app.game?.teams[this.app.playerTeam];
+    const on = !!T?.autoLoot;
+    $('#btn-autoloot').classList.toggle('on', on);
+    $('#autoloot-state').textContent = on ? 'ON' : 'OFF';
+    $('#autoloot-kbd').textContent = keyLabel(settings.keys.autoLoot);
+    if (this._alOn !== on) { this._alOn = on; if (this.tipEl?.id === 'btn-autoloot') this.renderTip(); }
+  }
   toggleRepair() {
     const g = this.app.game; if (!g || this.app.playerTeam === null) return;
     const T = g.teams[this.app.playerTeam];
@@ -696,6 +720,7 @@ export class UI {
     });
     this.renderBarracks();
     this.renderRepair();
+    this.renderAutoLoot();
     // nudge: idle gold piling up and shop closed -> pulse the shop button
     $('#btn-shop').classList.toggle('pulse', T.gold >= cheapest * 3 && !$('#shop').classList.contains('open') && !T.queue.length);
     this.renderQueue();
@@ -708,21 +733,25 @@ export class UI {
   /** Base selected: HP, defenses, economy, towers and every researched upgrade (own or enemy). */
   renderBaseSelection(b, force) {
     const g = this.app.game, T = g.teams[b.team], pt = this.app.playerTeam;
+    const enemy = pt !== null && b.team !== pt;
+    // enemy base: only what you last saw (fog of war intel); your own base: live
+    const I = enemy ? g.intel?.[pt] || { seen: false } : { seen: true, live: true, upLevels: T.upLevels, research: T.research ? { id: T.research.id, level: T.research.level, left: T.research.total - T.research.t } : null, towers: T.towers, repairOn: T.repairOn, income: T.income };
     const panel = $('#selpanel');
     panel.classList.remove('empty');
-    panel.classList.toggle('enemy', b.team !== pt);
+    panel.classList.toggle('enemy', enemy);
     const f = FACTIONS[T.faction];
-    const key = 'base' + b.team + ':' + JSON.stringify(T.upLevels) + (T.research?.id || '');
+    const key = 'base' + b.team + ':' + I.seen + ':' + JSON.stringify(I.upLevels || {}) + (I.research?.id || '');
     if (key !== this.lastSelKey || force) {
       this.lastSelKey = key;
       $('#sp-portrait').src = PORTRAITS['base' + b.team].face;
-      $('#sp-name').textContent = f.baseName + (b.team !== pt ? ' (enemy)' : '');
-      const ups = Object.entries(T.upLevels).filter(([, l]) => l > 0);
+      $('#sp-name').textContent = f.baseName + (enemy ? ' (enemy)' : '');
+      const ups = Object.entries(I.upLevels || {}).filter(([, l]) => l > 0);
       const grid = $('#sp-grid');
       grid.style.display = 'grid';
       grid.classList.add('basegrid');
-      grid.innerHTML = (ups.length ? ups.map(([id, l]) => `<div class="cell upcell" data-tip="upgrade:${id}:${b.team}"><svg><use href="#${UPGRADES[id].icon}"/></svg><em>${l}</em></div>`).join('')
-        : '<div class="more" style="grid-column:1/-1">No upgrades researched yet</div>');
+      grid.innerHTML = !I.seen ? '<div class="more" style="grid-column:1/-1">Not scouted</div>'
+        : ups.length ? ups.map(([id, l]) => `<div class="cell upcell" data-tip="upgrade:${id}:${b.team}:${l}"><svg><use href="#${UPGRADES[id].icon}"/></svg><em>${l}</em></div>`).join('')
+        : '<div class="more" style="grid-column:1/-1">No upgrades researched yet</div>';
       $('#sp-abil').innerHTML = ''; $('#sp-inv').classList.remove('on'); $('#sp-inv').innerHTML = '';
       $('#sp-res').innerHTML = '';
     }
@@ -730,12 +759,14 @@ export class UI {
     $('#sp-hpfill').style.width = (fr * 100) + '%';
     $('#sp-hpfill').style.background = fr > 0.5 ? 'var(--hp)' : fr > 0.25 ? 'var(--gold)' : 'var(--bad)';
     $('#sp-hptext').textContent = `${Math.ceil(b.hp)} / ${Math.round(b.maxHp)}`;
-    const R = T.research;
-    $('#sp-order').textContent = 'Base · ' + (R ? `Researching ${UPGRADES[R.id].name} Lv ${R.level} (${Math.ceil(R.total - R.t)}s)` : 'No research running');
+    const ago = enemy && I.seen ? (g.time - I.time < 1 ? ' · in vision' : ` · last seen ${fmtTime(g.time - I.time)} ago`) : '';
+    const R = I.research;
+    $('#sp-order').textContent = 'Base' + ago + ' · ' + (!I.seen ? 'Unknown' : R ? `Researching ${UPGRADES[R.id].name} Lv ${R.level}` + (enemy && g.time - I.time >= 1 ? '' : ` (${Math.ceil(R.left)}s)`) : 'No research running');
     const rr = g.repairRates(b.team);
     const stat = (label, val) => `<div><span>${label}</span><b>${val}</b></div>`;
-    $('#sp-stats').innerHTML = stat('ARMOR', fmt(GAME.baseArmor)) + stat('INCOME', fmt(T.income) + '/s') + stat('TOWERS', T.towers) +
-      stat('REPAIR', T.repairOn ? `ON +${rr.heal}/s` : 'off') + stat('ARMY', g.pop(b.team)) + stat('UPGRADES', Object.values(T.upLevels).reduce((a, l) => a + l, 0));
+    const q = (v) => (I.seen ? v : '?');
+    $('#sp-stats').innerHTML = stat('ARMOR', fmt(GAME.baseArmor)) + stat('INCOME', q(fmt(I.income) + '/s')) + stat('TOWERS', q(I.towers)) +
+      stat('REPAIR', q(I.repairOn ? `ON +${rr.heal}/s` : 'off')) + (enemy ? '' : stat('ARMY', g.pop(b.team))) + stat('UPGRADES', q(Object.values(I.upLevels || {}).reduce((a, l) => a + l, 0)));
   }
 
   refreshSelection(force = false) {
@@ -854,18 +885,30 @@ export class UI {
     c.fillStyle = '#2f4a25'; c.fillRect(0, 0, W / 2, H);
     c.fillStyle = '#34373c'; c.fillRect(W / 2, 0, W / 2, H);
     c.fillStyle = 'rgba(255,255,255,0.08)'; c.fillRect(X(-52), Z(-14), X(52) - X(-52), Z(14) - Z(-14));
+    c.fillStyle = 'rgba(58,122,184,0.7)'; c.fillRect(X(-3.5), 0, X(3.5) - X(-3.5), H);          // river (low ground)
+    const pt0 = this.app.playerTeam, V = g.vision;
+    if (V && pt0 !== null) {   // fog of war
+      const vis = V.vis[pt0], vc = 2;
+      c.fillStyle = 'rgba(0,0,0,0.45)';
+      for (let iz = 0; iz < V.H; iz++) for (let ix = 0; ix < V.W; ix++) {
+        if (vis[iz * V.W + ix]) continue;
+        const x = -90 + ix * vc, z = -36 + iz * vc;
+        if (x + vc < -64 || x > 64 || z + vc < -32 || z > 32) continue;
+        c.fillRect(X(x), Z(z), Math.ceil(X(x + vc) - X(x)), Math.ceil(Z(z + vc) - Z(z)));
+      }
+    }
     for (const b of g.bases) {
       c.fillStyle = b.dead ? '#555' : (b.team === 0 ? '#e8a83c' : '#4ea8ff');
       c.fillRect(X(b.x - 6), Z(-7), X(6) - X(0), Z(7) - Z(-7));
     }
     const pt = this.app.playerTeam;
     for (const u of g.units) {
-      if (u.dead) continue;
+      if (u.dead || !g.canSee(pt, u)) continue;
       c.fillStyle = u.selected ? '#ffffff' : u.team === 2 ? '#f2c94c' : (u.team === pt ? '#5ce36f' : '#ff5252');
       const s = u.ranged ? 3 : 4;
       c.fillRect(X(u.pos.x) - s / 2, Z(u.pos.z) - s / 2, s, s);
     }
-    for (const L of g.loot) { c.fillStyle = '#ffffff'; c.fillRect(X(L.x) - 1, Z(L.z) - 1, 2, 2); }
+    for (const L of g.loot) { if (!g.seenByViewer(L)) continue; c.fillStyle = '#ffffff'; c.fillRect(X(L.x) - 1, Z(L.z) - 1, 2, 2); }
     c.strokeStyle = 'rgba(242,201,76,0.55)'; c.lineWidth = 1;
     for (const cp of CAMPS) c.strokeRect(X(cp.x) - 3, Z(cp.z) - 3, 6, 6);
     const fp = this.app.controls.viewFootprint();
