@@ -1,7 +1,7 @@
 // A single troop: brain (orders/targeting), body (movement/separation), visuals (anim/hp bar/ring).
 import * as THREE from 'three';
 import { UNITS, GAME, ITEMS, ABILITIES, DAMAGE_TYPES, defenseMult, attackInterval } from './config.js';
-import { UPGRADES } from './upgrades.js';
+import { UPGRADES, STAT_BOOST } from './upgrades.js';
 import { NEUTRAL_TEAM, CAMP_RULES } from './neutrals.js';
 import { UNIT_BUILDERS, buildZzz } from './models.js';
 import { settings } from './settings.js';
@@ -121,7 +121,11 @@ export class Unit {
     add(T?.unitMods?.[this.def.id]);     // Barracks stat upgrades
     for (const id of this.items) { add(id && ITEMS[id]?.stats); if (this.ranged) add(id && ITEMS[id]?.rangedStats); }   // Quiver: ranged carriers only
     this.bonus = bonus;
-    for (const k of STAT_KEYS) this.stats[k] = (this.def[k] || 0) + bonus[k];
+    // BASE stats = definition, scaled by Barracks stat boosts (+10% per level). BONUS stats = items, family/flat upgrades, buffs.
+    const mult = this.game.statMult ? this.game.statMult(this.statTeam, this.def.id) : 1;
+    this.base = {};
+    for (const k of STAT_KEYS) this.base[k] = (this.def[k] || 0) * (STAT_BOOST.stats.includes(k) ? mult : 1);
+    for (const k of STAT_KEYS) this.stats[k] = this.base[k] + bonus[k];
 
     if (oldMax && this.hp !== undefined) this.hp = Math.min(this.stats.hp, this.hp * (this.stats.hp / oldMax));
   }
@@ -364,7 +368,8 @@ export class Unit {
   }
 
   /** After an attack's damage lands (melee or projectile): lifesteal, on-hit slows. */
-  onAttackLanded(tg, dealt, raw = 0) {
+  onAttackLanded(tg, dealt, raw = 0, crit = false) {
+    if (dealt > 0) this.game.emit('hitDmg', tg.pos, dealt, crit, this.team);
     if (this.pas.lifesteal && dealt > 0 && !this.dead) this.hp = Math.min(this.maxHp, this.hp + dealt * this.pas.lifesteal / 100);
     const g = this.game;
     // Shackles (melee carriers): chance to disarm
@@ -477,7 +482,7 @@ export class Unit {
       const raw = this.rollDamage();
       const dealt = tg.takeDamage(raw, this, this.def.damageType || 'physical', { attack: true, ranged: false });
       this.damageDealt += dealt;
-      this.onAttackLanded(tg, dealt, raw);
+      this.onAttackLanded(tg, dealt, raw, this.lastCrit);
       g.onHit(this, tg);
       this.onAttackDone();
     }

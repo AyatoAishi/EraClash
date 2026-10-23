@@ -59,7 +59,7 @@ export const DEFAULTS = {
     ...Object.fromEntries(Object.values(FACTIONS).flatMap((f) => f.units.map((id, i) => ['buy_' + id, 'Digit' + (i + 1)]))),
   },
   audio: { master: 0.8, music: 0.4, sfx: 0.8, mute: false },
-  graphics: { quality: 'medium', pixelated: false, showFps: false, hpBars: 'always', uiScale: 1 },
+  graphics: { quality: 'medium', pixelated: false, showFps: false, hpBars: 'always', uiScale: 1, damageNumbers: 'crits', critHighlight: true, combatText: true },
   gameplay: { edgePan: true, panSpeed: 1.0, zoomSpeed: 1.0 },
 };
 

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GAME, FACTIONS, UNITS, DIFFICULTY, defenseMult } from './config.js';
 import { Unit } from './unit.js';
-import { UPGRADES, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
+import { UPGRADES, STAT_BOOST, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
 import { ABILITIES, ITEMS } from './config.js';
 import { NEUTRAL_TEAM, CAMP_RULES, CAMPS } from './neutrals.js';
 import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot } from './models.js';
@@ -51,7 +51,8 @@ export class Game {
       unitMods: {},      // unitId -> flat stat bonuses from stat upgrades
       costAdd: {},       // unitId -> extra hiring cost
       grants: {},        // unitId -> [abilityId] added by upgrades
-      research: null,    // { id, t, total, price }
+      research: null,    // { id, t, total, price, level } — the one running now
+      rqueue: [],        // queued research: [{ id, price, level }] (paid up front, like training)
       towers: 0,
       trainT: 0,
       isAI: this.isAI(t),
@@ -104,7 +105,22 @@ export class Game {
   emit(evt, ...a) { (this.listeners[evt] || []).forEach((fn) => fn(...a)); }
 
   pop(team) { return this.units.filter((u) => u.team === team && !u.dead && !u.tower).length + this.teams[team].queue.length; }
-  unitCost(team, unitId) { return UNITS[unitId].cost + (this.teams[team].costAdd[unitId] || 0); }
+  unitCost(team, unitId) { return Math.round((UNITS[unitId].cost * this.statMult(team, unitId) + (this.teams[team]?.costAdd[unitId] || 0)) * 100) / 100; }
+  /** Stat boost multiplier for a troop type: 1 + 10% per level of every statBoost upgrade that targets it. */
+  statMult(team, unitId) {
+    const T = this.teams[team]; if (!T) return 1;
+    let m = 1;
+    for (const [id, L] of Object.entries(T.upLevels)) {
+      for (const e of UPGRADES[id]?.effects || []) if (e.type === 'statBoost' && e.unit === unitId) m += e.pct * L;
+    }
+    return m;
+  }
+  /** Level an upgrade will have once everything already running/queued finishes. */
+  pendingLevel(team, id) {
+    const T = this.teams[team];
+    return this.upLevel(team, id) + (T.research?.id === id ? 1 : 0) + T.rqueue.filter((q) => q.id === id).length;
+  }
+  researchCount(team) { const T = this.teams[team]; return (T.research ? 1 : 0) + T.rqueue.length; }
   upLevel(team, id) { return this.teams[team]?.upLevels[id] || 0; }
   /** Logistics: multiplier on research & training durations. */
   speedMult(team) {
@@ -125,21 +141,34 @@ export class Game {
     const T = this.teams[team], U = UPGRADES[id];
     if (!U || (U.faction !== 'both' && U.faction !== T.faction)) return 'Not available';
     if (this.over) return 'Match is over';
-    const lvl = this.upLevel(team, id);
-    if (lvl >= U.max) return 'Already maxed';
-    if (T.research) return 'Already researching ' + UPGRADES[T.research.id].name;
+    const lvl = this.pendingLevel(team, id);            // queued levels count: you can stack the same upgrade
+    if (lvl >= U.max) return T.research || T.rqueue.length ? 'Max level already queued' : 'Already maxed';
+    if (this.researchCount(team) >= GAME.researchQueueMax) return 'Research queue full';
     const price = upgradePrice(U, lvl);
     if (T.gold < price) return 'Not enough gold';
     T.gold -= price; T.stats.goldSpent += price;
-    T.research = { id, t: 0, total: upgradeTime(U, lvl) * this.speedMult(team), price, level: lvl + 1 };
+    const entry = { id, price, level: lvl + 1 };
+    if (T.research) T.rqueue.push(entry); else this.startResearch(team, entry);
     this.emit('researchStart', team, id);
     return null;
   }
-  cancelResearch(team) {
+  startResearch(team, e) {
+    const T = this.teams[team], U = UPGRADES[e.id];
+    T.research = { ...e, t: 0, total: upgradeTime(U, e.level - 1) * this.speedMult(team) };
+  }
+  /**
+   * Cancel research: slot -1 = the running one, 0.. = queued entry. Refunds it and any later
+   * levels of the same upgrade (they depend on it). The next queued research starts.
+   */
+  cancelResearch(team, slot = -1) {
     const T = this.teams[team];
-    if (!T.research) return false;
-    T.gold += T.research.price; T.stats.goldSpent -= T.research.price;
-    T.research = null;
+    const target = slot < 0 ? T.research : T.rqueue[slot];
+    if (!target) return false;
+    const drop = (e) => e === target || (e.id === target.id && e.level > target.level);
+    const refund = (e) => { T.gold += e.price; T.stats.goldSpent -= e.price; };
+    if (T.research && drop(T.research)) { refund(T.research); T.research = null; }
+    T.rqueue = T.rqueue.filter((e) => { if (drop(e)) { refund(e); return false; } return true; });
+    if (!T.research && T.rqueue.length) this.startResearch(team, T.rqueue.shift());
     return true;
   }
   /** Apply one level of an upgrade (called when research finishes). */
@@ -147,7 +176,9 @@ export class Game {
     const T = this.teams[team], U = UPGRADES[id];
     const lvl = (T.upLevels[id] = (T.upLevels[id] || 0) + 1);
     for (const e of U.effects || []) {
-      if (e.type === 'unitStats') {
+      if (e.type === 'statBoost') {
+        // nothing stored: Unit.recalcStats / Game.unitCost read the level through statMult()
+      } else if (e.type === 'unitStats') {
         const m = (T.unitMods[e.unit] ||= {});
         for (const [k, v] of Object.entries(e.perLevel)) m[k] = (m[k] || 0) + v;
         T.costAdd[e.unit] = (T.costAdd[e.unit] || 0) + (e.costPerLevel || 0);
@@ -489,7 +520,7 @@ export class Game {
           if (dodge) { this.onDodge(p.src, t, dodge); this.scene.remove(p.mesh); this.projectiles.splice(i, 1); continue; }
           const dealt = t.takeDamage(p.dmg, p.src, p.src.def.damageType || 'physical', { attack: true, ranged: true });
           p.src.damageDealt += dealt;
-          p.src.onAttackLanded(t, dealt, p.dmg);
+          p.src.onAttackLanded(t, dealt, p.dmg, p.crit);
           this.onHit(p.src, t);
           if (p.crit) { this.emit('crit', t.pos, dealt); this.burst(t.pos, 6, [0xf7c948, 0xffe27a], 2.5, 0.5); }
         }
@@ -604,7 +635,7 @@ export class Game {
     }
     const U = UPGRADES[T.aiGoal];
     T.aiGoalT += think;
-    if (T.gold >= upgradePrice(U, this.upLevel(T.team, U.id))) { this.research(T.team, U.id); T.aiGoal = null; }
+    if (T.gold >= upgradePrice(U, this.pendingLevel(T.team, U.id))) { this.research(T.team, U.id); T.aiGoal = null; }
     else if (T.aiGoalT > 30) T.aiGoal = null;
   }
   /** True while the AI is saving for an upgrade and buying this troop would break the plan. */
@@ -745,7 +776,10 @@ export class Game {
         } else T.trainT = 0;
         if (T.research) {
           T.research.t += dt;
-          if (T.research.t >= T.research.total) { const id = T.research.id; T.research = null; this.applyUpgrade(T.team, id); }
+          if (T.research.t >= T.research.total) {
+            const id = T.research.id; T.research = null; this.applyUpgrade(T.team, id);
+            if (T.rqueue.length) this.startResearch(T.team, T.rqueue.shift());
+          }
         }
         if (T.isAI) this.updateAI(T, dt);
       }

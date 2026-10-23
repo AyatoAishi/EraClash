@@ -116,15 +116,23 @@ app.startMatch = (faction, difficulty) => {
   g.on('upgrade', (team, id, lvl) => { if (team === app.playerTeam) { app.ui.toast(`Upgrade complete: ${app.ui.upgradeName(id)} Lv ${lvl}`); sfx('train'); } });
   g.on('pickup', (u, id) => { if (u.team === app.playerTeam) { app.ui.floatText(u.pos, CFG.ITEMS[id].name, 'gold'); sfx('coin', 80); app.ui.refreshSelection(true); } });
   g.on('invFull', () => app.ui.toast('Inventory full', 'err'));
-  g.on('disarm', (u) => { if (g.seenByViewer(u.pos)) app.ui.floatText(u.pos, 'DISARMED', 'miss'); });
+  g.on('disarm', (u) => { if (settings.graphics.combatText && g.seenByViewer(u.pos)) app.ui.floatText(u.pos, 'DISARMED', 'miss'); });
   g.on('brainwash', (u, orig) => {
-    if (g.seenByViewer(u.pos)) app.ui.floatText(u.pos, 'BRAINWASHED', 'crit');
+    if (settings.graphics.combatText && g.seenByViewer(u.pos)) app.ui.floatText(u.pos, 'BRAINWASHED', 'crit');
     const c = app.controls;
     if (c.selection.includes(u)) { u.selected = false; c.setSelection(c.selection.filter((x) => x !== u)); }
     if (orig === app.playerTeam) app.ui.toast(`A Banshee turned your ${u.def.name} against you!`, 'err');
   });
-  g.on('crit', (pos, dmg) => { if (g.seenByViewer(pos)) app.ui.floatText(pos, Math.round(dmg) + '!', 'crit'); });
-  g.on('dodge', (pos, kind) => { if (g.seenByViewer(pos)) app.ui.floatText(pos, kind === 'evade' ? 'EVADE' : kind === 'uphill' ? 'MISS ▲' : 'MISS', 'miss'); });
+  // damage numbers (Options > Graphics): all hits / crits only / off, crit highlight on/off
+  g.on('crit', (pos, dmg) => {
+    const G = settings.graphics; if (G.damageNumbers === 'off' || !g.seenByViewer(pos)) return;
+    app.ui.floatText(pos, Math.round(dmg) + (G.critHighlight ? '!' : ''), G.critHighlight ? 'crit' : 'dmg');
+  });
+  g.on('hitDmg', (pos, dmg, crit, team) => {
+    if (crit || settings.graphics.damageNumbers !== 'all' || !g.seenByViewer(pos)) return;
+    app.ui.floatText(pos, String(Math.round(dmg)), 'dmg' + (app.playerTeam !== null && team !== app.playerTeam ? ' foe' : ''));
+  });
+  g.on('dodge', (pos, kind) => { if (settings.graphics.combatText && g.seenByViewer(pos)) app.ui.floatText(pos, kind === 'evade' ? 'EVADE' : kind === 'uphill' ? 'MISS ▲' : 'MISS', 'miss'); });
   g.on('bounty', (pos, gold, team) => { if (team === app.playerTeam) { app.ui.floatText(pos, '+' + gold, 'gold'); sfx('coin', 80); } });
   g.on('baseDestroyed', (team) => {
     app.controls.enabled = false;

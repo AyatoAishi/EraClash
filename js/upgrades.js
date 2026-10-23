@@ -7,7 +7,10 @@
 //  icon: SVG symbol id in index.html (every upgrade has its own)
 // ============================================================
 
-const BASE_TIME = { base: 6, step: 1.5, cap: 30 };   // unlimited stat upgrades: 6s, +1.5s per level, max 30s
+const BASE_TIME = { base: 6, step: 1.5, cap: 30 };   // unlimited upgrades: 6s, +1.5s per level, max 30s
+/** Stat boost upgrades: base + 10% per level on the troop's BASE stats, its hiring cost, the upgrade price and research time. */
+export const STAT_BOOST = { pct: 0.10, stats: ['hp', 'armor', 'ward', 'damage', 'hpRegen'] };
+const STAT_BOOST_TIME = { base: 6, pct: STAT_BOOST.pct };
 
 export const UPGRADES = {
   // ===================== MEDIEVAL =====================
@@ -20,13 +23,14 @@ export const UPGRADES = {
     levelText: (l, U) => `Lone Wolf +${U.values.damage[l - 1]} dmg, +${U.values.hpRegen[l - 1]} regen, +${U.values.armor[l - 1]} armor${l === 5 ? ', 20% lifesteal' : ''}`,
   },
   proteinBoost: {
-    id: 'proteinBoost', faction: 'medieval', category: 'troop', unit: 'viking', icon: 'u-protein',
+    id: 'proteinBoost', faction: 'medieval', category: 'troop', unit: 'viking', icon: 'u-protein', kind: 'statBoost',
     name: 'Protein Boost', max: Infinity,
-    price: { base: 100, step: 10 }, time: BASE_TIME,
-    effects: [{ type: 'unitStats', unit: 'viking', perLevel: { hp: 5, armor: 0.1, damage: 0.3, hpRegen: 0.1 }, costPerLevel: 5 }],
-    desc: 'Every Viking: <b>+5 HP, +0.1 armor, +0.3 damage, +0.1 HP regen</b>. Vikings cost +5g per level.',
-    levelText: (l) => `+${5 * l} HP, +${(0.1 * l).toFixed(1)} armor, +${(0.3 * l).toFixed(1)} dmg · cost +${5 * l}g`,
+    price: { base: 100, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'viking', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Viking gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Viking cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
+
   flurry: {
     id: 'flurry', faction: 'medieval', category: 'troop', unit: 'archer', icon: 'u-flurry',
     name: 'Flurry', max: 5,
@@ -36,13 +40,14 @@ export const UPGRADES = {
     levelText: (l) => `Flurry: +${[60, 90, 120, 150, 180][l - 1]} attack speed for 4s`,
   },
   accuracyTraining: {
-    id: 'accuracyTraining', faction: 'medieval', category: 'troop', unit: 'archer', icon: 'u-accuracy',
+    id: 'accuracyTraining', faction: 'medieval', category: 'troop', unit: 'archer', icon: 'u-accuracy', kind: 'statBoost',
     name: 'Accuracy Training', max: Infinity,
-    price: { base: 100, step: 10 }, time: BASE_TIME,
-    effects: [{ type: 'unitStats', unit: 'archer', perLevel: { hp: 3, damage: 0.6, hpRegen: 0.05 }, costPerLevel: 7.5 }],
-    desc: 'Every Archer (incl. Battlement archers): <b>+3 HP, +0.6 damage, +0.05 HP regen</b>. Archers cost +7.5g per level.',
-    levelText: (l) => `+${3 * l} HP, +${(0.6 * l).toFixed(1)} dmg · cost +${(7.5 * l).toFixed(1)}g`,
+    price: { base: 100, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'archer', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Archer (incl. Battlement archers) gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Archer cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
+
   organicMatter: {
     id: 'organicMatter', faction: 'medieval', category: 'troop', unit: 'imp', icon: 'u-organic',
     name: 'Organic Matter', max: 5,
@@ -53,13 +58,14 @@ export const UPGRADES = {
     levelText: (l, U) => `Splatter +${U.values.damage[l - 1]} dmg, ${U.values.slow[l - 1]}% slow 3s${l === 5 ? ', Death Splatter' : ''}`,
   },
   hellWorkout: {
-    id: 'hellWorkout', faction: 'medieval', category: 'troop', unit: 'imp', icon: 'u-hellwork',
+    id: 'hellWorkout', faction: 'medieval', category: 'troop', unit: 'imp', icon: 'u-hellwork', kind: 'statBoost',
     name: 'Hell Workout', max: Infinity,
-    price: { base: 90, step: 10 }, time: BASE_TIME,
-    effects: [{ type: 'unitStats', unit: 'imp', perLevel: { hp: 4, damage: 0.4, hpRegen: 0.15 }, costPerLevel: 9 }],
-    desc: 'Every Imp: <b>+4 HP, +0.4 damage, +0.15 HP regen</b>. Imps cost +9g per level.',
-    levelText: (l) => `+${4 * l} HP, +${(0.4 * l).toFixed(1)} dmg · cost +${9 * l}g`,
+    price: { base: 90, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'imp', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Imp gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Imp cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
+
   battlement: {
     id: 'battlement', faction: 'medieval', category: 'base', icon: 'u-battlement',
     name: 'Battlement', max: 5,
@@ -79,13 +85,14 @@ export const UPGRADES = {
     levelText: (l, U) => `+${U.values.armorPerOfficer[l - 1]} armor per nearby officer${l === 5 ? ', Backup heal' : ''}`,
   },
   kevlar: {
-    id: 'kevlar', faction: 'modern', category: 'troop', unit: 'police', icon: 'u-kevlar',
+    id: 'kevlar', faction: 'modern', category: 'troop', unit: 'police', icon: 'u-kevlar', kind: 'statBoost',
     name: 'Kevlar Program', max: Infinity,
-    price: { base: 100, step: 10 }, time: BASE_TIME,
-    effects: [{ type: 'unitStats', unit: 'police', perLevel: { hp: 6, armor: 0.15, damage: 0.15, hpRegen: 0.1 }, costPerLevel: 5 }],
-    desc: 'Every Police Officer: <b>+6 HP, +0.15 armor, +0.15 damage, +0.1 HP regen</b>. Officers cost +5g per level.',
-    levelText: (l) => `+${6 * l} HP, +${(0.15 * l).toFixed(2)} armor · cost +${5 * l}g`,
+    price: { base: 100, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'police', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Police Officer gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Police Officer cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
+
   suppressiveFire: {
     id: 'suppressiveFire', faction: 'modern', category: 'troop', unit: 'gunner', icon: 'u-suppress',
     name: 'Suppressive Fire', max: 5,
@@ -95,13 +102,14 @@ export const UPGRADES = {
     levelText: (l) => `Suppressive Fire: +${[2, 4, 6, 8, 10][l - 1]} dmg, ${[0.3, 0.35, 0.4, 0.45, 0.5][l - 1]} knockback`,
   },
   drills: {
-    id: 'drills', faction: 'modern', category: 'troop', unit: 'gunner', icon: 'u-drills',
+    id: 'drills', faction: 'modern', category: 'troop', unit: 'gunner', icon: 'u-drills', kind: 'statBoost',
     name: 'Marksmanship Drills', max: Infinity,
-    price: { base: 100, step: 10 }, time: BASE_TIME,
-    effects: [{ type: 'unitStats', unit: 'gunner', perLevel: { hp: 3, damage: 0.4, hpRegen: 0.05 }, costPerLevel: 7.5 }],
-    desc: 'Every Gunner (incl. Overwatch gunners): <b>+3 HP, +0.4 damage, +0.05 HP regen</b>. Gunners cost +7.5g per level.',
-    levelText: (l) => `+${3 * l} HP, +${(0.4 * l).toFixed(1)} dmg · cost +${(7.5 * l).toFixed(1)}g`,
+    price: { base: 100, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'gunner', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Gunner (incl. Overwatch gunners) gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Gunner cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
+
   hollowPoints: {
     id: 'hollowPoints', faction: 'modern', category: 'troop', unit: 'sniper', icon: 'u-hollow',
     name: 'Hollow Points', max: 5,
@@ -111,13 +119,14 @@ export const UPGRADES = {
     levelText: (l, U) => `Bull's Eye crit +${70 + U.values.critBonus[l - 1] * 100}%${l === 5 ? ', every 3rd shot' : ''}`,
   },
   ghillie: {
-    id: 'ghillie', faction: 'modern', category: 'troop', unit: 'sniper', icon: 'u-ghillie',
+    id: 'ghillie', faction: 'modern', category: 'troop', unit: 'sniper', icon: 'u-ghillie', kind: 'statBoost',
     name: 'Ghillie Conditioning', max: Infinity,
-    price: { base: 110, step: 12 }, time: BASE_TIME,
-    effects: [{ type: 'unitStats', unit: 'sniper', perLevel: { hp: 4, damage: 0.6, hpRegen: 0.05 }, costPerLevel: 10 }],
-    desc: 'Every Sniper: <b>+4 HP, +0.6 damage, +0.05 HP regen</b>. Snipers cost +10g per level.',
-    levelText: (l) => `+${4 * l} HP, +${(0.6 * l).toFixed(1)} dmg · cost +${10 * l}g`,
+    price: { base: 110, pct: STAT_BOOST.pct }, time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'sniper', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Sniper gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Each level also makes the Sniper cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
+
   overwatch: {
     id: 'overwatch', faction: 'modern', category: 'base', icon: 'u-overwatch',
     name: 'Rooftop Overwatch', max: 5,
@@ -161,7 +170,9 @@ export const UPGRADES = {
   },
 };
 
-const pick = (v, lvl) => (Array.isArray(v) ? v[lvl] : Math.min(v.cap ?? Infinity, v.base + v.step * lvl));
+const r2 = (n) => Math.round(n * 100) / 100;
+// array (per level) | { base, step, cap } (linear add) | { base, pct } (base + pct of base per level)
+const pick = (v, lvl) => (Array.isArray(v) ? v[lvl] : v.pct !== undefined ? r2(v.base * (1 + v.pct * lvl)) : Math.min(v.cap ?? Infinity, v.base + v.step * lvl));
 /** Price of the NEXT level when the current level is `lvl` (0 = not bought). */
 export const upgradePrice = (U, lvl) => pick(U.price, lvl);
 export const upgradeTime = (U, lvl) => pick(U.time, lvl);

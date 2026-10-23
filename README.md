@@ -96,3 +96,7 @@ Systems are split so new features plug in without touching each other:
 - **Future buildings / turrets:** push into `game.structures` an object `{ team, pos:{x,z}, dead, visionRadius(nightF) }` and register its footprint with `terrain.addObstacle(...)` (remove on death). Pathing, collision and fog pick it up with no other changes. Turrets that shoot can reuse the tower path (`unit.tower = true`).
 - Uphill miss: `GAME.highGround.uphillMiss` (checked in `Unit.dodgeCheck`).
 - Auto-loot: `team.autoLoot` / `Game.setAutoLoot(team, on)`; handled in `Game.onUnitDeath`.
+
+## Research queue & stat boosts (v0.10.0)
+- `team.research` = running entry, `team.rqueue` = queued `{id, price, level}` (max `GAME.researchQueueMax`). `Game.pendingLevel(team,id)` counts queued levels; `cancelResearch(team, slot)` (-1 = running) refunds that entry and later levels of the same upgrade.
+- Stat boost upgrades: `kind: 'statBoost'`, effect `{ type: 'statBoost', unit, pct }`. `Game.statMult(team, unitId)` = 1 + pct x level; `Unit.recalcStats()` multiplies the def's base stats in `STAT_BOOST.stats` (hp, armor, ward, damage, hpRegen) and stores them in `unit.base`; items/other flat effects go to `unit.bonus`. Price/time use `{ base, pct }` in `upgradePrice/upgradeTime`.

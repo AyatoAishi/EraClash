@@ -278,9 +278,12 @@ export class Controls {
     sfx('order');
   }
   issueAttackBase(base) {
-    // attack-move onto the base face
-    const face = base.team === 0 ? base.x + GAME.baseHalfX + 0.5 : base.x - GAME.baseHalfX - 0.5;
-    this.issueMove({ x: face, z: 0 }, 'attackMove');
+    // a real attack order on the base: troops keep hitting it and ignore fresh spawns (attack-move would retarget)
+    const units = this.own();
+    if (!units.length) return;
+    units.forEach((u) => u.command({ type: 'attack', target: base }));
+    this.game.marker({ x: base.team === 0 ? base.x + GAME.baseHalfX : base.x - GAME.baseHalfX, z: 0 }, 0xff3a3a);
+    sfx('attack');
   }
   stop() {
     const units = this.own();

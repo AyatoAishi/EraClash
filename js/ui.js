@@ -398,6 +398,12 @@ export class UI {
     us.addEventListener('input', () => { usv.textContent = (+us.value).toFixed(2) + 'x'; });
     us.addEventListener('change', () => { settings.graphics.uiScale = +us.value; saveSettings(); applyUiScale(); });
 
+    const dn = $('#o-dmgnum'); dn.value = settings.graphics.damageNumbers;
+    dn.addEventListener('change', () => { settings.graphics.damageNumbers = dn.value; saveSettings(); });
+    const ch = $('#o-crithl'); ch.checked = settings.graphics.critHighlight;
+    ch.addEventListener('change', () => { settings.graphics.critHighlight = ch.checked; saveSettings(); });
+    const ct = $('#o-ctext'); ct.checked = settings.graphics.combatText;
+    ct.addEventListener('change', () => { settings.graphics.combatText = ct.checked; saveSettings(); });
     const ep = $('#o-edge'); ep.checked = settings.gameplay.edgePan;
     ep.addEventListener('change', () => { settings.gameplay.edgePan = ep.checked; saveSettings(); });
     bindRange('#o-pan', () => settings.gameplay.panSpeed, (v) => (settings.gameplay.panSpeed = v), (v) => v.toFixed(1) + 'x');
@@ -603,11 +609,21 @@ export class UI {
     $$('.bitem', box).forEach((el) => {
       const U = UPGRADES[el.dataset.id];
       el.dataset.tip = 'upgrade:' + U.id;
+      // LMB: research / queue another level (same upgrade can be stacked). RMB: cancel its last queued level.
       el.onclick = () => {
-        const g = this.app.game, T = g.teams[this.app.playerTeam];
-        if (T.research?.id === U.id) { g.cancelResearch(this.app.playerTeam); sfx('click'); this.toast('Research cancelled (refunded)'); return; }
+        const g = this.app.game;
         const err = g.research(this.app.playerTeam, U.id);
         if (err) { this.toast(err, 'err'); sfx('error', 150); } else sfx('train');
+        this.renderBarracks(true);
+      };
+      el.oncontextmenu = (e) => {
+        e.preventDefault();
+        const g = this.app.game, T = g.teams[this.app.playerTeam];
+        let slot = -2;
+        for (let k = T.rqueue.length - 1; k >= 0; k--) if (T.rqueue[k].id === U.id) { slot = k; break; }
+        if (slot === -2 && T.research?.id === U.id) slot = -1;
+        if (slot === -2) return;
+        g.cancelResearch(this.app.playerTeam, slot); sfx('click'); this.toast('Research cancelled (refunded)');
         this.renderBarracks(true);
       };
     });
@@ -623,24 +639,37 @@ export class UI {
     bp.style.width = R ? (R.t / R.total * 100) + '%' : '0';
     $('#btn-barracks').classList.toggle('busy', !!R);
     if (!this.barracksOpen() && !force) return;
-    $('#research-bar').innerHTML = R
-      ? `<div class="rbar"><svg class="ico"><use href="#${UPGRADES[R.id].icon}"/></svg><span>Researching <b>${UPGRADES[R.id].name} Lv ${R.level}</b></span><i style="width:${R.t / R.total * 100}%"></i><em>${Math.ceil(R.total - R.t)}s</em></div>`
-      : `<div class="rbar idle"><span>No research running — pick an upgrade.</span></div>`;
+    const qkey = T.rqueue.map((e) => e.id + e.level).join(',') + '|' + (R ? R.id + R.level : '');
+    if (qkey !== this.rqKey || force || !$('#research-bar .rbar')) {
+      this.rqKey = qkey;
+      const qi = (e, k) => `<button class="rq" data-slot="${k}" data-tip="upgrade:${e.id}"><svg><use href="#${UPGRADES[e.id].icon}"/></svg><em>${e.level}</em></button>`;
+      $('#research-bar').innerHTML = (R
+        ? `<div class="rbar"><svg class="ico"><use href="#${UPGRADES[R.id].icon}"/></svg><span>Researching <b>${UPGRADES[R.id].name} Lv ${R.level}</b></span><i></i><em></em></div>`
+        : `<div class="rbar idle"><span>No research running — pick an upgrade.</span></div>`) +
+        `<div class="rqueue"><span>QUEUE ${g.researchCount(this.app.playerTeam)}/${GAME.researchQueueMax}</span>${T.rqueue.map(qi).join('')}${'<i class="rqe"></i>'.repeat(Math.max(0, GAME.researchQueueMax - 1 - T.rqueue.length))}</div>`;
+      $$('#research-bar .rq').forEach((b) => (b.onclick = () => { g.cancelResearch(this.app.playerTeam, +b.dataset.slot); sfx('click'); this.toast('Research cancelled (refunded)'); this.renderBarracks(true); }));
+      const rb = $('#research-bar .rbar');
+      if (R) rb.onclick = () => { g.cancelResearch(this.app.playerTeam, -1); sfx('click'); this.toast('Research cancelled (refunded)'); this.renderBarracks(true); };
+    }
+    if (R) { $('#research-bar .rbar i').style.width = (R.t / R.total * 100) + '%'; $('#research-bar .rbar em').textContent = Math.ceil(R.total - R.t) + 's · click to cancel'; }
     $$('#barracks-items .bitem').forEach((el) => {
       const U = UPGRADES[el.dataset.id];
-      const lvl = g.upLevel(this.app.playerTeam, U.id);
+      const done = g.upLevel(this.app.playerTeam, U.id);
+      const lvl = g.pendingLevel(this.app.playerTeam, U.id);      // next level to queue (after running + queued)
+      const queued = lvl - done;
       const maxed = lvl >= U.max;
       const price = maxed ? 0 : upgradePrice(U, lvl);
       const mine = R?.id === U.id;
-      $('.blvl', el).textContent = U.max === Infinity ? `Lv ${lvl}` : `Lv ${lvl}/${U.max}`;
-      $('.bnext', el).innerHTML = maxed ? 'MAXED' : (mine ? 'Researching… click to cancel' : 'Next: ' + U.levelText(lvl + 1, U));
+      const full = g.researchCount(this.app.playerTeam) >= GAME.researchQueueMax;
+      $('.blvl', el).textContent = (U.max === Infinity ? `Lv ${done}` : `Lv ${done}/${U.max}`) + (queued ? ` (+${queued} queued)` : '');
+      $('.bnext', el).innerHTML = maxed ? (queued ? 'Max level queued' : 'MAXED') : `Lv ${lvl + 1}: ` + U.levelText(lvl + 1, U);
       $('.bprice', el).innerHTML = maxed ? '' : `<svg class="ico"><use href="#i-coin"/></svg>${price}`;
       $('.btime', el).textContent = maxed ? '' : `${fmt(upgradeTime(U, lvl) * g.speedMult(this.app.playerTeam))}s`;
       $('.bprog', el).style.width = mine ? (R.t / R.total * 100) + '%' : '0';
       el.classList.toggle('maxed', maxed);
-      el.classList.toggle('poor', !maxed && !mine && T.gold < price);
-      el.classList.toggle('busy', !!R && !mine);
-      el.classList.toggle('mine', mine);
+      el.classList.toggle('poor', !maxed && T.gold < price);
+      el.classList.toggle('busy', !maxed && full);
+      el.classList.toggle('mine', mine || queued > 0);
     });
     if (this.tipEl && this.tipEl.closest?.('#barracks')) this.renderTip();
   }

@@ -20,7 +20,8 @@ export const GAME = {
   baseX: 58,
   baseHalfX: 6,          // base footprint (AABB)
   baseHalfZ: 7,
-  highGround: { uphillMiss: 0.5 },   // ranged attack from low ground (river) at a target on high ground
+  highGround: { uphillMiss: 0.5 },
+  researchQueueMax: 5,               // Barracks: running research + queued, like the training queue   // ranged attack from low ground (river) at a target on high ground
   baseVision: [35, 20],              // [day, night] vision of a base
   defaultVision: [30, 16],
   dmgVariance: 1,        // each hit rolls damage +/- this much
@@ -118,8 +119,8 @@ export const UNITS = {
   imp: {
     id: 'imp', name: 'Imp Warrior', faction: 'medieval', family: 'melee', role: 'Suicide skirmisher', type: 'melee',
     cost: 90, trainTime: 1,
-    hp: 40, hpRegen: 0.1, damage: 12, damageType: 'physical', attackSpeed: 65,
-    armor: 2, ward: 0, evasion: 0, missChance: 0,
+    hp: 40, hpRegen: 0.1, damage: 20, damageType: 'physical', attackSpeed: 65,
+    armor: 2, ward: 1, evasion: 0, missChance: 0,
     moveSpeed: 4.5, range: 1.2, vision: [30, 16], aggro: 9, radius: 0.4,
     abilities: ['splatter', 'swiftStep'],          // Splatter first -> Q
     lore: 'A cackling little demon bound to the Keep. Fast, slippery while it runs, and more than happy to pop itself over a crowd.',
@@ -146,9 +147,9 @@ export const UNITS = {
   sniper: {
     id: 'sniper', name: 'Sniper', faction: 'modern', family: 'marksman', role: 'Long-range specialist', type: 'ranged',
     cost: 120, trainTime: 2.5,
-    hp: 40, hpRegen: 0.1, damage: 16, damageType: 'physical', attackSpeed: 30,
+    hp: 40, hpRegen: 0.1, damage: 24, damageType: 'physical', attackSpeed: 30,
     armor: 1, ward: 0, evasion: 0, missChance: 0,
-    moveSpeed: 1.4, range: 12, vision: [30, 16], aggro: 14, radius: 0.45,
+    moveSpeed: 2, range: 12, vision: [30, 16], aggro: 14, radius: 0.45,
     projectile: { kind: 'sniper', speed: 90, arc: 0 },
     abilities: ['snipeStance', 'bullsEye'],        // Snipe Stance first -> Q
     lore: 'Ghillie hood, long rifle, zero patience for close quarters. Lies down, waits, and deletes whatever wanders into the crosshair.',

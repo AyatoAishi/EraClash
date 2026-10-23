@@ -6,6 +6,28 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.10.0', date: '2026-10-24T02:25:00+08:00', title: 'Bulk research & stat boosts',
+    sections: [
+      { title: 'New — Research queue', items: [
+        'The Barracks now queues research like the training queue: up to <b>5</b> (running + queued), paid when queued.',
+        'You can queue the <b>same upgrade several times</b> as long as you can afford each next level (each queued level is priced at its own level).',
+        'Click a queued icon (or the running bar) to cancel it — refunds it and any later levels of the same upgrade. Right-click an upgrade card to cancel its last queued level.',
+      ] },
+      { title: 'Reworked — Stat boost upgrades', items: [
+        '<b>Protein Boost, Accuracy Training, Hell Workout, Kevlar Program, Marksmanship Drills, Ghillie Conditioning</b> are now <b>stat boosts</b>: each level gives <b>+10% of the troop\'s base</b> HP, armor, ward, damage and HP regen.',
+        'Each level also raises that troop\'s hiring cost by 10% of its base price, and the next level of the upgrade costs and takes 10% more (e.g. Protein Boost 100 → 110 → 120g, 6 → 6.6 → 7.2s).',
+        '<b>Base stats vs bonus stats:</b> stat boosts change the troop\'s base stats; items and other effects are bonus stats (the green +numbers in the panel) and are not multiplied.',
+        'Kill bounty still uses what was actually paid, so boosted troops are worth more to the enemy.',
+      ] },
+      { title: 'New — Options', items: ['Graphics: <b>Damage numbers</b> (all hits / critical strikes only / off), <b>Highlight critical strikes</b>, and <b>Combat text</b> (MISS / EVADE / DISARMED…).'] },
+      { title: 'Balance', items: [
+        '<b>Sniper</b>: move speed 1.4 → <b>2</b>, damage 16 → <b>24</b>.',
+        '<b>Imp Warrior</b>: damage 12 → <b>20</b>, ward 0 → <b>1</b>.',
+      ] },
+      { title: 'Fixes', items: ['Right-clicking the enemy base is now a real attack order: troops keep hitting the base instead of switching to freshly spawned (shielded) troops.'] },
+    ],
+  },
+  {
     version: '0.9.1', date: '2026-10-24T01:55:00+08:00', title: 'Vision tuning',
     sections: [
       { title: 'Balance', items: [
