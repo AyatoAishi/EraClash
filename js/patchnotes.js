@@ -7,6 +7,21 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.15.0', date: '2026-10-24T14:30:00+08:00', title: 'Chat, test commands, tiered camps & troop creator',
+    sections: [
+      { title: 'New — Chat & test commands', items: [
+        'Press <b>Enter</b> to chat (rebindable). Plain messages show in the chat log, ready for PvP later.',
+        'Commands start with <b>/</b> and only work <b>against the AI</b>, for that match only: <b>/gold</b>, <b>/hirespeed</b>, <b>/fog</b>, <b>/reveal</b>, <b>/wtf</b> (no mana or cooldowns), <b>/god</b>, <b>/spawn</b> &lt;unit&gt; [count] [me|enemy|neutral], <b>/kill</b>, <b>/level</b> &lt;upgrade&gt; &lt;n&gt;, <b>/item</b>, <b>/time</b> day|night, <b>/speed</b>, <b>/camps</b>, <b>/win</b>, <b>/lose</b>. Type <b>/help</b> for the list.',
+      ] },
+      { title: 'Reworked — Neutral camps', items: [
+        'Camps are no longer tied to one creep group or one side of the map. Every camp spot has a <b>tier</b>, and <b>every spawn rolls a random group</b> of that tier (Bear pack, Wraiths, Thug crew, Outlaw gang are all Tier 1). Stacked camps can mix groups.',
+        'Loot is by tier too: any Tier 1 creep can drop any Tier 1 item (a Dire Bear can drop Shackles). Drop chance: Tier 1 <b>20%</b>, each tier above 20% less often (16%, 12.8%…).',
+      ] },
+      { title: 'New — Dev Lab', items: ['<b>[ Create + ]</b> (bottom left): a troop concept form for stats, price, abilities, upgrades, look, lore and skill tree. <b>Copy</b> puts it on your clipboard in the spec format, ready to paste to Claude. "Load existing unit" pre-fills it from any unit in the game.'] },
+      { title: 'UI', items: ['Every hotkey label (command card, Barracks, Shop, Repair, Auto-loot, help pages) now follows your key bindings and updates the moment you rebind.'] },
+    ],
+  },
+  {
     version: '0.14.0', date: '2026-10-24T13:26:00+08:00', title: 'Growing bases',
     sections: [
       { title: 'Bases grow during the match', items: [

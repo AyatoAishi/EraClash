@@ -2,12 +2,12 @@
 import * as THREE from 'three';
 import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS } from './config.js';
 import { UNIT_BUILDERS, buildCastle, buildHQ, CASTLE_TIERS, HQ_TIERS } from './models.js';
-import { settings, saveSettings, ACTIONS, SCOPE_LABEL, scopeOf, keyLabel, resetKeys } from './settings.js';
+import { settings, saveSettings, onSettingsChange, ACTIONS, SCOPE_LABEL, scopeOf, keyLabel, resetKeys } from './settings.js';
 import { sfx, applyAudioSettings, initAudio } from './audio.js';
 import { ORDER_LABEL } from './unit.js';
 import { PATCH_NOTES, CURRENT_VERSION, formatPatchDate } from './patchnotes.js';
 import { UPGRADES, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
-import { CAMPS, CAMP_RULES } from './neutrals.js';
+import { CAMPS, CAMP_RULES, CREEP_GROUPS, dropChanceForTier } from './neutrals.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -72,6 +72,7 @@ export function applyUiScale() { document.documentElement.style.setProperty('--u
 
 export class UI {
   constructor(app) {
+    onSettingsChange(() => this.refreshKeyLabels());   // rebinding a key updates every label right away
     this.app = app;
     this.screen = 'main';
     this.optionsReturn = 'main';
@@ -477,8 +478,11 @@ export class UI {
   }
   buildHelpNeutrals() {
     const box = $('#help-neutrals');
-    const camps = CAMPS.map((c) => `<div><b>${c.name} (${c.z < 0 ? 'top' : 'bottom'}, ${c.side} side)</b>: ${c.units.map((id) => UNITS[id].name).join(' + ')} · drops ${c.drops.map((d) => `<span class="hitem" data-tip="item:${d}"><svg class="ico"><use href="#${ITEMS[d].sprite}"/></svg>${ITEMS[d].name}</span>`).join(', ')}</div>`).join('');
-    const creeps = [...new Set(CAMPS.flatMap((c) => c.units))].map((id) => {
+    const itemChip = (d) => `<span class="hitem" data-tip="item:${d}"><svg class="ico"><use href="#${ITEMS[d].sprite}"/></svg>${ITEMS[d].name}</span>`;
+    const tiers = Object.entries(CREEP_GROUPS).map(([t, groups]) => `<div><b>Tier ${t} camps</b> (${CAMPS.filter((c) => (c.tier || 1) === +t).length} on the map) roll one of these groups every spawn: ${groups.map((gr) => `<b>${gr.name}</b> (${gr.units.map((id) => UNITS[id].name).join(' + ')})`).join(', ')}.
+      Each Tier ${t} creep has a <b>${fmt(dropChanceForTier(+t) * 100)}%</b> chance to drop a Tier ${t} item: ${Object.keys(ITEMS).filter((d) => (ITEMS[d].tier || 1) === +t).map(itemChip).join(', ')}</div>`).join('');
+    const camps = tiers;
+    const creeps = [...new Set(Object.values(CREEP_GROUPS).flat().flatMap((g) => g.units))].map((id) => {
       const u = UNITS[id];
       return `<div class="tcard neutral"><img src="${PORTRAITS[id].full}" alt=""><div class="tbody"><div class="tfac">Neutral · ${fmt(u.cost * GAME.bountyPct)}g bounty</div><h3>${u.name} <small>${u.role}</small></h3><p>${u.lore}</p>
         <div class="stats"><div><span>HP</span><b>${u.hp}</b></div><div><span>Regen</span><b>${fmt(u.hpRegen)}/s</b></div><div><span>Damage</span><b>${u.damage}</b></div><div><span>Atk spd</span><b>${u.attackSpeed}/min</b></div><div><span>Armor</span><b>${u.armor}</b></div><div><span>Ward</span><b>${u.ward}</b></div><div><span>Move</span><b>${fmt(u.moveSpeed)}</b></div><div><span>Range</span><b>${u.type === 'ranged' ? u.range : 'Melee'}</b></div></div>
@@ -488,7 +492,7 @@ export class UI {
       <div><b>Camps</b> spawn at every full minute (from 1:00) if their spawn ring is empty. They chase up to ${CAMP_RULES.leash} range, then walk home and heal.</div>
       <div><b>Day:</b> a camp attacks anyone who walks within ${CAMP_RULES.dayAggroRange} range of it, or who attacks it. <b>Night:</b> camps sleep (Zzz) and ignore passers-by — but attacking one wakes the whole camp.</div>
       <div><b>Stacking.</b> Hit a camp just before the minute mark and pull it out of its ring: the ring is empty when the timer hits, so a second group spawns, and the first one walks back — now there are two.</div>
-      <div><b>Loot.</b> Each creep has a ${Math.round(CAMP_RULES.dropChance * 100)}% chance to drop an item. Select a troop and <kbd>RMB</kbd> the item: the closest selected troop with a free slot walks over and picks it up. Items are kept until the carrier dies — then they're gone. The AI also farms its own side's camps now and then.</div>
+      <div><b>Loot.</b> Creeps drop items of their tier (Tier 1: ${Math.round(CAMP_RULES.dropChance * 100)}%, each higher tier 20% less often). Select a troop and <kbd>RMB</kbd> the item: the closest selected troop with a free slot walks over and picks it up. Items are kept until the carrier dies — then they're gone. The AI also farms its own side's camps now and then.</div>
       ${camps}</div><div id="help-creeps">${creeps}</div>`;
   }
   renderHelpControls() {
@@ -511,15 +515,20 @@ export class UI {
   // ======================= HUD: command card + shop =======================
   roster() { return FACTIONS[this.app.playerFaction || 'medieval'].units; }
 
+  /** Every hotkey label in the HUD and help reads the CURRENT binding (elements tagged data-keyof="<action>"). */
+  refreshKeyLabels() {
+    for (const el of document.querySelectorAll('[data-keyof]')) el.textContent = keyLabel(settings.keys[el.dataset.keyof]);
+  }
   buildCommandCard() {
+    this.refreshKeyLabels();
     const k = settings.keys;
     $('#shop-kbd').textContent = keyLabel(k.shop);
     $('#shop-key').textContent = keyLabel(k.shop);
     $('#cmds').innerHTML = `
-      <button class="frame" data-cmd="attack">Attack<kbd>${keyLabel(k.attackMove)}</kbd></button>
-      <button class="frame" data-cmd="stop">Stop<kbd>${keyLabel(k.stop)}</kbd></button>
-      <button class="frame" data-cmd="charge">Charge<kbd>${keyLabel(k.charge)}</kbd></button>
-      <button class="frame" data-cmd="all">Army<kbd>${keyLabel(k.selectAll)}</kbd></button>`;
+      <button class="frame" data-cmd="attack">Attack<kbd data-keyof="attackMove">${keyLabel(k.attackMove)}</kbd></button>
+      <button class="frame" data-cmd="stop">Stop<kbd data-keyof="stop">${keyLabel(k.stop)}</kbd></button>
+      <button class="frame" data-cmd="charge">Charge<kbd data-keyof="charge">${keyLabel(k.charge)}</kbd></button>
+      <button class="frame" data-cmd="all">Army<kbd data-keyof="selectAll">${keyLabel(k.selectAll)}</kbd></button>`;
     $$('#cmds button').forEach((b) => b.onclick = () => {
       sfx('click');
       const c = this.app.controls;

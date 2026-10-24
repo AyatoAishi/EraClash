@@ -6,12 +6,13 @@
 import * as THREE from 'three';
 import { UNITS, ITEMS, GAME, FACTIONS, ABILITIES, attackInterval, dps, baseLevelStats, reductionPct } from '../config.js';
 import { UPGRADES, upgradesFor } from '../upgrades.js';
-import { CAMPS, NEUTRAL_TEAM } from '../neutrals.js';
+import { CAMPS, NEUTRAL_TEAM, CREEP_GROUPS } from '../neutrals.js';
 import * as M from '../models.js';
 import { Game } from '../game.js';
 import { Unit } from '../unit.js';
 import { FOW, updateFogTexture } from '../fow.js';
 import { OrbitCam } from './orbit.js';
+import { Creator } from './creator.js';
 
 const TEAM_NAMES = ['Medieval (you)', 'Modern', 'Neutral'];
 const SPEEDS = [0, 0.25, 0.5, 1, 2, 4];
@@ -41,7 +42,7 @@ const fmt = (n) => (Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) :
 
 // ---------- what the viewer can show ----------
 const roster = new Set(Object.values(FACTIONS).flatMap((f) => f.units));
-const creeps = new Set(CAMPS.flatMap((c) => c.units));
+const creeps = new Set(Object.values(CREEP_GROUPS).flat().flatMap((g) => g.units));
 function unitGroup(id) { return roster.has(id) ? 'Troops' : creeps.has(id) ? 'Creeps' : 'Other units'; }
 // theme: 'medieval' | 'modern' | 'any' (drives the viewer's All / Medieval / Modern filter; 'any' shows under both)
 function buildCatalog() {
@@ -163,6 +164,7 @@ export class DevLab {
     }
   }
   onEscape() {
+    if (this.creator?.isOpen) { this.creator.close(); return true; }
     if (this.placing) { this.setPlacing(null); return; }
     if (this.app.controls.cancelTargeting?.()) return;
     this.app.closeDevLab();
@@ -465,7 +467,7 @@ export class DevLab {
       u.spawnAt(x + Math.cos(a) * r, z + Math.sin(a) * r);
       if (team === NEUTRAL_TEAM) {
         u.home = { x: u.pos.x, z: u.pos.z };
-        u.camp = CAMPS.find((c) => c.units.includes(id)) || CAMPS[0];
+        u.camp = CAMPS[0];
         u.nState = 'home';
       } else if (A.hold) u.command({ type: 'idle' });
       u.invulnT = 0; u.shield.visible = false;
@@ -661,8 +663,10 @@ export class DevLab {
         h('button', { class: 'dl-b', onclick: () => this.app.closeDevLab() }, '✕ Menu')),
       h('aside', { class: 'dl-panel dl-left' }, h('div', { class: 'dl-viewer-only' }, this.listEl), h('div', { class: 'dl-sandbox-only' }, this.leftEl)),
       h('aside', { class: 'dl-panel dl-right' }, this.rightEl),
-      this.hintEl);
+      this.hintEl,
+      h('button', { class: 'dl-b dl-create', title: 'Fill in a troop concept and copy it as text', onclick: () => this.creator.open() }, '[ Create + ]'));
     document.body.append(this.root);
+    this.creator = new Creator();
     this.root.addEventListener('mousedown', (e) => e.stopPropagation());   // panel clicks never reach the RTS controls
     this.setPlacing(null);
   }

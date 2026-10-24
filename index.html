@@ -237,19 +237,19 @@
       <div class="hgrid">
         <div><b>Goal.</b> Destroy the enemy base. Medieval always holds the <b>left</b>, Modern the <b>right</b>.</div>
         <div><b>Gold.</b> Both sides start with 100 gold and earn <b>2.5 gold / second</b>. Every enemy troop you kill pays a <b>bounty of 40% of its hiring cost</b> (a 50g Police Officer = 20g). Self-destructs give no bounty to the enemy.</div>
-        <div><b>Training.</b> Open the Shop (<kbd>B</kbd>) and press a troop's buy key or click it. Bought troops queue up (max 5) and walk out of your base. Click a queued troop to cancel it for a full refund. Army limit: 40.</div>
-        <div><b>Auto-charge.</b> Fresh troops march at the enemy base and fight anything in their path. Your orders override this; <kbd>C</kbd> sends them charging again.</div>
+        <div><b>Training.</b> Open the Shop (<kbd data-keyof="shop">B</kbd>) and press a troop's buy key or click it. Bought troops queue up (max 5) and walk out of your base. Click a queued troop to cancel it for a full refund. Army limit: 40.</div>
+        <div><b>Auto-charge.</b> Fresh troops march at the enemy base and fight anything in their path. Your orders override this; <kbd data-keyof="charge">C</kbd> sends them charging again.</div>
         <div><b>Melee vs ranged.</b> Melee troops must touch their target. Ranged troops shoot from their range circle (select one troop to see it) — projectiles always hit, but they're fragile. In formations, ranged troops automatically stand behind melee.</div>
         <div><b>Damage types.</b> <b>Physical</b> is reduced by <b>Armor</b>, <b>Magic</b> is reduced by <b>Ward</b>, <b>True</b> ignores both. All current troops deal physical damage and have 0 Ward. Each hit rolls ±1 damage.</div>
         <div><b>Armor &amp; Ward scale like Dota:</b> reduction = 0.06×D ÷ (1 + 0.06×D). 2 → 10.7%, 5 → 23%, 10 → 37.5%, 20 → 54.5%. Every point helps, with diminishing returns; negative values make a troop take extra damage.</div>
         <div><b>Spawn shield.</b> Every troop is <b>invulnerable for 5 seconds</b> after it leaves the base (white bubble): it can be targeted but takes no damage and can't be crowd-controlled. The bubble blinks before it pops.</div>
         <div><b>HP regen</b> restores health per second, even mid-fight.</div>
         <div><b>Evasion &amp; miss (Dota-style).</b> Evasion is a % chance to dodge an incoming <b>attack</b>; miss chance is a % chance your own attacks whiff. Abilities can't be dodged. Multiple evasion sources stack multiplicatively (30% + 30% = 51%).</div>
-        <div><b>Abilities.</b> A troop has up to <b>4 ability slots</b> in any mix of passives and actives. Actives are cast with <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>R</kbd> (slot order) or by clicking the icon.</div>
+        <div><b>Abilities.</b> A troop can have up to <b>5 actives</b> and any number of passives. Actives are cast with <kbd data-keyof="abil1">Q</kbd> <kbd data-keyof="abil2">W</kbd> <kbd data-keyof="abil3">E</kbd> <kbd data-keyof="abil4">R</kbd> <kbd data-keyof="abil5">T</kbd> (1st, 2nd… active) or by clicking the icon.</div>
         <div><b>Attack speed</b> is attacks <b>per minute</b>: 60 = one hit per second, 120 = two. DPS = damage × (1 − enemy reduction) × attack speed ÷ 60.</div>
         <div><b>Tooltips.</b> Select a troop and hover any ability icon in the bottom panel to see what it does and whether it's active right now.</div>
-        <div><b>Repair</b> (<kbd>H</kbd>). Toggle to heal your base (+10 HP/s) while draining gold (5 gold/s). It only drains while the base is damaged and switches off when you run out of gold. Upgrade it with <b>Repair Crews</b> in the Barracks.</div>
-        <div><b>Barracks</b> (<kbd>V</kbd>). Spend gold on upgrades for your troops and base: stat boosts, stronger passives, new abilities, wall towers, base HP and income. Each research takes time, only one runs at a time, and everything resets next match. Click the researching upgrade to cancel it for a full refund. The AI researches too.</div>
+        <div><b>Repair</b> (<kbd data-keyof="repair">H</kbd>). Toggle to heal your base (+10 HP/s) while draining gold (5 gold/s). It only drains while the base is damaged and switches off when you run out of gold. Upgrade it with <b>Repair Crews</b> in the Barracks.</div>
+        <div><b>Barracks</b> (<kbd data-keyof="barracks">V</kbd>). Spend gold on upgrades for your troops and base: stat boosts, stronger passives, new abilities, wall towers, base HP and income. Each research takes time; you can queue up to 5 (the same upgrade several times too), and everything resets next match. Click a queued or running research to cancel it for a full refund. The AI researches too.</div>
         <div><b>Inventory.</b> Every troop has 6 item slots (select one troop to see them). Neutral creeps can drop items: select a troop and right-click the item to pick it up. Items give stats or passives; hover a slot to see the item. Items are lost when the carrier dies.</div>
       </div>
     </div>
@@ -310,6 +310,7 @@
 
 <!-- ================= HUD ================= -->
 <div id="hud">
+  <div id="chat"><div class="chat-log"></div><input type="text" maxlength="160" placeholder="Say something, or /help" autocomplete="off" spellcheck="false"></div>
   <div id="topbar" class="frame">
     <div id="base-0" class="basebar"><div class="bname"></div><div class="bbar"><i></i><span></span></div></div>
     <div class="tcenter">
@@ -327,7 +328,7 @@
   <div id="barracks" class="frame">
     <div class="shop-head">
       <svg class="ico big"><use href="#u-battlement"/></svg>
-      <div><h3>Barracks</h3><small>Upgrades last for this match only · queue up to 5 · right-click a card to cancel its last level · <kbd id="barracks-key">V</kbd> close</small></div>
+      <div><h3>Barracks</h3><small>Upgrades last for this match only · queue up to 5 · right-click a card to cancel its last level · <kbd id="barracks-key" data-keyof="barracks">V</kbd> close</small></div>
       <button id="barracks-close" class="sq frame small" title="Close">×</button>
     </div>
     <div id="research-bar"></div>
@@ -338,7 +339,7 @@
   <div id="shop" class="frame">
     <div class="shop-head">
       <svg class="ico big"><use href="#i-shop"/></svg>
-      <div><h3 id="shop-title">Barracks</h3><small>Click to buy · Shift+click buys 5 · <kbd id="shop-key">B</kbd> close</small></div>
+      <div><h3 id="shop-title">Barracks</h3><small>Click to buy · Shift+click buys 5 · <kbd id="shop-key" data-keyof="shop">B</kbd> close</small></div>
       <button id="shop-close" class="sq frame small" title="Close">×</button>
     </div>
     <div id="shop-items"></div>
@@ -366,20 +367,20 @@
       </div>
     </div>
     <div id="cmdcard" class="frame">
-      <button id="btn-autoloot" class="frame" data-tip="autoloot"><svg class="ico big"><use href="#i-autoloot"/></svg><span>AUTO-LOOT</span><b id="autoloot-state">OFF</b><kbd id="autoloot-kbd">L</kbd></button>
+      <button id="btn-autoloot" class="frame" data-tip="autoloot"><svg class="ico big"><use href="#i-autoloot"/></svg><span>AUTO-LOOT</span><b id="autoloot-state">OFF</b><kbd id="autoloot-kbd" data-keyof="autoLoot">L</kbd></button>
       <div class="cc-top">
         <button id="btn-barracks" class="frame" title="Barracks (upgrades)">
           <svg class="ico big"><use href="#u-battlement"/></svg>
-          <span>BARRACKS</span><kbd id="barracks-kbd">V</kbd><i class="rprog"></i>
+          <span>BARRACKS</span><kbd id="barracks-kbd" data-keyof="barracks">V</kbd><i class="rprog"></i>
         </button>
         <button id="btn-shop" class="frame" title="Shop">
           <svg class="ico big"><use href="#i-shop"/></svg>
-          <span>SHOP</span><kbd id="shop-kbd">B</kbd>
+          <span>SHOP</span><kbd id="shop-kbd" data-keyof="shop">B</kbd>
         </button>
         <div id="queue"></div>
         <button id="btn-repair" class="frame" data-tip="repair">
           <svg class="ico big"><use href="#u-repair"/></svg>
-          <span>REPAIR</span><small id="repair-rate"></small><kbd id="repair-kbd">H</kbd>
+          <span>REPAIR</span><small id="repair-rate"></small><kbd id="repair-kbd" data-keyof="repair">H</kbd>
         </button>
       </div>
       <div id="cmds"></div>

@@ -404,15 +404,15 @@ for (const u of Object.values(UNITS)) {
 */
 export const ITEMS = {
   // --- medieval camp drops ---
-  rusticSword:  { id: 'rusticSword', sprite: 'it-sword',  name: 'Rustic Sword',   icon: '#9aa3ab', desc: '+6 damage', stats: { damage: 6 } },
-  oldManShield: { id: 'oldManShield', sprite: 'it-shield', name: 'Old Man Shield', icon: '#8a5a2b', desc: 'Passive: 50% chance to block a random 5–7 damage from a basic attack you take.', block: [5, 7], blockChance: 0.5 },
-  sash:         { id: 'sash', sprite: 'it-sash',         name: 'Sash',           icon: '#c0392b', desc: '+1 move speed', stats: { moveSpeed: 1 } },
-  quiver:       { id: 'quiver', sprite: 'it-quiver',       name: 'Quiver',         icon: '#6b4423', desc: 'Passive: on a ranged troop, +1 attack range and +20 attack speed (no effect on melee).', rangedStats: { range: 1, attackSpeed: 20 } },
+  rusticSword:  { id: 'rusticSword', sprite: 'it-sword', tier: 1,  name: 'Rustic Sword',   icon: '#9aa3ab', desc: '+6 damage', stats: { damage: 6 } },
+  oldManShield: { id: 'oldManShield', sprite: 'it-shield', tier: 1, name: 'Old Man Shield', icon: '#8a5a2b', desc: 'Passive: 50% chance to block a random 5–7 damage from a basic attack you take.', block: [5, 7], blockChance: 0.5 },
+  sash:         { id: 'sash', sprite: 'it-sash', tier: 1,         name: 'Sash',           icon: '#c0392b', desc: '+1 move speed', stats: { moveSpeed: 1 } },
+  quiver:       { id: 'quiver', sprite: 'it-quiver', tier: 1,       name: 'Quiver',         icon: '#6b4423', desc: 'Passive: on a ranged troop, +1 attack range and +20 attack speed (no effect on melee).', rangedStats: { range: 1, attackSpeed: 20 } },
   // --- modern camp drops ---
-  shoulderGuard:{ id: 'shoulderGuard', sprite: 'it-shoulder',name: 'Shoulder Guard', icon: '#3b4652', desc: '+2 armor, +2 ward', stats: { armor: 2, ward: 2 } },
-  shackles:     { id: 'shackles', sprite: 'it-shackles',     name: 'Shackles',       icon: '#5a5f69', desc: 'Passive: on a melee troop, 20% chance on hit to DISARM the target for 3s (it can\'t start attacks). Doesn\'t stack: an already-disarmed target can\'t be disarmed again or refreshed.', disarm: { chance: 0.2, duration: 3 } },
-  riotHelmet:   { id: 'riotHelmet', sprite: 'it-helmet',   name: 'Riot Helmet',    icon: '#2f4a8a', desc: 'Passive: gain +3 armor for 3s after being hit by a ranged attack.', helmet: { armor: 3, duration: 3 } },
-  pocketKnife:  { id: 'pocketKnife', sprite: 'it-knife',  name: 'Pocket Knife',   icon: '#c9d1d8', desc: '+4 damage. On hit, deals +3 damage to every enemy within 3 range of you.', stats: { damage: 4 }, splash: { damage: 3, radius: 3 } },
+  shoulderGuard:{ id: 'shoulderGuard', sprite: 'it-shoulder', tier: 1,name: 'Shoulder Guard', icon: '#3b4652', desc: '+2 armor, +2 ward', stats: { armor: 2, ward: 2 } },
+  shackles:     { id: 'shackles', sprite: 'it-shackles', tier: 1,     name: 'Shackles',       icon: '#5a5f69', desc: 'Passive: on a melee troop, 20% chance on hit to DISARM the target for 3s (it can\'t start attacks). Doesn\'t stack: an already-disarmed target can\'t be disarmed again or refreshed.', disarm: { chance: 0.2, duration: 3 } },
+  riotHelmet:   { id: 'riotHelmet', sprite: 'it-helmet', tier: 1,   name: 'Riot Helmet',    icon: '#2f4a8a', desc: 'Passive: gain +3 armor for 3s after being hit by a ranged attack.', helmet: { armor: 3, duration: 3 } },
+  pocketKnife:  { id: 'pocketKnife', sprite: 'it-knife', tier: 1,  name: 'Pocket Knife',   icon: '#c9d1d8', desc: '+4 damage. On hit, deals +3 damage to every enemy within 3 range of you.', stats: { damage: 4 }, splash: { damage: 3, radius: 3 } },
 };
 
 export const DIFFICULTY = {

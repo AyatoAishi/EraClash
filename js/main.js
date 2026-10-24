@@ -5,6 +5,7 @@ import { FACTIONS, GAME } from './config.js';
 import { settings } from './settings.js';
 import { createWorld } from './world.js';
 import { installFogShader, updateFogTexture, FOW } from './fow.js';
+import { Chat } from './chat.js';
 import { Game } from './game.js';
 import { Controls } from './controls.js';
 import { UI, makePortraits } from './ui.js';
@@ -72,12 +73,14 @@ app.controls = new Controls(() => renderer.domElement, camera, {
   toggleBarracks: () => app.state === 'playing' && app.ui.toggleBarracks(),
   toggleRepair: () => app.state === 'playing' && app.ui.toggleRepair(),
   toggleAutoLoot: () => app.state === 'playing' && app.ui.toggleAutoLoot(),
+  openChat: () => app.chat?.open(),
   shopOpen: () => app.ui.shopOpen(),
   roster: () => (app.playerFaction ? FACTIONS[app.playerFaction].units : []),
   buy: (id, many) => { const i = FACTIONS[app.playerFaction].units.indexOf(id); for (let k = 0; k < (many ? 5 : 1); k++) if (!app.trainSlot(i, k > 0)) break; },
   onCenter: () => app.controls.centerOn(app.playerTeam === 0 ? -GAME.baseX + 14 : GAME.baseX - 14),
 });
 app.ui = new UI(app);
+app.chat = new Chat(app);
 app.devlab = new DevLab(app, { renderer, scene, world, camera });
 app.applyGraphics();
 
@@ -105,6 +108,8 @@ app.startMatch = (faction, difficulty) => {
   const g = new Game({ scene, playerTeam: app.playerTeam, difficulty, world, getViewX: () => app.controls.target.x });
   app.game = g;
   app.controls.setGame(g, app.playerTeam);
+  app.timeScale = 1;
+  app.chat?.clear(); app.chat?.line(`Press ${settings.keys.chat === 'Enter' ? 'Enter' : settings.keys.chat} to chat. Type /help for test commands (vs AI only).`, 'sys');
   app.controls.height = 34;
   app.controls.centerOn(app.playerTeam === 0 ? -GAME.baseX + 16 : GAME.baseX - 16);
   app.controls.enabled = true;
@@ -189,7 +194,8 @@ addEventListener('keydown', (e) => {
   if (app.state === 'devlab') { app.devlab.onEscape(); return; }
   const s = app.ui.screen;
   if (app.state === 'playing') {
-    if (app.controls.cancelTargeting()) { /* aiming cancelled */ }
+    if (app.chat?.isOpen) app.chat.close();
+    else if (app.controls.cancelTargeting()) { /* aiming cancelled */ }
     else if (app.controls.armed) app.controls.setArmed(false);
     else if (app.ui.shopOpen()) app.ui.toggleShop(false);   // Esc closes the shop before it pauses
     else if (app.ui.barracksOpen()) app.ui.toggleBarracks(false);
@@ -207,7 +213,7 @@ let menuT = 0, fpsAcc = 0, fpsN = 0;
 const fpsEl = document.getElementById('fps');
 function frame() {
   requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const dt = Math.min(clock.getDelta(), 0.05) * (app.state === 'playing' ? app.timeScale || 1 : 1);   // /speed
   const g = app.game;
   if (app.state === 'devlab') {
     app.devlab.update(dt);
@@ -225,7 +231,7 @@ function frame() {
     if (g.over) { demoRestart += dt; if (demoRestart > 4) { demoRestart = 0; startDemo(); } }
   }
   if (app.state !== 'paused') g.update(dt, camera.quaternion);
-  FOW.on.value = g && g.vision && g.playerTeam !== null ? 1 : 0;
+  FOW.on.value = g && g.vision && g.playerTeam !== null && !g.cheat?.reveal ? 1 : 0;
   if (FOW.on.value) updateFogTexture(g.vision.vis[g.playerTeam], dt);
   if (g) world.setNight(g.dayNight.f);
   world.update(dt);

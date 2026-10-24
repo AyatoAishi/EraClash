@@ -228,6 +228,7 @@ export class Unit {
     const def = DAMAGE_TYPES[type]?.defense;
     if (this.tower) return 0;
     if (this.invulnerable) { this.shieldPing = 1; return 0; }
+    if (this.game.cheat?.god && this.team === this.game.playerTeam) return 0;
     if (opts?.attack) {
       // Old Man Shield: flat block on basic attacks, before armor
       const sh = ITEMS.oldManShield;
@@ -507,9 +508,10 @@ export class Unit {
     const a = this.abil[i];
     if (!a || this.dead || (a.def.manaCost || 0) > this.mana) return false;
     if (!this.game.castAbility(this, a.def, aim)) return false;
-    this.mana -= a.def.manaCost || 0;
+    const wtf = this.game.cheat?.wtf && this.team === this.game.playerTeam;   // /wtf: free, instant recasts
+    if (!wtf) this.mana -= a.def.manaCost || 0;
     // Snipe Stance: going prone costs the short cooldown; standing up sets its own cooldown when it finishes
-    a.st.cd = a.def.id === 'snipeStance' && a.st.mode !== 'channel' ? 0 : (a.def.cooldown || 0);
+    a.st.cd = wtf || (a.def.id === 'snipeStance' && a.st.mode !== 'channel') ? 0 : (a.def.cooldown || 0);
     this.stillT = 0;
     return true;
   }

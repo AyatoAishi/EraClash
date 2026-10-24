@@ -42,6 +42,7 @@ export class Vision {
   /** Is world point (x,z) visible to `team`? null team (spectator) sees everything. */
   seen(team, p) {
     if (team === null || team === undefined || team > 1) return true;
+    if (this.game.cheat?.reveal && team === this.game.playerTeam) return true;   // /fog off
     const i = this.idx(p.x, p.z);
     return i >= 0 && this.vis[team][i] === 1;
   }

@@ -4,7 +4,7 @@ import { GAME, FACTIONS, UNITS, DIFFICULTY, defenseMult, baseLevelStats, BASE_LE
 import { Unit } from './unit.js';
 import { UPGRADES, STAT_BOOST, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
 import { ABILITIES, ITEMS } from './config.js';
-import { NEUTRAL_TEAM, CAMP_RULES, CAMPS } from './neutrals.js';
+import { NEUTRAL_TEAM, CAMP_RULES, CAMPS, CREEP_GROUPS, dropChanceForTier, creepTierOf } from './neutrals.js';
 import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ } from './models.js';
 import { sfx } from './audio.js';
 import { Vision } from './vision.js';
@@ -41,6 +41,7 @@ export class Game {
     this.loot = [];
     this.nextCampSpawn = CAMP_RULES.firstSpawn;
     this.listeners = {};
+    this.cheat = {};   // admin/test commands from the chat (js/chat.js), this match only
     this.teams = [0, 1].map((t) => ({
       team: t,
       faction: FACTION_BY_TEAM[t],
@@ -183,7 +184,9 @@ export class Game {
   }
   /** Logistics: multiplier on research & training durations. */
   speedMult(team) {
-    if (!this.teams[team]) return 1; const L = this.upLevel(team, 'logistics'); return L ? 1 - UPGRADES.logistics.values.speed[L - 1] : 1; }
+    if (!this.teams[team]) return 1; const L = this.upLevel(team, 'logistics');
+    const cheat = team === this.playerTeam && this.cheat?.hireSpeed ? 1 / this.cheat.hireSpeed : 1;
+    return (L ? 1 - UPGRADES.logistics.values.speed[L - 1] : 1) * cheat; }
   repairRates(team) { const L = this.upLevel(team, 'repairCrews'), R = GAME.repair; return { heal: R.heal + R.healPerLevel * L, drain: R.drain + R.drainPerLevel * L }; }
   setAutoLoot(team, on) { const T = this.teams[team]; if (T) { T.autoLoot = !!on; this.emit('autoLoot', team, T.autoLoot); } }
   setRepair(team, on) {
@@ -338,13 +341,15 @@ export class Game {
     return !this.units.some((u) => !u.dead && !u.tower && Math.hypot(u.pos.x - c.x, u.pos.z - c.z) < CAMP_RULES.boxRadius);
   }
   spawnCamp(c) {
-    c.units.forEach((id, k) => {
+    const groups = CREEP_GROUPS[c.tier || 1] || CREEP_GROUPS[1];
+    const group = groups[Math.floor(Math.random() * groups.length)];   // a fresh random group of the camp's tier every spawn
+    group.units.forEach((id, k) => {
       const u = new Unit(this, id, NEUTRAL_TEAM);
-      const a = (k / c.units.length) * Math.PI * 2;
+      const a = (k / group.units.length) * Math.PI * 2;
       const hx = c.x + Math.cos(a) * 1.4, hz = c.z + Math.sin(a) * 1.4;
       u.spawnAt(hx, hz);
       u.home = { x: hx, z: hz };
-      u.camp = c;
+      u.camp = c; u.creepTier = c.tier || 1; u.group = group.id;
       u.invulnT = 0; u.shield.visible = false;
       u.nState = 'home';
       u.facing = Math.atan2(-Math.cos(a), -Math.sin(a));
@@ -712,8 +717,9 @@ export class Game {
       this.emit('death', u); return;
     }
     if (this.teams[u.team]) this.teams[u.team].stats.lost++;
-    if (u.team === NEUTRAL_TEAM && Math.random() < CAMP_RULES.dropChance) {
-      const pool = u.camp?.drops || Object.keys(ITEMS);
+    const tier = u.creepTier || creepTierOf(u.def.id);
+    if (u.team === NEUTRAL_TEAM && Math.random() < dropChanceForTier(tier)) {
+      const pool = Object.keys(ITEMS).filter((id) => (ITEMS[id].tier || 1) === tier);   // any item of the creep's tier
       const id = pool[Math.floor(Math.random() * pool.length)];
       // Auto-loot (per team toggle): the troop that landed the kill gets it straight into a free slot
       if (killer && !killer.dead && !killer.tower && !killer.brainwashed && this.teams[killer.team]?.autoLoot && killer.addItem(id) >= 0) this.emit('pickup', killer, id);
@@ -754,6 +760,7 @@ export class Game {
   damageBase(team, raw, src, at = null) {
     const b = this.bases[team];
     if (b.dead || this.over || b.invulnerable) return;
+    if (this.cheat?.god && team === this.playerTeam) return;
     const dmg = raw * defenseMult(b.armor);
     b.hp = Math.max(0, b.hp - dmg);
     b.shake = 0.18;

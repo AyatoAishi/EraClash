@@ -483,7 +483,7 @@ export class Controls {
     }, { passive: true });
 
     addEventListener('keydown', (e) => {
-      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA')) return;
       this.keys.add(e.code);
       if (!this.enabled || e.repeat) return;
       const k = settings.keys;
@@ -522,6 +522,7 @@ export class Controls {
       else if (e.code === k.barracks) this.hooks.toggleBarracks?.();
       else if (e.code === k.repair) this.hooks.toggleRepair?.();
       else if (e.code === k.autoLoot) this.hooks.toggleAutoLoot?.();
+      else if (e.code === k.chat || (k.chat === 'Enter' && e.code === 'NumpadEnter')) { e.preventDefault(); this.hooks.openChat?.(); }
       else if (e.code === k.selectAll) this.selectAll();
       else if (e.code === k.centerBase) { e.preventDefault(); this.hooks.onCenter?.(); }
       if (e.code.startsWith('Arrow')) e.preventDefault();
