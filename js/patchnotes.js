@@ -7,6 +7,28 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.21.0', date: '2026-10-24T20:14:00+08:00', title: 'Building upgrade trees: Cannon & Howitzer',
+    sections: [
+      { title: 'New: upgrade your buildings', items: [
+        'Select one of your Cannons or Howitzers: an <b>upgrade panel</b> appears at the top. Each building upgrades on its own: <b>Lv 1 → 2</b>, then at <b>Lv 3 pick one of two paths</b>, then Lv 4 and 5 down that path. Every level has its own model.',
+        'Upgrading puts up scaffolding for 4–12s, and the building <b>keeps firing</b> at its old level until it\'s done. Demolish refunds 50% of everything spent on it, upgrades included.',
+        'The enemy AI upgrades its buildings too: against swarms it takes the rapid-fire path, otherwise the heavy one.',
+        'Dev Lab: level / path buttons for buildings in the Model Viewer and the Sandbox Inspector.',
+      ] },
+      { title: 'Cannon', items: [
+        'Lv 2 <b>Bronze Cannon</b> (150g): 750 HP, 55 damage, 5 armor.',
+        'Path A, heavy shot: <b>Bombard</b> (300g: 85 damage, splash 3.2, every 5s) → <b>Siege Mortar</b> (500g: lobs shells with a landing ring, range 20, 100 damage) → <b>Great Bombard</b> (900g: 150 damage, splash 4.2, <b>stuns 1.2s</b>).',
+        'Path B, rapid fire: <b>Twin Cannons</b> (300g: two barrels, about twice the fire rate) → <b>Grapeshot Battery</b> (500g: a cone of 8 iron balls) → <b>Thunder Organ</b> (900g: 12 balls every 2s with knockback).',
+      ] },
+      { title: 'Howitzer', items: [
+        'Lv 2 <b>Heavy Howitzer</b> (180g): 620 HP, 75 damage, 4 armor.',
+        'Path A, precision: <b>Long Tom</b> (360g: range 28) → <b>Guided Shells</b> (600g: shells steer onto the target, can\'t be dodged) → <b>Railgun</b> (1080g: an instant slug that pierces everything in a line for 220, <b>hits flying</b>).',
+        'Path B, saturation: <b>Autoloader</b> (360g: fires every 3.3s) → <b>MLRS</b> (600g: 6 rockets, splash 2) → <b>Thermobaric</b> (1080g: 8 rockets that leave <b>burning ground</b>, 10 magic damage/s for 4s).',
+      ] },
+      { title: 'Changes', items: ['The Barracks upgrades <b>Grapeshot</b> and <b>Ballistic Computer</b> are gone: their effects now live in the building paths.'] },
+    ],
+  },
+  {
     version: '0.20.1', date: '2026-10-24T19:59:00+08:00', title: 'Hwacha buff',
     sections: [
       { title: 'Balance', items: [

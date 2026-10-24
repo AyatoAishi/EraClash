@@ -134,3 +134,9 @@ Systems are split so new features plug in without touching each other:
 - `structure.highGround` makes `Unit.groundLevel` 2 (vision over trees, uphill rules). `structure.trueSight` registers a detector in `game.detectors` when the building comes online (`Game.activateStructure`). `structure.suppress` slows on every hit (`Unit.onAttackLanded`).
 - Tower models carry a crew rig (`addCrew` / `levelCrew` in models.js); `rig.muzzleY` is the shot height.
 - Testing: a selected building shows its min range ring (`Controls.updateMinRange`); the Dev Lab Inspector has "5 enemies in range" / "+ flying" (`DevLab.spawnTargets`).
+
+## Building upgrade trees (v0.21.0)
+- `js/buildtree.js`: `BUILD_TREES[id]` = `{ 2: step, a: { name, desc, 3, 4, 5 }, b: {...} }`. Each step: `name, cost, time, stats` (absolute values replacing the stat sheet), `structure` (fields replacing the structure block), `desc`. Later steps inherit earlier ones. `buildingDef(id, level, path)` merges them (cached); `nextSteps(id, level, path)` lists the next option(s) (two at the Lv 2 → 3 fork).
+- Each building instance has `bLevel / bPath / upgrading`. `Game.upgradeBuilding(u, path)` pays and starts scaffolding (it keeps firing); `Unit.applyBuildLevel(level, path)` swaps the def, stats and model (`UNIT_BUILDERS[id](level, path)`), keeping HP %. `u.paid` accumulates for the demolish refund. `Game.aiUpgradeBuildings` picks path b against swarms, a otherwise.
+- New structure fields: `marker` / `arc` (landing ring, lob height), `stun` (disarm + 100% slow), `guided` (shell follows its target), `fire: 'line'` + `lineWidth` (Railgun, `Game.fireLine`), `burn: { radius, dps, t }` (Thermobaric, `Game.addFire`), `pellet` / `rocketKind` (volley projectile look). Multi-barrel models expose `rig.muzzles`; shots cycle through them (`unit.shotIdx`).
+- UI: `#bup` panel (`UI.renderBuildingUpgrade`), shown while one of your buildings with a tree is selected.

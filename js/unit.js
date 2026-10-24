@@ -5,6 +5,7 @@ import { UPGRADES, STAT_BOOST } from './upgrades.js';
 import { NEUTRAL_TEAM, CAMP_RULES } from './neutrals.js';
 import { UNIT_BUILDERS, buildZzz, applyLook } from './models.js';
 import { formDef } from './skilltree.js';
+import { buildingDef } from './buildtree.js';
 import { settings } from './settings.js';
 
 let UID = 0;
@@ -65,7 +66,7 @@ export class Unit {
     this.invulnT = GAME.spawnInvuln;   // spawn protection
     // deployable building (Cannon / Howitzer): never moves, no spawn shield; Game.placeStructure sets buildT / obstacle
     this.structure = this.def.structure || null;
-    if (this.structure) { this.invulnT = 0; this.buildT = this.structure.buildTime; this.recoilT = 0; }
+    if (this.structure) { this.invulnT = 0; this.buildT = this.structure.buildTime; this.recoilT = 0; this.bLevel = 1; this.bPath = null; this.upgrading = null; this.shotIdx = 0; }
     this.lastCrit = false;
     this.pos = new THREE.Vector3();
     this.facing = team === 0 ? Math.PI / 2 : -Math.PI / 2;
@@ -917,6 +918,22 @@ export class Unit {
   get structMods() { return this.game.teams?.[this.team]?.structMods?.[this.def.id] || {}; }
   get minRange() { return Math.max(0, (this.structure?.minRange || 0) + (this.structMods.minRange || 0)); }
   get splashRadius() { return (this.structure?.splash || 0) + (this.structMods.splash || 0); }
+  /**
+   * Turn this building into its (level, path) version from BUILD_TREES: new stat sheet + structure block,
+   * new model (same position / facing), HP keeps its percentage. Used by upgrades and the Dev Lab.
+   */
+  applyBuildLevel(level, path) {
+    const id = this.def.id, def = buildingDef(id, level, path);
+    this.def = def; this.structure = def.structure; this.bLevel = level; this.bPath = path;
+    this.recalcStats();
+    const old = this.rig, rig = UNIT_BUILDERS[id](level, path);
+    rig.root.scale.setScalar(1.25 * (rig.scale || 1));
+    this.obj.remove(old.root); this.obj.add(rig.root);
+    old.matList.forEach((m) => m.dispose());
+    this.rig = rig; this.shotIdx = 0; this.recoilT = 0;
+    this.bar.position.y = (rig.barY || 2.95) * (rig.scale || 1) + 0.2;
+    this.target = null;
+  }
   /** Can this building fire at `o` right now (alive, visible, not flying, between min and max range)? */
   canShell(o) {
     if (!o || o.dead || o.tower || o.team === this.team) return false;
@@ -952,6 +969,10 @@ export class Unit {
       if (this.built) { r.scaffold.visible = false; r.yaw.scale.set(1, 1, 1); g.onStructureBuilt(this); }
     } else {
       this.atkCd -= dt; this.retarget -= dt;
+      if (this.upgrading) {   // upgrade scaffolding: keeps firing at the old level until it's done
+        const U = this.upgrading; U.t += dt; r.scaffold.visible = true;
+        if (U.t >= U.total) { this.upgrading = null; this.applyBuildLevel(U.level, U.path); g.onBuildingUpgraded(this); return false; }
+      }
       const o = this.order;
       let tg = null;
       if (o.type === 'attack') { if (this.canShell(o.target)) tg = o.target; else if (!o.target || o.target.dead) this.order = { type: 'idle' }; }
@@ -969,8 +990,10 @@ export class Unit {
         if (Math.abs(da) < (S.fire === 'direct' ? 0.15 : 0.08) && this.atkCd <= 0 && !this.disarmed) {
           this.atkCd = Math.max(this.atkCd, -0.1) + attackInterval(this.effAttackSpeed);
           if (S.fire === 'direct') this.releaseAttack(tg);          // arrow / bullet like a ranged troop (can miss, hits flying)
-          else if (S.fire === 'volley') g.fireVolley(this, tg);   // Hwacha: a fan of rockets
+          else if (S.fire === 'volley') g.fireVolley(this, tg);   // Hwacha / Grapeshot / MLRS: a fan of projectiles
+          else if (S.fire === 'line') g.fireLine(this, tg);       // Railgun: instant piercing slug
           else g.fireShell(this, tg);                              // artillery shell
+          this.shotIdx = (this.shotIdx + 1) % Math.max(1, r.muzzles?.length || 1);   // multi-barrel guns fire in turn
           this.recoilT = 1; this.muzzleT = S.fire === 'direct' ? 0.06 : 0.1;
         }
       } else if (r.barrel) r.barrel.rotation.x += (r.rest - r.barrel.rotation.x) * Math.min(1, dt * 2);
@@ -1079,7 +1102,11 @@ export class Unit {
       if (this.swing > 0) { this.swing = 0; this.recoilT = 1; this.muzzleT = 0.1; }
       this.recoilT = Math.max(0, this.recoilT - dt * 2.5);
       if (r.recoil) r.recoil.position.z = -(this.structure.fire === 'direct' ? 0.1 : 0.45) * Math.sin(Math.min(1, this.recoilT) * Math.PI / 2);
-      this.muzzleT -= dt; r.muzzle.visible = this.muzzleT > 0;
+      this.muzzleT -= dt;
+      const S = this.structure, all = S.fire === 'volley' || S.fire === 'line';   // volleys flash every barrel
+      if (r.muzzles?.length > 1) r.muzzles.forEach((mz, i) => (mz.visible = this.muzzleT > 0 && (all || i === (this.shotIdx + r.muzzles.length - 1) % r.muzzles.length)));
+      else r.muzzle.visible = this.muzzleT > 0;
+      if (r.radar) r.radar.rotation.y += dt * 1.5;   // Guided Shells radar / Autoloader drum
       return;
     }
     this.aimT -= dt;

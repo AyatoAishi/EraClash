@@ -135,6 +135,7 @@ app.startMatch = (faction, difficulty) => {
   });
   g.on('repair', (team, on, why) => { if (team === app.playerTeam && why === 'gold') app.ui.toast('Repair stopped: out of gold', 'err'); });
   g.on('built', (u) => { if (u.team === app.playerTeam) { app.ui.toast(`${u.def.name} ready`); sfx('train'); } });
+  g.on('buildingUpgraded', (u) => { if (u.team === app.playerTeam) app.ui.toast(`Upgraded: ${u.def.name} (Lv ${u.bLevel})`); });
   g.on('demolish', (u, refund) => { if (u.team === app.playerTeam) app.ui.toast(`${u.def.name} demolished (+${refund}g)`); });
   g.on('upgrade', (team, id, lvl) => { if (team === app.playerTeam) { app.ui.toast(`Upgrade complete: ${app.ui.upgradeName(id)} Lv ${lvl}`); sfx('train'); } });
   g.on('pickup', (u, id) => { if (u.team === app.playerTeam) { app.ui.floatText(u.pos, CFG.ITEMS[id].name, 'gold'); sfx('coin', 80); app.ui.refreshSelection(true); } });

@@ -9,6 +9,7 @@ import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, build
 import { sfx } from './audio.js';
 import { SKILL_TREES, levelInfo, formDef } from './skilltree.js';
 import { Vision } from './vision.js';
+import { nextSteps } from './buildtree.js';
 
 const FACTION_BY_TEAM = ['medieval', 'modern'];
 
@@ -89,6 +90,8 @@ export class Game {
     this.detectors = [];   // true-sight sources (future Sentry Wards): { team, pos, radius, dead }
     this.trails = [];      // Barding Rally: { team, x, z, t, bonus, mesh }
     this.shells = [];      // artillery shells in flight (Cannon / Howitzer): Game.fireShell / updateShells
+    this.fires = [];       // burning ground (Thermobaric): Game.addFire / updateFires
+    this.beams = [];       // railgun trails: Game.fireLine / updateBeams
     this.skillshots = [];  // line projectiles (Arrow Piercer)
     this.teams.forEach((T) => (T.autoLoot = false));
     // AI teams: difficulty head start + a personality for this match
@@ -673,24 +676,28 @@ export class Game {
   /** Fire a shell from building `src` at `target`'s current spot (no leading: moving out of the way works). */
   fireShell(src, target, o = {}) {
     const S = src.structure, howitzer = S.shell === 'howitzer';
-    const mesh = o.rocket ? buildRocket() : howitzer ? buildShell() : buildCannonball();
+    const kind = o.rocket ? (S.pellet ? 'pellet' : S.rocketKind || 'rocket') : howitzer ? 'shell' : 'ball';
+    const mesh = kind === 'rocket' ? buildRocket() : kind === 'shell' || kind === 'missile' ? buildShell() : buildCannonball();
+    if (kind === 'pellet') mesh.scale.setScalar(0.55);
+    if (kind === 'missile') mesh.scale.set(1.3, 1.3, 1.6);
     const start = new THREE.Vector3();
-    src.rig.muzzle.getWorldPosition(start);
+    (o.muzzle || src.rig.muzzles?.[src.shotIdx] || src.rig.muzzle).getWorldPosition(start);
     const end = new THREE.Vector3(target.pos.x, (this.terrain?.heightAt(target.pos.x, target.pos.z) || 0) + 0.15, target.pos.z);
     const dist = Math.hypot(end.x - start.x, end.z - start.z);
     mesh.position.copy(start);
     mesh.visible = !o.delay;
     this.scene.add(mesh);
     let marker = null;
-    if (howitzer && !o.rocket) {   // landing warning: a red ring that tightens until impact
+    if ((howitzer || S.marker) && !o.rocket) {   // landing warning: a red ring that tightens until impact
       marker = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
       marker.material.userData.noFow = true;
       marker.rotation.x = -Math.PI / 2; marker.position.set(end.x, end.y + 0.05, end.z); marker.renderOrder = 3;
       marker.scale.setScalar(src.splashRadius);
       this.scene.add(marker);
     }
-    this.shells.push({ mesh, marker, src, team: src.team, start, end, t: -(o.delay || 0), T: o.flight ?? S.flight, apex: dist * (o.arc ?? (howitzer ? 0.45 : 0.06)),
-      dmg: o.dmg ?? src.rollDamage(), splash: o.splash ?? src.splashRadius, kb: o.rocket ? 0 : S.knockback || 0, groundOnly: S.groundOnly, small: !!o.rocket });
+    this.shells.push({ mesh, marker, src, team: src.team, start, end, t: -(o.delay || 0), T: o.flight ?? S.flight, apex: dist * (o.arc ?? S.arc ?? (howitzer ? 0.45 : 0.06)),
+      dmg: o.dmg ?? src.rollDamage(), splash: o.splash ?? src.splashRadius, kb: o.rocket && !S.pellet ? 0 : S.knockback || 0, groundOnly: S.groundOnly, small: !!o.rocket,
+      guided: S.guided && target.dead === false ? target : null, stun: S.stun || 0, burn: S.burn || null });
     if (o.rocket) return;
     if (this.audible(src.pos.x)) sfx('snipe', 60);
     this.burst(start, 6, [0xd8d8d8, 0x9a9a9a, 0xffb040], 2, 0.6, 1.2);   // muzzle smoke
@@ -706,10 +713,11 @@ export class Game {
     for (let k = 0; k < n; k++) {
       const a = base + (k / Math.max(1, n - 1) - 0.5) * S.volley.cone + (Math.random() - 0.5) * 0.08;
       const d = Math.max(src.minRange + src.radius, Math.min(src.effRange + src.radius, d0 + (Math.random() - 0.5) * 4));
+      const mz = src.rig.muzzles?.length ? src.rig.muzzles[k % src.rig.muzzles.length] : src.rig.muzzle;
       this.fireShell(src, { pos: { x: src.pos.x + Math.sin(a) * d, z: src.pos.z + Math.cos(a) * d } },
-        { rocket: true, delay: k * 0.05, flight: S.flight + Math.random() * 0.2, arc: 0.12 });
+        { rocket: true, muzzle: mz, delay: k * (S.pellet ? 0.01 : 0.05), flight: S.flight + Math.random() * 0.2, arc: S.arc ?? (S.pellet ? 0.03 : 0.12) });
     }
-    if (this.audible(src.pos.x)) sfx('zap', 60);
+    if (this.audible(src.pos.x)) sfx(S.pellet ? 'snipe' : 'zap', 60);
     const mp = new THREE.Vector3(); src.rig.muzzle.getWorldPosition(mp);
     this.burst(mp, 10, [0xffb040, 0xff6a00, 0xd8d8d8], 2.5, 0.7, 1);
   }
@@ -720,6 +728,10 @@ export class Game {
       p.t += dt;
       if (p.t < 0) continue;            // staggered volley: not launched yet
       p.mesh.visible = true;
+      if (p.guided && !p.guided.dead) {   // Guided Shells: the landing point follows the target (can't be dodged)
+        p.end.x = p.guided.pos.x; p.end.z = p.guided.pos.z;
+        if (p.marker) p.marker.position.set(p.end.x, p.marker.position.y, p.end.z);
+      }
       const u = Math.min(1, p.t / p.T);
       prev.copy(p.mesh.position);
       p.mesh.position.lerpVectors(p.start, p.end, u);
@@ -750,11 +762,119 @@ export class Game {
       const dealt = o.takeDamage(p.dmg * f, src, 'physical', { ranged: true, splash: true });
       if (src && !src.dead) src.damageDealt += dealt;
       if (p.kb && !o.dead) o.knockback(p.end, p.kb * f);
+      if (p.stun && !o.dead && !o.structure) { o.disarmT = Math.max(o.disarmT || 0, p.stun); o.pendingHit = null; o.addSlow(100, p.stun); }   // stun = can't attack or move
       if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
     }
+    if (p.burn) this.addFire(p.team, src, p.end.x, p.end.z, p.burn);
     if (p.small) { this.burst(p.end, 5, [0xffb040, 0xff6a00, 0x5a4a3a], 2.5, 0.5, 0.8); return; }
     this.burst(p.end, 18, [0x5a4a3a, 0x8a7a6a, 0xffb040, 0x3a3a3a], 5, 0.9, 1.5);
     if (this.audible(p.end.x)) sfx('baseHit', 90);
+  }
+
+  /** Burning ground (Thermobaric): damages ground enemies standing in it every second. */
+  addFire(team, src, x, z, B) {
+    const mesh = new THREE.Mesh(new THREE.CircleGeometry(B.radius, 20), new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0.45, depthWrite: false }));
+    mesh.material.userData.noFow = true;
+    mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, (this.terrain?.heightAt(x, z) || 0) + 0.07, z); mesh.renderOrder = 2;
+    this.scene.add(mesh);
+    this.fires.push({ team, src, x, z, r: B.radius, dps: B.dps, t: B.t, life: B.t, tick: 0, mesh });
+  }
+  updateFires(dt) {
+    for (let i = this.fires.length - 1; i >= 0; i--) {
+      const F = this.fires[i];
+      F.t -= dt; F.tick -= dt;
+      F.mesh.material.opacity = 0.25 + 0.2 * Math.sin(this.time * 20 + i) + 0.15 * (F.t / F.life);
+      F.mesh.visible = F.team === this.playerTeam || this.seenByViewer(F);
+      if (F.tick <= 0) {
+        F.tick = 0.5;
+        for (const o of this.units) {
+          if (o.dead || o.tower || o.flying || o.team === F.team || (o.team === NEUTRAL_TEAM && o.aggroTeam !== F.team)) continue;
+          if (Math.hypot(o.pos.x - F.x, o.pos.z - F.z) - o.radius > F.r) continue;
+          const dealt = o.takeDamage(F.dps * 0.5, F.src, 'magic', { splash: true });
+          if (F.src && !F.src.dead) F.src.damageDealt += dealt;
+        }
+        if (Math.random() < 0.6) this.burst({ x: F.x + (Math.random() - 0.5) * F.r, z: F.z + (Math.random() - 0.5) * F.r }, 2, [0xff6a1a, 0xffb040], 1.5, 0.4, 0.6);
+      }
+      if (F.t <= 0) { this.scene.remove(F.mesh); F.mesh.geometry.dispose(); F.mesh.material.dispose(); this.fires.splice(i, 1); }
+    }
+  }
+  /** Railgun: an instant slug along the line to the target, out to full range. Hits everything on it (flying too). */
+  fireLine(src, target) {
+    const S = src.structure, start = new THREE.Vector3();
+    src.rig.muzzle.getWorldPosition(start);
+    const dx = target.pos.x - src.pos.x, dz = target.pos.z - src.pos.z, len = Math.hypot(dx, dz) || 1, ux = dx / len, uz = dz / len;
+    const reach = src.effRange + src.radius;
+    const dmg = src.rollDamage();
+    for (const o of this.units) {
+      if (o.dead || o.tower || o.team === src.team || (o.team === NEUTRAL_TEAM && o.aggroTeam !== src.team)) continue;
+      const rx = o.pos.x - src.pos.x, rz = o.pos.z - src.pos.z, along = rx * ux + rz * uz;
+      if (along < 0 || along > reach + o.radius) continue;
+      if (Math.abs(rx * uz - rz * ux) > (S.lineWidth || 0.8) + o.radius) continue;
+      const dealt = o.takeDamage(dmg, src, 'physical', { ranged: true });
+      src.damageDealt += dealt;
+      if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
+      this.burst(o.pos, 5, [0xa0f0ff, 0xffffff], 2.5, 0.4, 0.8);
+    }
+    // the slug's trail: a thin glowing beam that fades
+    const beam = new THREE.Mesh(boxGeo(0.25, 0.25, 1), new THREE.MeshBasicMaterial({ color: 0x80f0ff, transparent: true, opacity: 0.9, depthWrite: false }));
+    beam.material.userData.noFow = true;
+    const end = new THREE.Vector3(src.pos.x + ux * reach, start.y - 0.4, src.pos.z + uz * reach);
+    beam.position.lerpVectors(start, end, 0.5); beam.scale.z = start.distanceTo(end); beam.lookAt(end);
+    this.scene.add(beam);
+    this.beams.push({ mesh: beam, t: 0.35 });
+    if (this.audible(src.pos.x)) sfx('snipe', 40);
+  }
+  updateBeams(dt) {
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      const b = this.beams[i]; b.t -= dt;
+      b.mesh.material.opacity = Math.max(0, b.t / 0.35) * 0.9; b.mesh.scale.x = b.mesh.scale.y = 1 + (0.35 - b.t) * 3;
+      if (b.t <= 0) { this.scene.remove(b.mesh); b.mesh.material.dispose(); this.beams.splice(i, 1); }
+    }
+  }
+
+  // ---------------- building upgrades (js/buildtree.js) ----------------
+  /**
+   * Upgrade building `u` one step (`path` 'a' | 'b' needed at the Lv 2 → 3 fork). Pays now; scaffolding for the
+   * step's time while it keeps firing at its old level. Returns an error message or null.
+   */
+  upgradeBuilding(u, path = null) {
+    if (!u?.structure || u.dead) return 'Not a building';
+    if (!u.built) return 'Still under construction';
+    if (u.upgrading) return 'Already upgrading';
+    const steps = nextSteps(u.def.id, u.bLevel, u.bPath);
+    if (!steps.length) return 'Max level';
+    const st = steps.length > 1 ? steps.find((x) => x.path === path) : steps[0];
+    if (!st) return 'Pick a path';
+    const T = this.teams[u.team];
+    if (T.gold < st.node.cost) return 'Not enough gold';
+    T.gold -= st.node.cost; T.stats.goldSpent += st.node.cost;
+    u.paid = (u.paid ?? u.def.cost) + st.node.cost;
+    u.upgrading = { t: 0, total: st.node.time, level: st.level, path: st.path, name: st.node.name };
+    u.rig.scaffold.visible = true;
+    this.burst(u.pos, 8, [0x9a7a4c, 0xd8c8a0], 2, 0.6);
+    this.emit('buildingUpgradeStart', u);
+    return null;
+  }
+  onBuildingUpgraded(u) {
+    this.burst(u.pos, 16, [0xffffff, 0xf7c948, 0x9a7a4c], 3, 0.9);
+    if (this.audible(u.pos.x)) sfx('evolve', 80);
+    this.emit('buildingUpgraded', u);
+  }
+  /** AI: upgrade its built buildings when it has spare gold; at the fork, swarms → path b, otherwise path a. */
+  aiUpgradeBuildings(T) {
+    if (Math.random() > 0.25) return;
+    const saving = T.aiGoal ? upgradePrice(UPGRADES[T.aiGoal], this.pendingLevel(T.team, T.aiGoal)) : 0;
+    for (const u of this.buildingsOf(T.team)) {
+      if (!u.built || u.upgrading) continue;
+      const steps = nextSteps(u.def.id, u.bLevel, u.bPath); if (!steps.length) continue;
+      let st = steps[0];
+      if (steps.length > 1) {
+        const foes = this.units.filter((o) => !o.dead && !o.structure && !o.tower && o.team !== T.team && o.team !== NEUTRAL_TEAM);
+        const swarm = foes.length >= 8 || foes.filter((o) => o.def.cost <= 75).length >= 5;
+        st = steps.find((x) => x.path === (swarm ? 'b' : 'a')) || steps[0];
+      }
+      if (T.gold >= st.node.cost + 40 + Math.min(saving, 150)) { this.upgradeBuilding(u, st.path); return; }
+    }
   }
 
   // ---------------- combat callbacks ----------------
@@ -1171,6 +1291,7 @@ export class Game {
     T.aiNext ||= (ranged && nM >= 2 && nR < (nM + nR) * rangedShare ? ranged : melee).id;
     this.aiResearch(T, this.diff.thinkEvery);
     this.aiBuild(T);
+    this.aiUpgradeBuildings(T);
     for (const id of FACTIONS[T.faction].units) {   // evolutions are free: take one as soon as it unlocks
       const opts = Object.keys(SKILL_TREES[id] || {}).filter((f) => !this.formBlock(T.team, id, f));
       if (opts.length) this.pickForm(T.team, id, opts[Math.floor(Math.random() * opts.length)]);
@@ -1460,6 +1581,8 @@ export class Game {
     this.updateProjectiles(dt);
     this.updateSkillshots(dt);
     this.updateShells(dt);
+    this.updateFires(dt);
+    this.updateBeams(dt);
     this.updateTrails(dt);
     this.updateChains(dt);
     this.updateTethers(dt);
@@ -1500,6 +1623,8 @@ export class Game {
     this.markers.forEach((k) => this.scene.remove(k.m));
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
     this.shells.forEach((p) => { this.scene.remove(p.mesh); if (p.marker) this.scene.remove(p.marker); }); this.shells = [];
+    this.fires.forEach((F) => this.scene.remove(F.mesh)); this.fires = [];
+    this.beams.forEach((b) => this.scene.remove(b.mesh)); this.beams = [];
     (this.tethers || []).forEach((T) => this.scene.remove(T.g)); this.tethers = []; this.chains = [];
     this.units = []; this.particles = []; this.markers = []; this.projectiles = [];
     this.bases.forEach((b, t) => {

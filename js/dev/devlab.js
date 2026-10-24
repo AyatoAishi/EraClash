@@ -13,6 +13,11 @@ import { Unit } from '../unit.js';
 import { FOW, updateFogTexture } from '../fow.js';
 import { OrbitCam } from './orbit.js';
 import { Creator } from './creator.js';
+import { BUILD_TREES } from '../buildtree.js';
+
+/** Every (level, path) design of a building with an upgrade tree, for the level buttons. */
+const buildSteps = (id) => BUILD_TREES[id] ? [[1, null], [2, null], ...['a', 'b'].flatMap((p) => [3, 4, 5].filter((l) => BUILD_TREES[id][p]?.[l]).map((l) => [l, p]))] : [];
+const stepLabel = ([l, p]) => (p ? p.toUpperCase() : '') + l;
 
 const TEAM_NAMES = ['Medieval (you)', 'Modern', 'Neutral'];
 const SPEEDS = [0, 0.25, 0.5, 1, 2, 4];
@@ -109,7 +114,7 @@ export class DevLab {
     // a sandbox game only used to build Unit instances for the viewer (never updated)
     this.vGame = new Game({ scene: this.vScene, playerTeam: 0, world: { terrain: null, castle: new THREE.Group(), hq: new THREE.Group() }, sandbox: true });
     this.view = { entry: null, filter: 'all', level: 3, anim: 'idle', animSpeed: 1, spin: true, wire: false, bounds: false, grid: true, axes: false,
-      night: false, scaleRef: false, slots: true, wallTroops: false };
+      night: false, scaleRef: false, slots: true, wallTroops: false, bLevel: 1, bPath: null };
     this.wired = new Set();
 
     // ----- flat arena scene -----
@@ -235,6 +240,7 @@ export class DevLab {
       unit.ring.visible = false; unit.bar.visible = false; unit.shield.visible = false;
       unit.facing = 0; unit.obj.rotation.y = 0;
       if (unit.flying) unit.obj.position.y = GAME.flyHeight;
+      if (unit.structure && V.bLevel > 1 && BUILD_TREES[entry.unit]) unit.applyBuildLevel(V.bLevel, V.bPath);   // building design picked below
       model = unit.obj;
     } else model = entry.build(V.level);
     holder.add(model);
@@ -338,7 +344,13 @@ export class DevLab {
         h('div', { class: 'dl-sec' }, 'Level stats'), this.baseStatsTable(E.wallUnit, V.level));
     }
     if (vm.unit) {
-      const d = UNITS[E.unit], s = vm.unit.stats;
+      const d = vm.unit.def, s = vm.unit.stats;
+      if (BUILD_TREES[E.unit]) {
+        p.append(h('div', { class: 'dl-sec' }, 'Building level'),
+          h('div', { class: 'dl-row dl-levels' }, buildSteps(E.unit).map(([l, pa]) => h('button', { class: 'dl-b' + (V.bLevel === l && V.bPath === pa ? ' on' : ''),
+            onclick: () => { V.bLevel = l; V.bPath = pa; this.pick(E); } }, stepLabel([l, pa])))),
+          h('div', { class: 'dl-tier' }, h('b', {}, `${d.name}`), h('div', {}, (pa => pa ? `Path ${pa.toUpperCase()}: ${BUILD_TREES[E.unit][pa].name}` : 'Base line')(V.bPath))));
+      }
       p.append(h('div', { class: 'dl-sec' }, 'Animation'),
         h('div', { class: 'dl-row' }, ['idle', 'walk', 'attack'].map((a) => h('button', { class: 'dl-b' + (V.anim === a ? ' on' : ''),
           onclick: () => { V.anim = a; this.atkT = 0; this.renderViewerPanel(); } }, a))),
@@ -602,6 +614,9 @@ export class DevLab {
         h('button', { class: 'dl-b', onclick: () => (u.hp = u.maxHp) }, 'Heal'),
         h('button', { class: 'dl-b', onclick: () => (u.invulnT = u.invulnT > 1000 ? 0 : 1e9) }, 'God mode'),
         h('button', { class: 'dl-b', onclick: () => { if (!u.dead) { u.hp = 0; u.die(null); } } }, 'Kill')),
+      u.structure && BUILD_TREES[u.def.id] ? h('div', { class: 'dl-row dl-levels', title: 'Set this building’s level / path instantly' },
+        buildSteps(u.def.id).map(([l, pa]) => h('button', { class: 'dl-b' + (u.bLevel === l && u.bPath === pa ? ' on' : ''),
+          onclick: () => { u.upgrading = null; u.applyBuildLevel(l, pa); this.renderInspector(); } }, stepLabel([l, pa])))) : null,
       u.structure ? h('div', { class: 'dl-row' },
         h('button', { class: 'dl-b', title: 'Enemy troops (holding position) in the middle of this building’s range', onclick: () => this.spawnTargets(u, false) }, '5 enemies in range'),
         h('button', { class: 'dl-b', title: 'A flying enemy in range (towers that hit flying shoot it; artillery and the Hwacha cannot)', onclick: () => this.spawnTargets(u, true) }, '+ flying')) : null);

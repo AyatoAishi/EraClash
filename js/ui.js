@@ -9,6 +9,7 @@ import { sfx, applyAudioSettings, initAudio } from './audio.js';
 import { ORDER_LABEL } from './unit.js';
 import { PATCH_NOTES, CURRENT_VERSION, formatPatchDate } from './patchnotes.js';
 import { UPGRADES, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
+import { BUILD_TREES, nextSteps } from './buildtree.js';
 import { CAMPS, CAMP_RULES, CREEP_GROUPS, dropChanceForTier } from './neutrals.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -792,6 +793,39 @@ export class UI {
   upgradeName(id) { return UPGRADES[id]?.name || id; }
   barracksOpen() { return $('#barracks').classList.contains('open'); }
   buildOpen() { return $('#build').classList.contains('open'); }
+  /**
+   * Building upgrade panel: shows while exactly one of your buildings with an upgrade tree is selected.
+   * Lv 1 → 2 is one card, Lv 2 → 3 shows both paths side by side, then the chosen path continues to Lv 5.
+   * Re-rendered only when something it shows changes (level, upgrade progress step, affordability).
+   */
+  renderBuildingUpgrade() {
+    const el = $('#bup'), g = this.app.game, team = this.app.playerTeam;
+    const sel = this.app.controls.selection;
+    const u = sel.length === 1 && sel[0].structure && sel[0].team === team && !sel[0].dead && BUILD_TREES[sel[0].def.id] ? sel[0] : null;
+    if (!u) { if (el.classList.contains('open')) { el.classList.remove('open'); this._bupKey = ''; } return; }
+    const T = g.teams[team], U = u.upgrading, steps = U ? [] : nextSteps(u.def.id, u.bLevel, u.bPath);
+    const key = [u.id, u.bLevel, u.bPath, u.built, U ? Math.floor(U.t / U.total * 20) : -1, steps.map((st) => T.gold >= st.node.cost).join()].join('|');
+    el.classList.add('open');
+    if (key === this._bupKey) return;
+    this._bupKey = key;
+    const tree = BUILD_TREES[u.def.id];
+    const pathName = u.bPath ? tree[u.bPath].name : '';
+    const head = `<div class="bu-head"><h4>${u.def.name}</h4><small>Lv ${u.bLevel}${pathName ? ' · ' + pathName : ''}</small>
+      <span class="bu-pips">${[1, 2, 3, 4, 5].map((l) => `<i class="${l <= u.bLevel ? 'on' : ''}"></i>`).join('')}</span></div>`;
+    let body;
+    if (!u.built) body = '<div class="bu-max">Finish construction to upgrade.</div>';
+    else if (U) body = `<div class="bu-max">Upgrading to <b>${U.name}</b> (Lv ${U.level}) · ${Math.ceil(U.total - U.t)}s · still firing</div><div class="bu-prog"><i style="width:${(U.t / U.total * 100).toFixed(0)}%"></i></div>`;
+    else if (!steps.length) body = '<div class="bu-max">Max level.</div>';
+    else body = `<div class="bu-steps">${steps.map((st) => `<button class="bu-step frame${T.gold < st.node.cost ? ' off' : ''}" data-path="${st.path || ''}">
+        <span class="bu-cost"><svg class="ico"><use href="#i-coin"/></svg>${st.node.cost} · ${st.node.time}s</span>
+        <b>Lv ${st.level} · ${st.node.name}</b>${steps.length > 1 ? `<span class="bu-path">Path ${st.path.toUpperCase()}: ${tree[st.path].name} — ${tree[st.path].desc}</span>` : ''}
+        <div>${st.node.desc}</div></button>`).join('')}</div>`;
+    el.innerHTML = head + body;
+    $$('#bup .bu-step').forEach((b) => (b.onclick = () => {
+      const err = g.upgradeBuilding(u, b.dataset.path || null);
+      if (err) { this.toast(err, 'err'); sfx('error', 150); } else { sfx('click'); this._bupKey = ''; }
+    }));
+  }
   /** Build menu: one card per faction building; clicking one starts placement (Controls.startBuild). */
   toggleBuild(force) {
     const el = $('#build');
@@ -1008,6 +1042,7 @@ export class UI {
     const g = this.app.game;
     if (!g || this.app.playerTeam === null) return;
     const T = g.teams[this.app.playerTeam];
+    this.renderBuildingUpgrade();
     const demo = $('#cmds [data-cmd="demolish"]');   // Demolish shows only while one of your buildings is selected
     if (demo) demo.hidden = !this.app.controls.selection.some((u) => u.structure && u.team === this.app.playerTeam);
     $('#gold').textContent = Math.floor(T.gold);
