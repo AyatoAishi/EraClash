@@ -62,7 +62,7 @@ export const DEFAULTS = {
   },
   audio: { master: 0.8, music: 0.4, sfx: 0.8, mute: false },
   graphics: { quality: 'medium', pixelated: false, showFps: false, hpBars: 'always', uiScale: 1, damageNumbers: 'crits', critHighlight: true, combatText: true },
-  gameplay: { edgePan: true, panSpeed: 1.0, zoomSpeed: 1.0 },
+  gameplay: { edgePan: true, panSpeed: 1.0, zoomSpeed: 1.0, quickCast: false },
 };
 
 function deepMerge(base, over) {

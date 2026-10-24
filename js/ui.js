@@ -407,6 +407,8 @@ export class UI {
     ch.addEventListener('change', () => { settings.graphics.critHighlight = ch.checked; saveSettings(); });
     const ct = $('#o-ctext'); ct.checked = settings.graphics.combatText;
     ct.addEventListener('change', () => { settings.graphics.combatText = ct.checked; saveSettings(); });
+    const qc = $('#o-quickcast'); qc.checked = !!settings.gameplay.quickCast;
+    qc.addEventListener('change', () => { settings.gameplay.quickCast = qc.checked; saveSettings(); });
     const ep = $('#o-edge'); ep.checked = settings.gameplay.edgePan;
     ep.addEventListener('change', () => { settings.gameplay.edgePan = ep.checked; saveSettings(); });
     bindRange('#o-pan', () => settings.gameplay.panSpeed, (v) => (settings.gameplay.panSpeed = v), (v) => v.toFixed(1) + 'x');

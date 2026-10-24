@@ -7,6 +7,15 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.12.2', date: '2026-10-24T13:19:00+08:00', title: 'Quick cast & aim lines',
+    sections: [
+      { title: 'New', items: [
+        'Options → Gameplay: <b>Quick cast</b>. Aimed abilities (Elf\'s Arrow Piercer) fire at the cursor the moment you press the key.',
+        'Normal cast now shows an <b>aim line for every selected caster</b> (5 Elves = 5 lines), since they all fire on the click.',
+      ] },
+    ],
+  },
+  {
     version: '0.12.1', date: '2026-10-24T12:59:00+08:00', title: 'Auto-update',
     sections: [
       { title: 'New', items: [

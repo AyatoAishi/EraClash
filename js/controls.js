@@ -315,7 +315,18 @@ export class Controls {
     if (a.def.kind !== 'active') { this.hooks.toast?.(`${a.def.name} is passive`); return false; }
     const ready = units.filter((u) => u.def.id === type && u.abil[i]?.st.cd <= 0 && (u.abil[i].def.manaCost || 0) <= u.mana && !u.casting);
     if (!ready.length) { this.hooks.toast?.((a.def.manaCost || 0) > units[0].mana ? `Not enough mana for ${a.def.name}` : `${a.def.name} not ready`); return false; }
-    if (a.def.cast === 'line') { this.setArmed(false); this.targeting = { slot: i, def: a.def, type }; document.body.classList.add('armed'); return true; }
+    if (a.def.cast === 'line') {
+      // Quick cast (Options > Gameplay): fire at the cursor right away. Normal cast: show the aim lines and wait for a click.
+      if (settings.gameplay.quickCast) {
+        const p = this.mouse.inside ? this.groundAt(this.mouse.x, this.mouse.y) : null;
+        if (!p) return false;
+        let n = 0;
+        for (const u of ready) if (u.castAbility(i, { x: p.x, z: p.z })) n++;
+        if (n) sfx('attack');
+        return n > 0;
+      }
+      this.setArmed(false); this.targeting = { slot: i, def: a.def, type }; document.body.classList.add('armed'); return true;
+    }
     let n = 0;
     for (const u of ready) if (u.castAbility(i)) n++;
     return n > 0;
@@ -331,27 +342,31 @@ export class Controls {
   cancelTargeting() {
     if (!this.targeting) return false;
     this.targeting = null; document.body.classList.toggle('armed', this.armed);
-    if (this.aimMesh) this.aimMesh.visible = false;
+    for (const m of this.aimMeshes || []) m.visible = false;
     return true;
   }
-  /** Line indicator from the primary caster toward the cursor (Dota-style range preview). */
+  /** Line indicators from EVERY ready caster of that type toward the cursor (they all fire when you click). */
   updateAiming() {
     const T = this.targeting;
-    if (!T || !this.game) { if (this.aimMesh) this.aimMesh.visible = false; return; }
-    const u = this.own().find((x) => x.def.id === T.type);
-    if (!u) return this.cancelTargeting();
-    if (!this.aimMesh) {
-      this.aimMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.05, 1), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, transparent: true, opacity: 0.35, depthWrite: false }));
-      this.aimMesh.material.userData.noFow = true; this.aimMesh.renderOrder = 6;
-      this.game.scene.add(this.aimMesh);
+    this.aimMeshes ||= [];
+    if (!T || !this.game) { for (const m of this.aimMeshes) m.visible = false; return; }
+    const casters = this.own().filter((x) => x.def.id === T.type && x.abil[T.slot]?.st.cd <= 0 && (x.abil[T.slot].def.manaCost || 0) <= x.mana && !x.casting);
+    if (!casters.length) return this.cancelTargeting();
+    const p = this.groundAt(this.mouse.x, this.mouse.y);
+    while (this.aimMeshes.length < casters.length) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(1, 0.05, 1), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, transparent: true, opacity: 0.3, depthWrite: false }));
+      m.material.userData.noFow = true; m.renderOrder = 6;
+      this.game.scene.add(m); this.aimMeshes.push(m);
     }
-    const p = this.groundAt(this.mouse.x, this.mouse.y); if (!p) return;
-    let dx = p.x - u.pos.x, dz = p.z - u.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
-    const L = T.def.range;
-    const m = this.aimMesh;
-    m.visible = true; m.scale.set(T.def.width, 1, L);
-    m.position.set(u.pos.x + dx * L / 2, 0.12 + Math.max(0, u.pos.y || 0), u.pos.z + dz * L / 2);
-    m.rotation.y = Math.atan2(dx, dz);
+    this.aimMeshes.forEach((m, k) => {
+      const u = casters[k];
+      if (!u || !p) { m.visible = false; return; }
+      let dx = p.x - u.pos.x, dz = p.z - u.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+      const L = T.def.range;
+      m.visible = true; m.scale.set(T.def.width, 1, L);
+      m.position.set(u.pos.x + dx * L / 2, 0.12 + Math.max(0, u.pos.y || 0), u.pos.z + dz * L / 2);
+      m.rotation.y = Math.atan2(dx, dz);
+    });
   }
   setArmed(v) {
     this.armed = v && this.own().length > 0;
