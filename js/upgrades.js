@@ -1,4 +1,5 @@
-import { UNITS, FACTIONS } from './config.js';
+import { UNITS, FACTIONS, BASE_LEVELS } from './config.js';
+import { CASTLE_TIERS, HQ_TIERS } from './models.js';
 // ============================================================
 //  BARRACKS UPGRADES — per match only (reset every game).
 //  max: number of levels (Infinity = unlimited)
@@ -18,6 +19,14 @@ export const STAT_BOOST = {
 };
 const STAT_BOOST_TIME = { base: STAT_BOOST.baseTime, pct: STAT_BOOST.pct };
 const boostPrice = (unitId) => ({ base: UNITS[unitId].cost * STAT_BOOST.priceMult, pct: STAT_BOOST.pct });
+
+// Fortify / Expand HQ: upgrade level l = base level 1 + l (matches start at level 1)
+const BASE_LEVEL_PRICE = [300, 600, 1200, 2000];
+const BASE_LEVEL_TIME = [20, 30, 40, 50];
+const baseLevelText = (l, tiers) => {
+  const S = BASE_LEVELS[l];
+  return `Lv ${l + 1} ${tiers[l].name}: ${S.hp} HP, ${S.armor} armor, ${S.slots} wall spots`;
+};
 
 export const UPGRADES = {
   // ===================== MEDIEVAL =====================
@@ -105,12 +114,20 @@ export const UPGRADES = {
     desc: 'Stat boost: every Elf gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Elf cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
+  fortify: {
+    id: 'fortify', faction: 'medieval', category: 'base', icon: 'u-fortify',
+    name: 'Fortify', max: BASE_LEVELS.length - 1,
+    price: BASE_LEVEL_PRICE, time: BASE_LEVEL_TIME,
+    effects: [{ type: 'baseLevel' }],
+    desc: 'Rebuilds your castle <b>one level higher</b>: more HP, armor and vision, and more wall spots for Battlement Rangers. The castle keeps its HP %.',
+    levelText: (l) => baseLevelText(l, CASTLE_TIERS),
+  },
   battlement: {
     id: 'battlement', faction: 'medieval', category: 'base', icon: 'u-battlement',
-    name: 'Battlement', max: 4,
-    price: [100, 200, 400, 800, 1600], time: [12, 16, 20, 25, 30],
+    name: 'Battlement', max: 8,   // also capped by the castle's wall spots (Game.upgradeMax / BASE_LEVELS)
+    price: [100, 200, 400, 800, 1200, 1600, 2000, 2400], time: [12, 16, 20, 25, 28, 30, 32, 35],
     effects: [{ type: 'towers', unit: 'archer', rangeBonus: 15 }],
-    desc: 'Adds <b>+1 Ranger on the castle walls</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Ranger upgrades.',
+    desc: 'Adds <b>+1 Ranger on the castle walls</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Ranger upgrades. Max level = the castle\'s wall spots (4 at Castle Lv 3, up to 8).',
     levelText: (l) => `${l} wall ranger${l > 1 ? 's' : ''}`,
   },
 
@@ -197,12 +214,20 @@ export const UPGRADES = {
     desc: 'Stat boost: every Recon Drone gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Recon Drone cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
+  expandHQ: {
+    id: 'expandHQ', faction: 'modern', category: 'base', icon: 'u-expand',
+    name: 'Expand HQ', max: BASE_LEVELS.length - 1,
+    price: BASE_LEVEL_PRICE, time: BASE_LEVEL_TIME,
+    effects: [{ type: 'baseLevel' }],
+    desc: 'Rebuilds your HQ <b>one level higher</b>: more HP, armor and vision, and more rooftop spots for Overwatch Gunners. The HQ keeps its HP %.',
+    levelText: (l) => baseLevelText(l, HQ_TIERS),
+  },
   overwatch: {
     id: 'overwatch', faction: 'modern', category: 'base', icon: 'u-overwatch',
-    name: 'Rooftop Overwatch', max: 4,
-    price: [100, 200, 400, 800, 1600], time: [12, 16, 20, 25, 30],
+    name: 'Rooftop Overwatch', max: 8,   // also capped by the HQ's rooftop spots
+    price: [100, 200, 400, 800, 1200, 1600, 2000, 2400], time: [12, 16, 20, 25, 28, 30, 32, 35],
     effects: [{ type: 'towers', unit: 'gunner', rangeBonus: 15 }],
-    desc: 'Adds <b>+1 Gunner on the HQ roof</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Gunner upgrades.',
+    desc: 'Adds <b>+1 Gunner on the HQ roof</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Gunner upgrades. Max level = the HQ\'s rooftop spots (4 at HQ Lv 3, up to 8).',
     levelText: (l) => `${l} rooftop gunner${l > 1 ? 's' : ''}`,
   },
 

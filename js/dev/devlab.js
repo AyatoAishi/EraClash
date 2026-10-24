@@ -4,7 +4,7 @@
 //  - Sandbox: a real Game ({ sandbox: true }) on a flat floor or the lane map. Spawn anything, set any
 //    upgrade level instantly, inspect stats, change time speed. Uses the normal RTS controls for team 0.
 import * as THREE from 'three';
-import { UNITS, ITEMS, GAME, FACTIONS, ABILITIES, attackInterval } from '../config.js';
+import { UNITS, ITEMS, GAME, FACTIONS, ABILITIES, attackInterval, dps, baseLevelStats, reductionPct } from '../config.js';
 import { UPGRADES, upgradesFor } from '../upgrades.js';
 import { CAMPS, NEUTRAL_TEAM } from '../neutrals.js';
 import * as M from '../models.js';
@@ -123,8 +123,7 @@ export class DevLab {
     this.aScene.add(aFloor, aGrid, lane);
     this.aWorld = { terrain: null, castle: M.buildCastle(3), hq: M.buildHQ() };
     this.aScene.add(this.aWorld.castle, this.aWorld.hq);
-    this.arena = { map: 'flat', speed: 1, step: 0, invulnBases: true, fog: false, team: 0, count: 1, hold: true, baseLevels: [3, 3], upTeam: 0 };
-    this.swapped = [null, null];
+    this.arena = { map: 'flat', speed: 1, step: 0, invulnBases: true, fog: false, team: 0, count: 1, hold: true, baseLevels: [GAME.baseLevel, GAME.baseLevel], upTeam: 0 };
     this.placing = null;
     this.t = 0;
 
@@ -141,7 +140,6 @@ export class DevLab {
     this.setPlacing(null);
     this.clearViewer();
     this.disposeArena();
-    this.restoreMainBases();
     FOW.on.value = 0;
     this.orbit.enabled = false;
     this.app.controls.enabled = false;
@@ -334,8 +332,8 @@ export class DevLab {
       p.append(h('div', { class: 'dl-sec' }, 'Level'),
         h('div', { class: 'dl-row dl-levels' }, E.tiers.map((t, i) => h('button', { class: 'dl-b' + (V.level === i + 1 ? ' on' : ''), title: t.name,
           onclick: () => { V.level = i + 1; this.pick(E); } }, String(i + 1)))),
-        h('div', { class: 'dl-tier' }, h('b', {}, `Lv ${V.level} · ${T.name}`), h('div', {}, T.desc),
-          h('div', { class: 'dl-muted' }, `${(vm.model.userData.slots || []).length} wall slot(s)`)));
+        h('div', { class: 'dl-tier' }, h('b', {}, `Lv ${V.level} · ${T.name}`), h('div', {}, T.desc)),
+        h('div', { class: 'dl-sec' }, 'Level stats'), this.baseStatsTable(E.wallUnit, V.level));
     }
     if (vm.unit) {
       const d = UNITS[E.unit], s = vm.unit.stats;
@@ -361,6 +359,24 @@ export class DevLab {
       h('button', { class: 'dl-b wide', onclick: () => this.orbit.frame(vm.box) }, 'Re-frame camera'));
     fill(this.rightEl, out);
   }
+  /**
+   * Base stats at a level, with the change from the level below. Firepower = spots x the wall troop's
+   * damage per second (unupgraded) — what a full Battlement / Overwatch adds at that level.
+   */
+  baseStatsTable(wallUnit, L) {
+    const S = baseLevelStats(L), P = L > 1 ? baseLevelStats(L - 1) : null, W = UNITS[wallUnit];
+    const fire = (X) => X.slots * dps(W);
+    const row = (name, val, prev, show = fmt) => h('tr', {}, h('td', {}, name),
+      h('td', {}, show(val), prev !== null && val !== prev ? h('em', { class: val > prev ? 'up' : 'down' }, ` ${val > prev ? '+' : ''}${show(val - prev)}`) : null));
+    return h('table', { class: 'dl-stats' },
+      row('HP', S.hp, P?.hp ?? null),
+      row('Armor', S.armor, P?.armor ?? null),
+      row('Damage reduction', reductionPct(S.armor), P ? reductionPct(P.armor) : null, (v) => v.toFixed(1) + '%'),
+      row('Vision (day)', S.vision[0], P?.vision[0] ?? null),
+      row('Vision (night)', S.vision[1], P?.vision[1] ?? null),
+      row(`${W.name} spots`, S.slots, P?.slots ?? null),
+      row('Wall firepower', fire(S), P ? fire(P) : null, (v) => v.toFixed(1) + '/s'));
+  }
   check(label, key, rebuildExtras = false) {
     const V = this.view;
     return h('label', { class: 'dl-check' }, h('input', { type: 'checkbox', checked: V[key], onchange: (e) => {
@@ -379,7 +395,6 @@ export class DevLab {
   startArena(map) {
     this.disposeArena();
     const A = this.arena; A.map = map;
-    this.restoreMainBases();
     const flat = map === 'flat';
     const world = flat ? this.aWorld : this.world;
     const scene = flat ? this.aScene : this.mainScene;
@@ -402,32 +417,17 @@ export class DevLab {
     this.game = null;
     this.app.controls.setSelection?.([]);
   }
-  /** Lane map arena swaps the real base models; put them back before the menu demo uses them again. */
-  restoreMainBases() {
-    ['castle', 'hq'].forEach((key, team) => {
-      const wb = this.world[key], sw = this.swapped[team];
-      if (sw && sw !== wb) sw.parent?.remove(sw);
-      this.swapped[team] = null;
-      if (!wb.parent) this.mainScene.add(wb);
-      wb.position.set(team === 0 ? -GAME.baseX : GAME.baseX, 0, 0);
-    });
-  }
-  /** Rebuild a base at another level; its wall troops (Battlement / Overwatch) move to the new slots. */
+  /**
+   * Set a base's level directly (stats + model; Game.dispose puts the world's own models back).
+   * Keeps the Fortify / Expand HQ level in step so the upgrade panel matches.
+   */
   setBaseLevel(team, L) {
     const g = this.game; if (!g) return;
-    const D = BASES[team];
     this.arena.baseLevels[team] = L;
-    const b = g.bases[team], old = b.obj, flat = this.arena.map === 'flat';
-    const nw = D.build(L);
-    nw.position.copy(old.position);
-    old.parent.add(nw); old.parent.remove(old);
-    b.obj = nw;
-    if (flat) this.aWorld[D.key] = nw;
-    else this.swapped[team] = nw;
-    g.units.filter((u) => u.tower && u.team === team).forEach((u, i) => {
-      const s = nw.userData.slots[i]; if (!s) return;
-      u.pos.set(b.x + s.x, 0, s.z); u.yOff = s.y; u.obj.position.set(u.pos.x, s.y, s.z);
-    });
+    g.setBaseLevel(team, L);
+    g.swapBaseModel(team, L);
+    const up = Object.values(UPGRADES).find((U) => U.faction === g.teams[team].faction && U.effects?.some((e) => e.type === 'baseLevel'));
+    if (up) g.teams[team].upLevels[up.id] = Math.max(0, L - GAME.baseLevel);
   }
   /** Rebuild a team's upgrades from scratch at the given levels (lets the panel go down a level too). */
   setUpgradeLevels(team, levels) {
@@ -437,19 +437,25 @@ export class DevLab {
       if (u.tower && u.team === team) { u.dispose(); g.units.splice(i, 1); }
     }
     T.upLevels = {}; T.unitMods = {}; T.costAdd = {}; T.grants = {}; T.towers = 0; T.income = 0;
-    const b = g.bases[team]; b.maxHp = GAME.baseHP; b.hp = b.maxHp;
+    const b = g.bases[team]; b.bonusHp = 0;
+    g.setBaseLevel(team, GAME.baseLevel); g.swapBaseModel(team, GAME.baseLevel);
+    b.maxHp = b.hp = baseLevelStats(b.level).hp;
     for (const u of g.units) if (u.team === team) u.abil = u.abil.filter((a) => !a.def.granted);
-    for (const [id, n] of Object.entries(levels)) for (let k = 0; k < n; k++) g.applyUpgrade(team, id);
+    const baseFirst = (U) => (UPGRADES[U[0]]?.effects?.some((e) => e.type === 'baseLevel') ? 0 : 1);   // base level first: it decides wall spots
+    for (const [id, n] of Object.entries(levels).sort((a, b) => baseFirst(a) - baseFirst(b))) for (let k = 0; k < Math.min(n, g.upgradeMax(team, UPGRADES[id])); k++) g.applyUpgrade(team, id);
     for (const u of g.units) if (!u.dead && u.team === team) { u.syncAbilities(); u.recalcStats(); }
     this.renderUpgrades();
   }
   bumpUpgrade(team, id, d) {
     const T = this.game.teams[team], U = UPGRADES[id];
-    const cur = T.upLevels[id] || 0, next = Math.max(0, Math.min(U.max === Infinity ? 99 : U.max, cur + d));
+    const cap = this.game.upgradeMax(team, U);
+    const cur = T.upLevels[id] || 0, next = Math.max(0, Math.min(cap === Infinity ? 99 : cap, cur + d));
     if (next === cur) return;
-    if (d > 0 && next === cur + 1) { this.game.applyUpgrade(team, id); this.renderUpgrades(); return; }
+    if (d > 0 && next === cur + 1) { this.game.applyUpgrade(team, id); this.syncBaseLevels(); this.renderArenaPanels(); return; }
     this.setUpgradeLevels(team, { ...T.upLevels, [id]: next });
+    this.syncBaseLevels(); this.renderArenaPanels();
   }
+  syncBaseLevels() { this.game.bases.forEach((b, t) => (this.arena.baseLevels[t] = b.level)); }
   spawnAt(id, x, z) {
     const g = this.game, A = this.arena; if (!g) return;
     const team = A.team;
@@ -542,12 +548,13 @@ export class DevLab {
     fill(this.upEl, 
       h('div', { class: 'dl-sec' }, 'Upgrades'),
       h('div', { class: 'dl-row' }, [0, 1].map((t) => h('button', { class: 'dl-b team' + t + (A.upTeam === t ? ' on' : ''), onclick: () => { A.upTeam = t; this.renderUpgrades(); } }, TEAM_NAMES[t].split(' ')[0])),
-        h('button', { class: 'dl-b', onclick: () => this.setUpgradeLevels(A.upTeam, Object.fromEntries(list.map((U) => [U.id, U.max === Infinity ? 5 : U.max]))) }, 'Max'),
+        h('button', { class: 'dl-b', onclick: () => this.setUpgradeLevels(A.upTeam, Object.fromEntries(list.map((U) => { const c = g.upgradeMax(A.upTeam, U); return [U.id, c === Infinity ? 5 : c]; }))) }, 'Max'),
         h('button', { class: 'dl-b', onclick: () => this.setUpgradeLevels(A.upTeam, {}) }, 'Reset')),
       list.map((U) => {
         const lvl = T.upLevels[U.id] || 0;
         return h('div', { class: 'dl-up' + (lvl ? ' has' : '') },
-          h('div', { class: 'dl-up-n' }, h('b', {}, U.name), h('span', {}, ` ${lvl}/${U.max === Infinity ? '∞' : U.max}`),
+          h('div', { class: 'dl-up-n' }, h('b', {}, U.name), h('span', {}, ` ${lvl}/${U.max === Infinity ? '∞' : g.upgradeMax(A.upTeam, U)}`),
+            g.upgradeMax(A.upTeam, U) < U.max ? h('span', { class: 'dl-muted', title: 'Raise the base level for more spots' }, ` (base cap, max ${U.max})`) : null,
             h('div', { class: 'dl-muted' }, lvl && U.levelText ? U.levelText(lvl, U) : U.category + (U.unit ? ' · ' + (UNITS[U.unit]?.name || U.unit) : ''))),
           h('button', { class: 'dl-b sq', onclick: () => this.bumpUpgrade(A.upTeam, U.id, -1) }, '−'),
           h('button', { class: 'dl-b sq', onclick: () => this.bumpUpgrade(A.upTeam, U.id, 1) }, '+'));
@@ -570,6 +577,7 @@ export class DevLab {
   renderInspector() {
     if (!this.inspEl) return;
     const u = this.inspected;
+    if (!u && this.app.controls.selectedBase) return this.renderBaseInspector(this.app.controls.selectedBase);
     if (!u) { fill(this.inspEl, h('div', { class: 'dl-sec' }, 'Inspector'), h('div', { class: 'dl-muted' }, 'Select a troop (click it) to inspect it. Enemy and creep troops can be selected too.')); this.inspStats = null; return; }
     const sel = this.app.controls.selection.length;
     this.inspStats = h('table', { class: 'dl-stats wide' });
@@ -589,7 +597,32 @@ export class DevLab {
         h('button', { class: 'dl-b', onclick: () => { if (!u.dead) { u.hp = 0; u.die(null); } } }, 'Kill')));
     this.renderInspectorStats();
   }
+  renderBaseInspector(b) {
+    const D = BASES[b.team];
+    this.inspStats = h('table', { class: 'dl-stats wide' });
+    this.inspStats.dataset.base = b.team;
+    fill(this.inspEl,
+      h('div', { class: 'dl-sec' }, 'Inspector'),
+      h('h3', {}, `${D.tiers[b.level - 1].name}`), h('div', { class: 'dl-muted' }, `${TEAM_NAMES[b.team]} ${D.name} · level ${b.level}`),
+      this.inspStats,
+      h('div', { class: 'dl-row' },
+        h('button', { class: 'dl-b', onclick: () => (b.hp = b.maxHp) }, 'Repair'),
+        h('button', { class: 'dl-b', onclick: () => (b.hp = Math.max(1, b.hp - b.maxHp * 0.25)) }, '−25% HP')));
+    this.renderInspectorStats();
+  }
   renderInspectorStats() {
+    const sb = this.app.controls.selectedBase;
+    if (!this.inspected && sb && this.inspStats?.dataset.base == sb.team) {
+      const g = this.game, S = baseLevelStats(sb.level), towers = g.units.filter((u) => u.tower && u.team === sb.team);
+      fill(this.inspStats,
+        h('tr', {}, h('td', {}, 'HP'), h('td', {}, `${Math.ceil(sb.hp)} / ${Math.round(sb.maxHp)}` + (sb.bonusHp ? ` (+${sb.bonusHp} Reinforce)` : ''))),
+        h('tr', {}, h('td', {}, 'Armor'), h('td', {}, fmt(sb.armor))),
+        h('tr', {}, h('td', {}, 'Vision'), h('td', {}, `${S.vision[0]} day / ${S.vision[1]} night`)),
+        h('tr', {}, h('td', {}, 'Wall troops'), h('td', {}, `${towers.length} / ${S.slots} spots`)),
+        h('tr', {}, h('td', {}, 'Wall firepower'), h('td', {}, towers.reduce((a, u) => a + dps(u.stats), 0).toFixed(1) + '/s')),
+        h('tr', {}, h('td', {}, 'Invulnerable'), h('td', {}, sb.invulnerable ? 'yes' : 'no')));
+      return;
+    }
     const u = this.inspected, t = this.inspStats; if (!u || !t) return;
     if (u.dead) { fill(t, h('tr', {}, h('td', {}, 'Dead'))); return; }
     const eff = { damage: u.effDamage, attackSpeed: u.effAttackSpeed, range: u.effRange, moveSpeed: u.effMoveSpeed, evasion: u.effEvasion };

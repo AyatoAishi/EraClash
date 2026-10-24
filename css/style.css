@@ -570,3 +570,4 @@ small.passive { color: var(--gold) !important; }
   #sp-portrait { width: 5.6rem; height: 5.6rem; }
   .sp-port { width: 5.6rem; }
 }
+.basebar .bname small { font-size: .85em; opacity: .7; margin: 0 .35em; }

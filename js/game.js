@@ -1,11 +1,11 @@
 // Match state: economy, training queues, AI, combat bookkeeping, particles, win/lose.
 import * as THREE from 'three';
-import { GAME, FACTIONS, UNITS, DIFFICULTY, defenseMult } from './config.js';
+import { GAME, FACTIONS, UNITS, DIFFICULTY, defenseMult, baseLevelStats, BASE_LEVELS } from './config.js';
 import { Unit } from './unit.js';
 import { UPGRADES, STAT_BOOST, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
 import { ABILITIES, ITEMS } from './config.js';
 import { NEUTRAL_TEAM, CAMP_RULES, CAMPS } from './neutrals.js';
-import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot } from './models.js';
+import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ } from './models.js';
 import { sfx } from './audio.js';
 import { Vision } from './vision.js';
 
@@ -64,14 +64,20 @@ export class Game {
     }));
     this.bases = [0, 1].map((t) => ({
       isBase: true, team: t,
-      hp: GAME.baseHP, maxHp: GAME.baseHP,
+      level: GAME.baseLevel, bonusHp: 0,   // bonusHp = Reinforce; the rest comes from the level (setBaseLevel)
       x: t === 0 ? -GAME.baseX : GAME.baseX,
       pos: new THREE.Vector3(t === 0 ? -GAME.baseX : GAME.baseX, 0, 0),
       shake: 0,
       obj: t === 0 ? world.castle : world.hq,
       dead: false,
     }));
-    this.bases.forEach((b) => { b.obj.position.set(b.x, 0, 0); b.obj.rotation.set(0, 0, 0); });
+    this.baseOrig = this.bases.map((b) => b.obj);   // the world's own models: put back on dispose()
+    this.bases.forEach((b) => {
+      b.obj.position.set(b.x, 0, 0); b.obj.rotation.set(0, 0, 0);
+      const S = baseLevelStats(b.level);
+      b.maxHp = b.hp = S.hp; b.armor = S.armor; b.vision = S.vision;
+      if (b.obj.userData.level !== undefined && b.obj.userData.level !== b.level) this.swapBaseModel(b.team, b.level);
+    });
     // map / systems (modular): terrain = obstacles + nav + height, structures = future buildables, vision = fog of war
     this.terrain = world?.terrain || null;
     this.structures = [];
@@ -127,6 +133,54 @@ export class Game {
   }
   researchCount(team) { const T = this.teams[team]; return (T.research ? 1 : 0) + T.rqueue.length; }
   upLevel(team, id) { return this.teams[team]?.upLevels[id] || 0; }
+  /** Wall troop spots on a base = cap for tower upgrades (Battlement / Overwatch). */
+  baseSlots(team) { return baseLevelStats(this.bases[team].level).slots; }
+  /** Effective max level: tower upgrades are capped by the base's spots, everything else by U.max. */
+  upgradeMax(team, U) {
+    if (U.effects?.some((e) => e.type === 'towers')) return Math.min(U.max, this.baseSlots(team));
+    if (U.effects?.some((e) => e.type === 'baseLevel')) return Math.min(U.max, this.upLevel(team, U.id) + BASE_LEVELS.length - this.bases[team].level);
+    return U.max;
+  }
+  /**
+   * Change a base's level: new HP / armor / vision (HP keeps its %), and wall troops beyond the new
+   * spot count are removed (their upgrade level drops with them). The model swap is the caller's job.
+   */
+  setBaseLevel(team, L) {
+    const b = this.bases[team], T = this.teams[team], S = baseLevelStats(L);
+    const frac = b.hp / b.maxHp;
+    b.level = S.level; b.maxHp = S.hp + b.bonusHp; b.hp = Math.max(1, frac * b.maxHp); b.armor = S.armor; b.vision = S.vision;
+    const towers = this.units.filter((u) => u.tower && u.team === team);
+    if (towers.length > S.slots) {
+      for (const u of towers.slice(S.slots)) { u.dispose(); this.units.splice(this.units.indexOf(u), 1); }
+      T.towers = S.slots;
+      for (const U of Object.values(UPGRADES)) if (T.upLevels[U.id] > S.slots && U.effects?.some((e) => e.type === 'towers')) T.upLevels[U.id] = S.slots;
+    }
+    this.emit('baseLevel', team, S.level);
+  }
+  /** Rebuild a base's model at level L (castle / HQ), in place; wall troops move to the new level's spots. */
+  swapBaseModel(team, L) {
+    const b = this.bases[team], old = b.obj;
+    const nw = (team === 0 ? buildCastle : buildHQ)(L);
+    nw.position.copy(old.position); nw.rotation.copy(old.rotation);
+    (old.parent || this.scene).add(nw); old.parent?.remove(old);
+    b.obj = nw;
+    if (this.world?.castle === old || this.world?.hq === old) this.world.setBaseModel?.(team, nw);
+    this.units.filter((u) => u.tower && u.team === team).forEach((u, i) => {
+      const s = nw.userData.slots?.[i]; if (!s) return;
+      u.pos.set(b.x + s.x, 0, s.z); u.yOff = s.y; u.obj.position.set(u.pos.x, s.y, s.z);
+    });
+    return nw;
+  }
+  /** Fortify / Expand HQ finished: one level up, new model, a puff of dust. */
+  raiseBase(team) {
+    const b = this.bases[team], L = b.level + 1;
+    if (L > BASE_LEVELS.length) return;
+    this.setBaseLevel(team, L);
+    this.swapBaseModel(team, L);
+    const cols = team === 0 ? [0x8d8f93, 0xe0b040, 0xffffff] : [0xb8bcc2, 0x4fa8e0, 0xffffff];
+    for (let k = 0; k < 4; k++) this.burst({ x: b.x + (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 10 }, 14, cols, 5, 1.4, 3);
+    if (this.audible(b.x)) sfx('train');
+  }
   /** Logistics: multiplier on research & training durations. */
   speedMult(team) {
     if (!this.teams[team]) return 1; const L = this.upLevel(team, 'logistics'); return L ? 1 - UPGRADES.logistics.values.speed[L - 1] : 1; }
@@ -147,7 +201,7 @@ export class Game {
     if (!U || !upgradesFor(T.faction).includes(U)) return 'Not available';
     if (this.over) return 'Match is over';
     const lvl = this.pendingLevel(team, id);            // queued levels count: you can stack the same upgrade
-    if (lvl >= U.max) return T.research || T.rqueue.length ? 'Max level already queued' : 'Already maxed';
+    if (lvl >= this.upgradeMax(team, U)) return lvl < U.max ? 'Needs a higher base level' : T.research || T.rqueue.length ? 'Max level already queued' : 'Already maxed';
     if (this.researchCount(team) >= GAME.researchQueueMax) return 'Research queue full';
     const price = upgradePrice(U, lvl);
     if (T.gold < price) return 'Not enough gold';
@@ -193,9 +247,11 @@ export class Game {
       } else if (e.type === 'towers') {
         this.spawnTower(team, e.unit, T.towers++, e.rangeBonus);
       } else if (e.type === 'baseHP') {
-        const b = this.bases[team]; b.maxHp += e.perLevel; b.hp += e.perLevel;
+        const b = this.bases[team]; b.bonusHp += e.perLevel; b.maxHp += e.perLevel; b.hp += e.perLevel;
       } else if (e.type === 'income') {
         T.income += e.perLevel;
+      } else if (e.type === 'baseLevel') {
+        this.raiseBase(team);
       }
     }
     for (const u of this.units) if (!u.dead && u.team === team) { u.syncAbilities(); u.recalcStats(); }
@@ -666,7 +722,7 @@ export class Game {
   damageBase(team, raw, src, at = null) {
     const b = this.bases[team];
     if (b.dead || this.over || b.invulnerable) return;
-    const dmg = raw * defenseMult(GAME.baseArmor);
+    const dmg = raw * defenseMult(b.armor);
     b.hp = Math.max(0, b.hp - dmg);
     b.shake = 0.18;
     if (src) { src.damageDealt += dmg; this.teams[src.team].stats.baseDamage += dmg; }
@@ -695,14 +751,16 @@ export class Game {
     const b = this.bases[T.team];
     const opts = upgradesFor(T.faction).map((U) => {
       const lvl = this.upLevel(T.team, U.id);
-      if (lvl >= U.max) return null;
+      if (lvl >= this.upgradeMax(T.team, U)) return null;
       const price = upgradePrice(U, lvl);
       let w = 1;
       if (U.unit) w = 0.4 + myUnits.filter((u) => u.def.id === U.unit).length * 0.6;
       if (U.id === 'finance') w = lvl === 0 ? 4 : 0.3;
       if (U.id === 'reinforce') w = (1 - b.hp / b.maxHp) * 6;
       if (U.effects?.[0]?.type === 'towers') w = 1.5;
-      w /= 1 + price / 300;          // prefer cheaper steps
+      const grow = U.effects?.[0]?.type === 'baseLevel';
+      if (grow) w = 5 + (1 - b.hp / b.maxHp) * 8;   // growing the base is a priority, more so when it's hurt
+      w /= 1 + price / (grow ? 1200 : 300);          // prefer cheaper steps (base levels are pricey by design)
       return w > 0 ? { U, w } : null;
     }).filter(Boolean);
     if (!opts.length) return null;
@@ -712,6 +770,10 @@ export class Game {
   }
   aiResearch(T, think) {
     if (T.research) return;
+    // grow the base on a schedule (~45s per current level), on top of the random upgrade picks
+    const grow = upgradesFor(T.faction).find((U) => U.effects?.some((e) => e.type === 'baseLevel'));
+    const L = this.bases[T.team].level;
+    if (grow && T.aiGoal !== grow.id && this.time > 45 * L && this.upLevel(T.team, grow.id) < this.upgradeMax(T.team, grow)) { T.aiGoal = grow.id; T.aiGoalT = 0; }
     if (!T.aiGoal) {
       if (Math.random() < this.diff.researchRate * 0.25) { T.aiGoal = this.aiPickUpgrade(T); T.aiGoalT = 0; }
       return;
@@ -719,14 +781,15 @@ export class Game {
     const U = UPGRADES[T.aiGoal];
     T.aiGoalT += think;
     if (T.gold >= upgradePrice(U, this.pendingLevel(T.team, U.id))) { this.research(T.team, U.id); T.aiGoal = null; }
-    else if (T.aiGoalT > 30) T.aiGoal = null;
+    else if (T.aiGoalT > (U.effects?.[0]?.type === 'baseLevel' ? 90 : 30)) T.aiGoal = null;   // base levels are worth saving up for
   }
   /** True while the AI is saving for an upgrade and buying this troop would break the plan. */
   aiSaving(T, unitCost) {
     if (!T.aiGoal) return false;
-    const threat = this.units.some((u) => u.team !== T.team && !u.dead && Math.abs(u.pos.x - this.bases[T.team].x) < 25);
-    if (threat) return false;
     const U = UPGRADES[T.aiGoal];
+    const threat = this.units.some((u) => u.team !== T.team && !u.dead && Math.abs(u.pos.x - this.bases[T.team].x) < 25);
+    // under attack: spend on troops — unless saving for a base level with a few defenders already up
+    if (threat && !(U.effects?.[0]?.type === 'baseLevel' && this.pop(T.team) >= 3)) return false;
     return T.gold - unitCost < upgradePrice(U, this.upLevel(T.team, U.id));
   }
 
@@ -926,6 +989,15 @@ export class Game {
     this.markers.forEach((k) => this.scene.remove(k.m));
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
     this.units = []; this.particles = []; this.markers = []; this.projectiles = [];
-    this.bases.forEach((b) => { b.obj.position.set(b.x, 0, 0); b.obj.rotation.set(0, 0, 0); });
+    this.bases.forEach((b, t) => {
+      const orig = this.baseOrig[t];
+      if (b.obj !== orig) {
+        b.obj.parent?.remove(b.obj);
+        if (!orig.parent) this.scene.add(orig);
+        if (this.world?.castle === b.obj || this.world?.hq === b.obj) this.world.setBaseModel?.(t, orig);
+        b.obj = orig;
+      }
+      b.obj.position.set(b.x, 0, 0); b.obj.rotation.set(0, 0, 0);
+    });
   }
 }

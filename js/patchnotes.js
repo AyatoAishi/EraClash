@@ -6,6 +6,25 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.13.0', date: '2026-10-24T13:26:00+08:00', title: 'Growing bases',
+    sections: [
+      { title: 'Bases grow during the match', items: [
+        'Both bases now <b>start at level 1</b> (Wooden Fort / Field Outpost, 1500 HP, 1 wall spot) instead of level 3.',
+        'New base upgrades: <b>Fortify</b> (Medieval) and <b>Expand HQ</b> (Modern). Each level rebuilds your base one level higher, right on the battlefield: Lv 2 300g / 20s, Lv 3 600g / 30s, Lv 4 1200g / 40s, Lv 5 2000g / 50s. The base keeps its HP %, and wall troops move to the new spots.',
+        'The enemy AI researches them too, sooner when its base is under attack.',
+        'Selecting a base shows its level name and level.',
+      ] },
+      { title: 'Base stats by level', items: [
+        'Each level has its own stats (same for both sides): <b>HP</b> 1500 / 2000 / 2500 / 3500 / 5000, <b>armor</b> 0 / 0 / 0 / 2 / 4, <b>vision</b> 30 / 32 / 35 / 38 / 40 (day), 16 / 18 / 20 / 22 / 24 (night). Reinforce HP stacks on top.',
+        'Dev Lab: the viewer shows each level’s stats with the change from the level below, plus <b>wall firepower</b> (spots × the wall troop’s damage per second). In the sandbox, changing a base’s level applies its stats, and clicking a base shows them live in the Inspector.',
+      ] },
+      { title: 'Balance', items: [
+        '<b>Battlement</b> and <b>Rooftop Overwatch</b> are now capped by your base’s troop spots: 1 / 2 / 4 / 6 / 8 by base level (hard max 8). Levels 5–8 cost 1200 / 1600 / 2000 / 2400.',
+        'The Barracks shows what a capped upgrade needs, e.g. <em>Needs Fortress (Castle Lv 4) · research Fortify</em>.',
+      ] },
+    ],
+  },
+  {
     version: '0.12.0', date: '2026-10-24T12:28:00+08:00', title: 'Dev Lab & base levels',
     sections: [
       { title: 'Dev Lab (main menu, top right)', items: [

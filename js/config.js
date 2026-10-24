@@ -8,9 +8,8 @@ export const GAME = {
   startGold: 100,
   incomePerSec: 2.5,
   bountyPct: 0.4,        // killing any unit (troop or creep) pays 40% of its hiring cost (what was paid)
-  baseHP: 2500,
+  baseLevel: 1,          // castle / HQ level every match starts at (stats: BASE_LEVELS); Fortify / Expand HQ raise it
   repair: { heal: 10, drain: 5, healPerLevel: 6, drainPerLevel: 3 },   // base repair toggle
-  baseArmor: 0,
   popCap: 40,
   queueMax: 5,
   laneHalfLen: 60,       // bases sit at +/- 58
@@ -22,7 +21,6 @@ export const GAME = {
   baseHalfZ: 7,
   highGround: { uphillMiss: 0.5 },
   researchQueueMax: 5,               // Barracks: running research + queued, like the training queue   // ranged attack from low ground (river) at a target on high ground
-  baseVision: [35, 20],              // [day, night] vision of a base
   defaultVision: [30, 16],
   dmgVariance: 1,        // each hit rolls damage +/- this much
   invSlots: 6,           // item slots per troop
@@ -31,6 +29,18 @@ export const GAME = {
   flyingMiss: 0.5,       // ranged attacks against flying units miss this often (melee can't hit them at all)
   spawnInvuln: 5,        // seconds of invulnerability (no damage, no CC) after spawning
 };
+
+// Base levels — castle and HQ use the same numbers. Matches start at GAME.baseLevel and level up through the
+// Fortify / Expand HQ upgrades (upgrades.js). Level 3 = the classic base (2500 HP).
+// slots = wall troop spots (models.js castleSlots / hqSlots) = how many Battlement / Overwatch levels the base can hold.
+export const BASE_LEVELS = [
+  { level: 1, hp: 1500, armor: 0, vision: [30, 16], slots: 1 },
+  { level: 2, hp: 2000, armor: 0, vision: [32, 18], slots: 2 },
+  { level: 3, hp: 2500, armor: 0, vision: [35, 20], slots: 4 },
+  { level: 4, hp: 3500, armor: 2, vision: [38, 22], slots: 6 },
+  { level: 5, hp: 5000, armor: 4, vision: [40, 24], slots: 8 },
+];
+export const baseLevelStats = (L) => BASE_LEVELS[Math.max(1, Math.min(BASE_LEVELS.length, L)) - 1];
 
 // team 0 = LEFT  (always Medieval)
 // team 1 = RIGHT (always Modern)
