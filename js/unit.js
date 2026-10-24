@@ -8,9 +8,9 @@ import { settings } from './settings.js';
 
 let UID = 0;
 const ringGeo = new THREE.RingGeometry(0.72, 0.92, 4, 1);
-const barBgMat = new THREE.MeshBasicMaterial({ color: 0x111111, depthWrite: false });
+const barBgMat = new THREE.MeshBasicMaterial({ color: 0x111111, depthWrite: false, depthTest: false });   // HP bars always draw on top of models
 const barMats = {};
-function barMat(hex) { return barMats[hex] || (barMats[hex] = new THREE.MeshBasicMaterial({ color: hex, depthWrite: false })); }
+function barMat(hex) { return barMats[hex] || (barMats[hex] = new THREE.MeshBasicMaterial({ color: hex, depthWrite: false, depthTest: false })); }
 const ringMats = {};
 function ringMat(hex) { return ringMats[hex] || (ringMats[hex] = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.9, depthWrite: false })); }
 const barGeo = new THREE.PlaneGeometry(1, 1);
@@ -94,11 +94,11 @@ export class Unit {
     this.ring.position.y = 0.06; this.ring.visible = false; this.ring.renderOrder = 2;
     this.obj.add(this.ring);
 
-    this.bar = new THREE.Group(); this.bar.position.y = 2.95 * (rig.scale || 1) + 0.2;
-    const bg = new THREE.Mesh(barGeo, barBgMat); bg.scale.set(1.04, 0.16, 1); bg.renderOrder = 3;
+    this.bar = new THREE.Group(); this.bar.position.y = (rig.barY || 2.95) * (rig.scale || 1) + 0.2;
+    const bg = new THREE.Mesh(barGeo, barBgMat); bg.scale.set(1.04, 0.16, 1); bg.renderOrder = 30;
     const fillColor = isNeutral ? 0xf2c94c : game.playerTeam === null ? (team === 0 ? 0xe0b040 : 0x4aa3ff) : (isFriendly ? 0x45e06a : 0xe84545);
     this.fill = new THREE.Mesh(barGeo, barMat(fillColor)); this.fill.scale.set(1, 0.11, 1);
-    this.fill.position.z = 0.001; this.fill.renderOrder = 4;
+    this.fill.position.z = 0.001; this.fill.renderOrder = 31;
     this.bar.add(bg, this.fill);
     this.obj.add(this.bar);
 

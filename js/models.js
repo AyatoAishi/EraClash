@@ -353,6 +353,7 @@ export function buildLancer() {
   }
   r.legL = legs[0]; r.legR = legs[1]; r.extraLegs = [legs[2], legs[3]];
   r.scale = 1.05;
+  r.barY = 3.9;   // rider sits high: bar above the plume
   return finalize(r);
 }
 

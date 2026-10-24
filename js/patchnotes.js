@@ -6,6 +6,18 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.11.1', date: '2026-10-24T12:02:00+08:00', title: 'New troop tuning',
+    sections: [
+      { title: 'Balance', items: [
+        '<b>Elf</b> HP 100 → <b>120</b>. <b>Arrow Piercer</b> projectile speed 10 → <b>35</b>.',
+        '<b>Lancer</b> HP 140 → <b>200</b>.',
+        '<b>Recon Drone</b> HP 70 → <b>45</b>.',
+        'Abilities now state whether they <b>affect flying</b> units: Arrow Piercer yes; Splatter (and Death Splatter) and Shield Stomp no.',
+      ] },
+      { title: 'Fixes', items: ['Health bars are always drawn on top of models (the Lancer no longer hides his own bar), and his bar sits above his plume.'] },
+    ],
+  },
+  {
     version: '0.11.0', date: '2026-10-24T11:15:00+08:00', title: 'Lancer, Elf, Riot Skirmisher & Recon Drone',
     sections: [
       { title: 'New troops — Medieval', items: [

@@ -183,7 +183,7 @@ export class UI {
       const u = el._unit, entry = u && u.ability(id);
       const status = entry && !u.dead ? this.abilityStatus(u, entry) : null;
       const meta = A.kind === 'active'
-        ? `<div class="tip-m">${A.cooldown ? `Cooldown ${A.cooldown}s` : 'No cooldown'}${A.radius ? ` · Radius ${A.radius}` : ''}${A.damage ? ` · ${A.damage} ${DAMAGE_TYPES[A.damageType].name.toLowerCase()} dmg` : ''}${el.dataset.key ? ` · Key <kbd>${el.dataset.key}</kbd>` : ''}</div>` : '';
+        ? `<div class="tip-m">${A.cooldown ? `Cooldown ${A.cooldown}s` : 'No cooldown'}${A.radius ? ` · Radius ${A.radius}` : ''}${A.damage ? ` · ${A.damage} ${DAMAGE_TYPES[A.damageType].name.toLowerCase()} dmg` : ''}${A.affectsFlying !== undefined ? ` · Affects flying: ${A.affectsFlying ? 'yes' : 'no'}` : ''}${A.manaCost ? ` · ${A.manaCost} mana` : ''}${el.dataset.key ? ` · Key <kbd>${el.dataset.key}</kbd>` : ''}</div>` : '';
       html = `<div class="tip-h"><svg class="ico"><use href="#${A.icon}"/></svg><b>${A.name}</b><small class="${A.kind}">${A.kind.toUpperCase()}</small></div>
         <p>${A.desc}</p>${meta}${status ? `<div class="tip-s ${status.on ? 'on' : ''}">${status.text}</div>` : ''}`;
     } else if (kind === 'autoloot') {

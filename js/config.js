@@ -43,7 +43,7 @@ export const FACTIONS = {
     baseName: 'Stone Keep',
     emblem: 'em-medieval',                // pixel symbol id in index.html
     color: '#d9a441',
-    units: ['viking', 'archer', 'imp', 'sniper', 'lancer', 'elf'],   // shop order = default buy key order (1, 2, 3...)
+    units: ['viking', 'archer', 'imp', 'lancer', 'elf'],   // shop order = default buy key order (1, 2, 3...)
   },
   modern: {
     id: 'modern',
@@ -170,7 +170,7 @@ Object.assign(UNITS, {
   lancer: {
     id: 'lancer', name: 'Lancer', theme: 'medieval', family: 'melee', role: 'Cavalry lancer', type: 'melee',
     cost: 160, trainTime: 5,
-    hp: 140, hpRegen: 1.2, damage: 18, damageType: 'physical', attackSpeed: 45,
+    hp: 200, hpRegen: 1.2, damage: 18, damageType: 'physical', attackSpeed: 45,
     armor: 4, ward: 1, evasion: 0, missChance: 0,
     moveSpeed: 4.1, range: 2.2, vision: [30, 16], aggro: 10, radius: 0.7,
     abilities: ['courageAura', 'bardingRally'],
@@ -179,7 +179,7 @@ Object.assign(UNITS, {
   elf: {
     id: 'elf', name: 'Elf', theme: 'medieval', family: 'marksman', role: 'Night ranger', type: 'ranged',
     cost: 120, trainTime: 3,
-    hp: 100, hpRegen: 0.6, damage: 19, damageType: 'physical', attackSpeed: 55,
+    hp: 120, hpRegen: 0.6, damage: 19, damageType: 'physical', attackSpeed: 55,
     armor: 1, ward: 3, evasion: 0, missChance: 0,
     moveSpeed: 3.2, range: 10, vision: [28, 20], aggro: 13, radius: 0.45,
     mana: 100, manaRegen: 1,
@@ -199,7 +199,7 @@ Object.assign(UNITS, {
   reconDrone: {
     id: 'reconDrone', name: 'Recon Drone', theme: 'modern', family: 'marksman', role: 'Flying harasser', type: 'ranged', flying: true,
     cost: 160, trainTime: 4.5,
-    hp: 70, hpRegen: 0.1, damage: 20, damageType: 'physical', attackSpeed: 40,
+    hp: 45, hpRegen: 0.1, damage: 20, damageType: 'physical', attackSpeed: 40,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 3.3, range: 2, vision: [30, 16], aggro: 10, radius: 0.5,
     projectile: { kind: 'bullet', speed: 60, arc: 0 },
@@ -277,8 +277,8 @@ Object.assign(UNITS, {
   },
 });
 /*
-  ABILITIES — modular. kind: 'passive' | 'active'. A troop may have up to GAME.maxAbilities (4)
-  in any mix (4 actives, 2+2, 1+3 ...). Logic lives in unit.js (passives) and game.js (actives: castAbility).
+  ABILITIES — modular. kind: 'passive' | 'active'. A unit may have up to GAME.maxActives (5) actives
+  and any number of passives. affectsFlying: false = can't hit flying units (default: it can). Logic lives in unit.js (passives) and game.js (actives: castAbility).
   `icon` = SVG symbol id in index.html.
 */
 export const ABILITIES = {
@@ -321,7 +321,7 @@ export const ABILITIES = {
     desc: 'Channels for 1s (S cancels), then lies prone: move speed 0, +6 range, +3 damage and attacks ignore 2 armor — but takes DOUBLE damage. Recast to stand up (1s channel), then 5s cooldown.',
   },
   splatter: {
-    id: 'splatter', kind: 'active', name: 'Splatter', icon: 'a-splatter',
+    id: 'splatter', kind: 'active', affectsFlying: false, name: 'Splatter', icon: 'a-splatter',
     cooldown: 0, radius: 2.2, damage: 70, damageType: 'magic', selfDestruct: true,
     aiCast: { minTargets: 2, lowHpPct: 0.35 },          // when the AI uses it
     desc: 'Sacrifices itself in an organic explosion, dealing 70 magic damage to every enemy within 2.2 range (bases included). Can\'t be evaded.',
@@ -361,13 +361,13 @@ export const ABILITIES = {
   critStrike: { id: 'critStrike', kind: 'passive', name: 'Critical Strike', icon: 'u-crit', granted: true, chance: 0.3, bonus: [0.8, 1.0, 1.2, 1.4, 1.6],
     desc: '30% chance on attack to deal +80/100/120/140/160% damage (by Critical Strike level).' },
   arrowPiercer: { id: 'arrowPiercer', kind: 'active', name: 'Arrow Piercer', icon: 'u-piercer', granted: true, cast: 'line',
-    castTime: 0.4, cooldown: 20, manaCost: 50, speed: 10, range: 25, width: 1, bonusMagic: [0, 50, 100, 150, 250], falloff: 0.1, slow: 70, slowTime: 1,
+    castTime: 0.4, cooldown: 20, manaCost: 50, speed: 35, range: 25, affectsFlying: true, width: 1, bonusMagic: [0, 50, 100, 150, 250], falloff: 0.1, slow: 70, slowTime: 1,
     ai: { whenAttacking: true },
     desc: 'Aim a piercing arrow in a line (25 range). Hits every enemy on its path for the Elf\'s attack damage + 0/50/100/150/250 magic and slows 70% for 1s. Each enemy hit weakens it by 10%. Costs 50 mana.' },
   nightMeld: { id: 'nightMeld', kind: 'passive', name: 'Night Meld', icon: 'a-nightmeld', stillFor: 2,
     desc: 'At night, standing still for 2s without attacking makes the Elf invisible. Moving or attacking breaks it.' },
   shieldStomp: { id: 'shieldStomp', kind: 'active', name: 'Shield Stomp', icon: 'u-stomp', granted: true,
-    castTime: 0.3, cooldown: 20, radius: 2, damage: [80, 120, 160, 200, 240], damageType: 'magic', knockback: 2.5,
+    castTime: 0.3, cooldown: 20, radius: 2, damage: [80, 120, 160, 200, 240], damageType: 'magic', knockback: 2.5, affectsFlying: false,
     ai: { whenAttacking: true },
     desc: 'Slams the shield down: 80/120/160/200/240 magic damage to enemies within 2 range and knocks them 2.5 away.' },
   bulwark: { id: 'bulwark', kind: 'passive', name: 'Bulwark', icon: 'a-bulwark', unbreakable: true, reduction: 0.3, arc: Math.PI * 2 / 3,

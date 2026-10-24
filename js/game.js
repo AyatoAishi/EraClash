@@ -358,7 +358,7 @@ export class Game {
     t.command({ type: 'charge' });
     const purple = 0xb070ff;
     t.ring.material = new THREE.MeshBasicMaterial({ color: purple, transparent: true, opacity: 0.9, depthWrite: false });
-    t.fill.material = new THREE.MeshBasicMaterial({ color: purple, depthWrite: false });
+    t.fill.material = new THREE.MeshBasicMaterial({ color: purple, depthWrite: false, depthTest: false });
     t.ring.visible = false;
     this.burst(t.pos, 16, [0x9a6ad8, 0xd8c8ff, 0x5a3aa0], 3, 0.8);
     if (this.audible(t.pos.x)) sfx('whiff', 40);
@@ -431,8 +431,8 @@ export class Game {
     if (this.audible(victim.pos.x)) sfx('whiff', 60);
   }
 
-  enemiesInRadius(src, r) {
-    return this.units.filter((o) => !o.dead && !o.tower && o.team !== src.team && Math.hypot(o.pos.x - src.pos.x, o.pos.z - src.pos.z) - o.radius <= r);
+  enemiesInRadius(src, r, A = null) {
+    return this.units.filter((o) => !o.dead && !o.tower && o.team !== src.team && !(o.flying && A?.affectsFlying === false) && Math.hypot(o.pos.x - src.pos.x, o.pos.z - src.pos.z) - o.radius <= r);
   }
 
   // ---------------- trails (Barding Rally) & line projectiles ----------------
@@ -463,7 +463,7 @@ export class Game {
       S.mesh.position.x = S.x; S.mesh.position.z = S.z;
       S.mesh.visible = S.team === this.playerTeam || this.seenByViewer(S);
       for (const o of this.units) {
-        if (o.dead || o.tower || o.team === S.team || S.hit.has(o)) continue;
+        if (o.dead || o.tower || o.team === S.team || S.hit.has(o) || (o.flying && !S.air)) continue;
         // distance from o to the swept segment
         const vx = o.pos.x - x0, vz = o.pos.z - z0, t = Math.max(0, Math.min(step, vx * S.dx + vz * S.dz));
         if (Math.hypot(o.pos.x - (x0 + S.dx * t), o.pos.z - (z0 + S.dz * t)) > S.width / 2 + o.radius) continue;
@@ -500,7 +500,7 @@ export class Game {
     }
     if (A.id === 'shieldStomp') {
       const L = Math.max(1, this.upLevel(u.statTeam, 'shieldStomp'));
-      const hits = this.enemiesInRadius(u, A.radius);
+      const hits = this.enemiesInRadius(u, A.radius, A);
       for (const t of hits) { u.damageDealt += t.takeDamage(A.damage[L - 1], u, A.damageType); t.knockback(u.pos, A.knockback); }
       this.burst(u.pos, 20, [0x9aa3ab, 0xcdd3da, 0x5a6470], 5, 0.6, 1.1);
       if (this.audible(u.pos.x)) sfx('baseHit', 120);
@@ -519,7 +519,7 @@ export class Game {
       mesh.position.set(u.pos.x, 1.3 + (u.pos.y || 0), u.pos.z); mesh.rotation.y = Math.atan2(dx, dz);
       this.scene.add(mesh);
       this.skillshots.push({ src: u, team: u.team, x: u.pos.x, z: u.pos.z, dx, dz, speed: A.speed, left: A.range, width: A.width,
-        phys: u.effDamage, magic: A.bonusMagic[L - 1], mult: 1, falloff: A.falloff, slow: A.slow, slowTime: A.slowTime, hit: new Set(), mesh });
+        phys: u.effDamage, magic: A.bonusMagic[L - 1], mult: 1, falloff: A.falloff, slow: A.slow, slowTime: A.slowTime, air: A.affectsFlying !== false, hit: new Set(), mesh });
       if (this.audible(u.pos.x)) sfx('bow', 40);
       return true;
     }
@@ -547,7 +547,7 @@ export class Game {
   splatterBlast(u, A) {
     const om = UPGRADES.organicMatter, lvl = this.upLevel(u.team, 'organicMatter');
     const dmg = A.damage + (lvl ? om.values.damage[lvl - 1] : 0);
-    const hits = this.enemiesInRadius(u, A.radius);
+    const hits = this.enemiesInRadius(u, A.radius, A);
     for (const t of hits) {
       const dealt = t.takeDamage(dmg, u, A.damageType);   // abilities can't be evaded
       u.damageDealt += dealt;
