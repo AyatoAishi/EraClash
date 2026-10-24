@@ -7,6 +7,10 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.12.3', date: '2026-10-24T13:28:00+08:00', title: 'Cleaner HUD',
+    sections: [ { title: 'UI', items: ['Removed the "Drag a box over your troops…" hint panel. The selection panel now only shows up when something is selected.'] } ],
+  },
+  {
     version: '0.12.2', date: '2026-10-24T13:19:00+08:00', title: 'Quick cast & aim lines',
     sections: [
       { title: 'New', items: [

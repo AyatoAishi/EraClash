@@ -578,3 +578,5 @@ small.passive { color: var(--gold) !important; }
 .update-banner { position: fixed; top: 6rem; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: .7rem; padding: .6rem .9rem; background: rgba(20, 24, 34, .97); }
 .update-banner b { color: var(--hp); font-family: var(--head); text-transform: uppercase; }
 .update-banner span { color: var(--muted); max-width: 26rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* v0.12.3: no hint panel — the selection panel only appears when something is selected (keeps its slot so the HUD doesn't jump) */
+#selpanel.empty { visibility: hidden; }
