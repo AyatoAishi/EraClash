@@ -5,7 +5,7 @@ import { Unit } from './unit.js';
 import { UPGRADES, STAT_BOOST, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
 import { ABILITIES, ITEMS } from './config.js';
 import { NEUTRAL_TEAM, CAMP_RULES, CAMPS, CREEP_GROUPS, dropChanceForTier, creepTierOf } from './neutrals.js';
-import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ } from './models.js';
+import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ, buildCannonball, buildShell } from './models.js';
 import { sfx } from './audio.js';
 import { SKILL_TREES, levelInfo, formDef } from './skilltree.js';
 import { Vision } from './vision.js';
@@ -52,6 +52,7 @@ export class Game {
       queuePaid: [],
       // Barracks (per match)
       upLevels: {},      // upgradeId -> level
+      structMods: {},    // buildingId -> { minRange, splash } from `structureMods` upgrade effects
       unitMods: {},      // unitId -> flat stat bonuses from stat upgrades
       costAdd: {},       // unitId -> extra hiring cost
       grants: {},        // unitId -> [abilityId] added by upgrades
@@ -87,6 +88,7 @@ export class Game {
     this.structures = [];
     this.detectors = [];   // true-sight sources (future Sentry Wards): { team, pos, radius, dead }
     this.trails = [];      // Barding Rally: { team, x, z, t, bonus, mesh }
+    this.shells = [];      // artillery shells in flight (Cannon / Howitzer): Game.fireShell / updateShells
     this.skillshots = [];  // line projectiles (Arrow Piercer)
     this.teams.forEach((T) => (T.autoLoot = false));
     // AI teams: difficulty head start + a personality for this match
@@ -126,7 +128,7 @@ export class Game {
   on(evt, fn) { (this.listeners[evt] ||= []).push(fn); }
   emit(evt, ...a) { (this.listeners[evt] || []).forEach((fn) => fn(...a)); }
 
-  pop(team) { return this.units.filter((u) => u.team === team && !u.dead && !u.tower && !u.raised).length + this.teams[team].queue.length; }
+  pop(team) { return this.units.filter((u) => u.team === team && !u.dead && !u.tower && !u.raised && !u.structure).length + this.teams[team].queue.length; }
   unitCost(team, unitId) { return Math.round((formDef(unitId, this.teams[team]?.forms[unitId]).cost * this.statMult(team, unitId) + (this.teams[team]?.costAdd[unitId] || 0)) * 100) / 100; }
   /** Stat boost multiplier for a troop type: 1 + 10% per level of every statBoost upgrade that targets it. */
   statMult(team, unitId) {
@@ -274,6 +276,9 @@ export class Game {
         T.income += e.perLevel;
       } else if (e.type === 'baseLevel') {
         this.raiseBase(team);
+      } else if (e.type === 'structureMods') {
+        const m = (T.structMods[e.unit] ||= {});
+        for (const [k, v] of Object.entries(e.perLevel)) m[k] = (m[k] || 0) + v;
       }
     }
     for (const u of this.units) if (!u.dead && u.team === team) { u.syncAbilities(); u.recalcStats(); }
@@ -544,6 +549,166 @@ export class Game {
   }
 
   audible(x) { return Math.abs(x - this.getViewX()) < 34; }
+
+  // ---------------- deployable buildings (Build menu) ----------------
+  /** Living buildings of a team (built or under construction). */
+  buildingsOf(team) { return this.units.filter((u) => u.structure && !u.dead && u.team === team); }
+  /**
+   * Can `team` put building `id` at (x, z)? Returns an error message, or null when the spot is fine.
+   * Rules (GAME.build): your own side of the river, on normal ground, within maxDist of your base front,
+   * clear of trees/props/buildings (footprint + clearance), and not inside the base.
+   */
+  canPlace(team, id, x, z) {
+    const def = UNITS[id], S = def?.structure, B = GAME.build, b = this.bases[team];
+    if (!S || !(FACTIONS[this.teams[team].faction].buildings || []).includes(id)) return 'Not available';
+    const fp = S.footprint, side = team === 0 ? -1 : 1;
+    if (Math.sign(x) !== side) return 'Build on your own side';
+    const fromBase = Math.abs(x - b.x);
+    if (fromBase < GAME.baseHalfX + fp + 1) return 'Too close to the base';
+    if (fromBase > GAME.baseHalfX + B.maxDist) return 'Too far from your base';
+    if (Math.abs(z) > GAME.mapHalfWidth - fp - 1) return 'Out of bounds';
+    const T = this.terrain;
+    if (T) {
+      if (T.level(x, z) !== 1) return 'Needs flat ground (not the river or hill)';
+      const r = fp + B.clearance;
+      for (let a = 0; a < 8; a++) if (T.blockedAt(x + Math.cos(a * Math.PI / 4) * r, z + Math.sin(a * Math.PI / 4) * r)) return 'Blocked';
+      if (T.blockedAt(x, z)) return 'Blocked';
+    }
+    for (const o of this.units) if (o.structure && !o.dead && Math.hypot(o.pos.x - x, o.pos.z - z) < fp + o.structure.footprint + B.clearance) return 'Too close to another building';
+    return null;
+  }
+  /** Player / AI order: pay and start constructing. Returns an error message or null. */
+  build(team, id, x, z) {
+    const T = this.teams[team], def = UNITS[id];
+    if (this.over) return 'Match is over';
+    if (this.buildingsOf(team).filter((u) => u.def.id === id).length >= GAME.build.maxPerSide) return `Max ${GAME.build.maxPerSide} ${def.name}s`;
+    const err = this.canPlace(team, id, x, z); if (err) return err;
+    if (T.gold < def.cost) return 'Not enough gold';
+    T.gold -= def.cost; T.stats.goldSpent += def.cost;
+    const u = this.placeStructure(team, id, x, z, false);
+    u.paid = def.cost;
+    this.emit('buildStart', u);
+    return null;
+  }
+  /** Put a building on the map (instant = already built: Dev Lab). Registers its footprint as an obstacle. */
+  placeStructure(team, id, x, z, instant = false) {
+    const u = new Unit(this, id, team), S = u.structure;
+    u.spawnAt(x, z);
+    u.groundPos?.();
+    u.order = { type: 'idle' };
+    u.obstacle = this.terrain ? this.terrain.addObstacle({ x, z, r: S.footprint, kind: 'structure' }) : null;
+    if (!instant) { u.buildT = 0; u.hp = u.maxHp * 0.1; u.rig.scaffold.visible = true; u.rig.yaw.scale.set(1, 0.2, 1); }
+    this.units.push(u);
+    this.scene.add(u.obj);
+    this.burst({ x, z }, 12, [0x9a7a4c, 0xd8c8a0, 0xffffff], 2.5, 0.8);
+    if (this.audible(x)) sfx('train');
+    return u;
+  }
+  onStructureBuilt(u) {
+    this.burst(u.pos, 14, [0xffffff, 0xf7c948], 3, 0.8);
+    this.emit('built', u);
+  }
+  /** Tear down your own building: refunds GAME.build.refund of what you paid. */
+  demolish(u) {
+    if (!u?.structure || u.dead) return false;
+    const refund = Math.round((u.paid ?? u.def.cost) * GAME.build.refund);
+    this.teams[u.team].gold += refund;
+    if (u.obstacle != null) { this.terrain?.removeObstacle(u.obstacle); u.obstacle = null; }
+    u.dead = true; u.dispose();
+    this.units.splice(this.units.indexOf(u), 1);
+    this.burst(u.pos, 16, [0x9a7a4c, 0x8d8f93, 0xd8c8a0], 3, 0.9);
+    this.emit('demolish', u, refund);
+    return true;
+  }
+  /**
+   * AI: after the opening it decides to save up for a building (aiSaving holds troop buys meanwhile, gives up
+   * after 150s), then puts it down behind its own front line. Never spends gold saved for an upgrade.
+   */
+  aiBuild(T) {
+    const ids = FACTIONS[T.faction].buildings || [];
+    if (!ids.length || this.time < 90) return;
+    if (!T.aiBuildGoal) {
+      const open = ids.filter((id) => this.buildingsOf(T.team).filter((u) => u.def.id === id).length < GAME.build.maxPerSide);
+      if (!open.length || Math.random() > 0.08) return;
+      T.aiBuildGoal = open[Math.floor(Math.random() * open.length)]; T.aiBuildT = 0;
+      return;
+    }
+    const id = T.aiBuildGoal, def = UNITS[id];
+    T.aiBuildT += this.diff.thinkEvery;
+    if (T.aiBuildT > 150) { T.aiBuildGoal = null; return; }
+    const saving = T.aiGoal ? upgradePrice(UPGRADES[T.aiGoal], this.pendingLevel(T.team, T.aiGoal)) : 0;
+    if (T.gold < def.cost + Math.min(saving, 100)) return;
+    const b = this.bases[T.team], dir = T.team === 0 ? 1 : -1;
+    for (let k = 0; k < 14; k++) {
+      const x = b.x + dir * (GAME.baseHalfX + def.structure.footprint + 3 + Math.random() * 14), z = (Math.random() - 0.5) * 22;
+      if (!this.canPlace(T.team, id, x, z)) { if (!this.build(T.team, id, x, z)) T.aiBuildGoal = null; return; }
+    }
+  }
+
+  // ---------------- artillery shells ----------------
+  /** Fire a shell from building `src` at `target`'s current spot (no leading: moving out of the way works). */
+  fireShell(src, target) {
+    const S = src.structure, howitzer = S.shell === 'howitzer';
+    const mesh = howitzer ? buildShell() : buildCannonball();
+    const start = new THREE.Vector3();
+    src.rig.muzzle.getWorldPosition(start);
+    const end = new THREE.Vector3(target.pos.x, (this.terrain?.heightAt(target.pos.x, target.pos.z) || 0) + 0.15, target.pos.z);
+    const dist = Math.hypot(end.x - start.x, end.z - start.z);
+    mesh.position.copy(start);
+    this.scene.add(mesh);
+    let marker = null;
+    if (howitzer) {   // landing warning: a red ring that tightens until impact
+      marker = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
+      marker.material.userData.noFow = true;
+      marker.rotation.x = -Math.PI / 2; marker.position.set(end.x, end.y + 0.05, end.z); marker.renderOrder = 3;
+      marker.scale.setScalar(src.splashRadius);
+      this.scene.add(marker);
+    }
+    this.shells.push({ mesh, marker, src, team: src.team, start, end, t: 0, T: S.flight, apex: dist * (howitzer ? 0.45 : 0.06),
+      dmg: src.rollDamage(), splash: src.splashRadius, kb: S.knockback || 0, groundOnly: S.groundOnly });
+    if (this.audible(src.pos.x)) sfx('snipe', 60);
+    this.burst(start, 6, [0xd8d8d8, 0x9a9a9a, 0xffb040], 2, 0.6, 1.2);   // muzzle smoke
+  }
+  updateShells(dt) {
+    const prev = new THREE.Vector3();
+    for (let i = this.shells.length - 1; i >= 0; i--) {
+      const p = this.shells[i];
+      p.t += dt;
+      const u = Math.min(1, p.t / p.T);
+      prev.copy(p.mesh.position);
+      p.mesh.position.lerpVectors(p.start, p.end, u);
+      p.mesh.position.y += p.apex * 4 * u * (1 - u);
+      if (prev.distanceToSquared(p.mesh.position) > 1e-6) p.mesh.lookAt(prev.lerp(p.mesh.position, 2));
+      p.mesh.visible = p.team === this.playerTeam || this.seenByViewer(p.mesh.position);
+      if (p.marker) {
+        p.marker.scale.setScalar(p.splash * (1.25 - 0.25 * u));
+        p.marker.material.opacity = 0.35 + 0.45 * u;
+        p.marker.visible = p.team === this.playerTeam || this.seenByViewer(p.end);
+      }
+      if (u < 1) continue;
+      this.explodeShell(p);
+      this.scene.remove(p.mesh);
+      if (p.marker) { this.scene.remove(p.marker); p.marker.geometry.dispose(); p.marker.material.dispose(); }
+      this.shells.splice(i, 1);
+    }
+  }
+  /** Splash: 100% damage at the center, 50% at the edge. Ground troops only (flying units are safe). Ignores evasion. */
+  explodeShell(p) {
+    const src = p.src, R = p.splash;
+    for (const o of this.units) {
+      if (o.dead || o.tower || o.team === p.team || (p.groundOnly && o.flying)) continue;
+      if (o.team === NEUTRAL_TEAM && o.aggroTeam !== p.team) continue;   // artillery leaves peaceful camps alone
+      const d = Math.max(0, Math.hypot(o.pos.x - p.end.x, o.pos.z - p.end.z) - o.radius);
+      if (d > R) continue;
+      const f = 1 - 0.5 * (d / R);
+      const dealt = o.takeDamage(p.dmg * f, src, 'physical', { ranged: true, splash: true });
+      if (src && !src.dead) src.damageDealt += dealt;
+      if (p.kb && !o.dead) o.knockback(p.end, p.kb * f);
+      if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
+    }
+    this.burst(p.end, 18, [0x5a4a3a, 0x8a7a6a, 0xffb040, 0x3a3a3a], 5, 0.9, 1.5);
+    if (this.audible(p.end.x)) sfx('baseHit', 90);
+  }
 
   // ---------------- combat callbacks ----------------
   // ---------------- projectiles ----------------
@@ -896,6 +1061,8 @@ export class Game {
   }
   /** True while the AI is saving for an upgrade and buying this troop would break the plan. */
   aiSaving(T, unitCost) {
+    // saving up for a building (aiBuild): hold troop purchases unless the base is threatened
+    if (T.aiBuildGoal && !this.units.some((u) => u.team !== T.team && !u.dead && Math.abs(u.pos.x - this.bases[T.team].x) < 25) && T.gold - unitCost < UNITS[T.aiBuildGoal].cost) return true;
     if (!T.aiGoal) return false;
     const U = UPGRADES[T.aiGoal];
     const threat = this.units.some((u) => u.team !== T.team && !u.dead && Math.abs(u.pos.x - this.bases[T.team].x) < 25);
@@ -956,6 +1123,7 @@ export class Game {
     if (!T.aiNext && Math.random() < P.sloppy * 0.15) T.aiNext = roster[Math.floor(Math.random() * roster.length)].id;
     T.aiNext ||= (ranged && nM >= 2 && nR < (nM + nR) * rangedShare ? ranged : melee).id;
     this.aiResearch(T, this.diff.thinkEvery);
+    this.aiBuild(T);
     for (const id of FACTIONS[T.faction].units) {   // evolutions are free: take one as soon as it unlocks
       const opts = Object.keys(SKILL_TREES[id] || {}).filter((f) => !this.formBlock(T.team, id, f));
       if (opts.length) this.pickForm(T.team, id, opts[Math.floor(Math.random() * opts.length)]);
@@ -1244,6 +1412,7 @@ export class Game {
 
     this.updateProjectiles(dt);
     this.updateSkillshots(dt);
+    this.updateShells(dt);
     this.updateTrails(dt);
     this.updateChains(dt);
     this.updateTethers(dt);
@@ -1283,6 +1452,7 @@ export class Game {
     this.loot.forEach((L) => this.scene.remove(L.mesh)); this.loot = [];
     this.markers.forEach((k) => this.scene.remove(k.m));
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
+    this.shells.forEach((p) => { this.scene.remove(p.mesh); if (p.marker) this.scene.remove(p.marker); }); this.shells = [];
     (this.tethers || []).forEach((T) => this.scene.remove(T.g)); this.tethers = []; this.chains = [];
     this.units = []; this.particles = []; this.markers = []; this.projectiles = [];
     this.bases.forEach((b, t) => {

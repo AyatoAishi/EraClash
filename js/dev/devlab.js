@@ -43,7 +43,7 @@ const fmt = (n) => (Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) :
 // ---------- what the viewer can show ----------
 const roster = new Set(Object.values(FACTIONS).flatMap((f) => f.units));
 const creeps = new Set(Object.values(CREEP_GROUPS).flat().flatMap((g) => g.units));
-function unitGroup(id) { return roster.has(id) ? 'Troops' : creeps.has(id) ? 'Creeps' : 'Other units'; }
+function unitGroup(id) { return UNITS[id]?.structure ? 'Buildings' : roster.has(id) ? 'Troops' : creeps.has(id) ? 'Creeps' : 'Other units'; }
 // theme: 'medieval' | 'modern' | 'any' (drives the viewer's All / Medieval / Modern filter; 'any' shows under both)
 function buildCatalog() {
   const list = [
@@ -438,7 +438,7 @@ export class DevLab {
       const u = g.units[i];
       if (u.tower && u.team === team) { u.dispose(); g.units.splice(i, 1); }
     }
-    T.upLevels = {}; T.unitMods = {}; T.costAdd = {}; T.grants = {}; T.towers = 0; T.income = 0;
+    T.upLevels = {}; T.unitMods = {}; T.costAdd = {}; T.grants = {}; T.structMods = {}; T.towers = 0; T.income = 0;
     const b = g.bases[team]; b.bonusHp = 0;
     g.setBaseLevel(team, GAME.baseLevel); g.swapBaseModel(team, GAME.baseLevel);
     b.maxHp = b.hp = baseLevelStats(b.level).hp;
@@ -461,6 +461,10 @@ export class DevLab {
   spawnAt(id, x, z) {
     const g = this.game, A = this.arena; if (!g) return;
     const team = A.team;
+    if (UNITS[id].structure) {   // buildings: one, already built, footprint registered (team 2 can't own one)
+      if (team !== NEUTRAL_TEAM) g.placeStructure(team, id, x, z, true);
+      return;
+    }
     for (let k = 0; k < A.count; k++) {
       const a = (k / A.count) * Math.PI * 2, r = A.count > 1 ? 0.8 + 0.25 * A.count : 0;
       const u = new Unit(g, id, team);
@@ -503,7 +507,8 @@ export class DevLab {
     const A = this.arena;
     // LEFT: spawn + upgrades
     const groups = { Medieval: FACTIONS.medieval.units, Modern: FACTIONS.modern.units,
-      Creeps: [...creeps], Other: Object.keys(UNITS).filter((id) => !roster.has(id) && !creeps.has(id)) };
+      Buildings: Object.keys(UNITS).filter((id) => UNITS[id].structure),
+      Creeps: [...creeps], Other: Object.keys(UNITS).filter((id) => !roster.has(id) && !creeps.has(id) && !UNITS[id].structure) };
     this.spawnEl = h('div', {},
       h('div', { class: 'dl-sec' }, 'Spawn'),
       h('div', { class: 'dl-row' }, TEAM_NAMES.map((n, t) => h('button', { class: 'dl-b team' + t + (A.team === t ? ' on' : ''), onclick: () => { A.team = t; this.renderArenaPanels(); } }, n.split(' ')[0]))),

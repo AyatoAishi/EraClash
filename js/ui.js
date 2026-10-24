@@ -146,6 +146,8 @@ export class UI {
     });
     $('#shop-close').addEventListener('click', () => this.toggleShop(false));
     $('#btn-barracks').addEventListener('click', () => this.toggleBarracks());
+    $('#btn-build').addEventListener('click', () => this.toggleBuild());
+    $('#build-close').addEventListener('click', () => this.toggleBuild(false));
     $('#barracks-close').addEventListener('click', () => this.toggleBarracks(false));
     $('#btn-skills').addEventListener('click', () => this.toggleSkills());
     $('#skills-close').addEventListener('click', () => this.toggleSkills(false));
@@ -546,11 +548,12 @@ export class UI {
       <button class="frame" data-cmd="attack">Attack<kbd data-keyof="attackMove">${keyLabel(k.attackMove)}</kbd></button>
       <button class="frame" data-cmd="stop">Stop<kbd data-keyof="stop">${keyLabel(k.stop)}</kbd></button>
       <button class="frame" data-cmd="charge">Charge<kbd data-keyof="charge">${keyLabel(k.charge)}</kbd></button>
-      <button class="frame" data-cmd="all">Army<kbd data-keyof="selectAll">${keyLabel(k.selectAll)}</kbd></button>`;
+      <button class="frame" data-cmd="all">Army<kbd data-keyof="selectAll">${keyLabel(k.selectAll)}</kbd></button>
+      <button class="frame" data-cmd="demolish" hidden title="Tear down the selected building (50% refund)">Demolish<kbd>Del</kbd></button>`;
     $$('#cmds button').forEach((b) => b.onclick = () => {
       sfx('click');
       const c = this.app.controls;
-      ({ attack: () => c.setArmed(true), stop: () => c.stop(), charge: () => c.charge(), all: () => c.selectAll() })[b.dataset.cmd]();
+      ({ attack: () => c.setArmed(true), stop: () => c.stop(), charge: () => c.charge(), all: () => c.selectAll(), demolish: () => c.demolishSelected() })[b.dataset.cmd]();
     });
     this.lastQueueKey = '#';
   }
@@ -781,6 +784,41 @@ export class UI {
   // ======================= BARRACKS =======================
   upgradeName(id) { return UPGRADES[id]?.name || id; }
   barracksOpen() { return $('#barracks').classList.contains('open'); }
+  buildOpen() { return $('#build').classList.contains('open'); }
+  /** Build menu: one card per faction building; clicking one starts placement (Controls.startBuild). */
+  toggleBuild(force) {
+    const el = $('#build');
+    const open = force ?? !el.classList.contains('open');
+    if (open === el.classList.contains('open')) return;
+    if (open) { this.toggleShop(false); this.toggleBarracks(false); this.toggleSkills(false); }
+    el.classList.toggle('open', open);
+    $('#btn-build').classList.toggle('on', open);
+    sfx(open ? 'shop' : 'click');
+    if (open) this.renderBuild();
+  }
+  renderBuild() {
+    const g = this.app.game, team = this.app.playerTeam; if (!g || team === null) return;
+    const T = g.teams[team], ids = FACTIONS[T.faction].buildings || [];
+    $('#build-items').innerHTML = ids.map((id) => {
+      const d = UNITS[id], S = d.structure, have = g.buildingsOf(team).filter((u) => u.def.id === id).length;
+      const off = have >= GAME.build.maxPerSide || T.gold < d.cost;
+      return `<button class="bcard frame${off ? ' off' : ''}" data-build="${id}">
+        <img src="${PORTRAITS[id]?.full || ''}" alt="">
+        <div><h4>${d.name} <small>${have}/${GAME.build.maxPerSide}</small></h4>
+          <div class="bcost"><svg class="ico"><use href="#i-coin"/></svg>${d.cost} · ${S.buildTime}s to build</div>
+          <div class="bstats">${d.hp} HP · ${d.armor} armor · ${d.damage} splash dmg (r ${S.splash})<br>range ${S.minRange}–${d.range} · every ${fmt(60 / d.attackSpeed)}s · ground only</div></div>
+      </button>`;
+    }).join('') || '<div class="more">Nothing to build.</div>';
+    $$('#build-items .bcard').forEach((b) => (b.onclick = () => {
+      const id = b.dataset.build;
+      const d = UNITS[id];
+      if (g.buildingsOf(team).filter((u) => u.def.id === id).length >= GAME.build.maxPerSide) { this.toast(`Max ${GAME.build.maxPerSide} ${d.name}s`, 'err'); sfx('error', 150); return; }
+      if (T.gold < d.cost) { this.toast('Not enough gold', 'err'); sfx('error', 150); return; }
+      sfx('click');
+      this.toggleBuild(false);
+      this.app.controls.startBuild(id);
+    }));
+  }
   toggleBarracks(force) {
     const el = $('#barracks');
     const open = force ?? !el.classList.contains('open');
@@ -950,6 +988,8 @@ export class UI {
     const g = this.app.game;
     if (!g || this.app.playerTeam === null) return;
     const T = g.teams[this.app.playerTeam];
+    const demo = $('#cmds [data-cmd="demolish"]');   // Demolish shows only while one of your buildings is selected
+    if (demo) demo.hidden = !this.app.controls.selection.some((u) => u.structure && u.team === this.app.playerTeam);
     $('#gold').textContent = Math.floor(T.gold);
     $('#income').textContent = `+${T.income}/s`;
     $('#clock').textContent = fmtTime(g.time);
@@ -1081,7 +1121,7 @@ export class UI {
     $('#sp-hptext').textContent = `${Math.ceil(p.hp)} / ${Math.round(p.maxHp)}`;
     $('#sp-mana').style.display = p.maxMana ? '' : 'none';
     if (p.maxMana) { $('#sp-manafill').style.width = (p.mana / p.maxMana * 100) + '%'; $('#sp-manatext').textContent = `${Math.floor(p.mana)} / ${p.maxMana}`; }
-    $('#sp-order').textContent = `${FAMILIES[p.family].name} · ` + (p.invulnerable ? `SHIELDED ${p.invulnT.toFixed(1)}s · ` : '') + (p.disarmed ? `DISARMED ${p.disarmT.toFixed(1)}s · ` : '') + (p.broken ? `BROKEN ${p.breakT.toFixed(1)}s · ` : '') + (p.invisible ? 'INVISIBLE · ' : '') + (p.flying ? 'FLYING · ' : '') + (p.casting ? 'CASTING · ' : '') + (p.brainwashed ? `BRAINWASHED ${p.brainwashed.t.toFixed(1)}s · ` : '') + (p.sleeping ? 'SLEEPING · ' : '') + (p.stance === 'prone' ? 'PRONE · ' : p.stance === 'channel' ? 'SETTING UP · ' : p.stance === 'standup' ? 'STANDING UP · ' : '') + (single ? ORDER_LABEL[p.order.type] : `${sel.length} units · ${ORDER_LABEL[p.order.type]}`);
+    $('#sp-order').textContent = `${FAMILIES[p.family].name} · ` + (p.invulnerable ? `SHIELDED ${p.invulnT.toFixed(1)}s · ` : '') + (p.disarmed ? `DISARMED ${p.disarmT.toFixed(1)}s · ` : '') + (p.broken ? `BROKEN ${p.breakT.toFixed(1)}s · ` : '') + (p.invisible ? 'INVISIBLE · ' : '') + (p.flying ? 'FLYING · ' : '') + (p.structure && !p.built ? `BUILDING ${Math.floor(p.buildT / p.structure.buildTime * 100)}% · ` : '') + (p.casting ? 'CASTING · ' : '') + (p.brainwashed ? `BRAINWASHED ${p.brainwashed.t.toFixed(1)}s · ` : '') + (p.sleeping ? 'SLEEPING · ' : '') + (p.stance === 'prone' ? 'PRONE · ' : p.stance === 'channel' ? 'SETTING UP · ' : p.stance === 'standup' ? 'STANDING UP · ' : '') + (single ? ORDER_LABEL[p.order.type] : `${sel.length} units · ${ORDER_LABEL[p.order.type]}`);
     const s = p.stats, bn = p.bonus;
     const stat = (label, val, bonus) => `<div><span>${label}</span><b>${fmt(val)}</b>${bonus ? `<em>+${fmt(bonus)}</em>` : ''}</div>`;
     $('#sp-stats').innerHTML =

@@ -63,6 +63,9 @@ export class Unit {
     this.invisible = false; this._lookInvis = false;
     this.syncAbilities();
     this.invulnT = GAME.spawnInvuln;   // spawn protection
+    // deployable building (Cannon / Howitzer): never moves, no spawn shield; Game.placeStructure sets buildT / obstacle
+    this.structure = this.def.structure || null;
+    if (this.structure) { this.invulnT = 0; this.buildT = this.structure.buildTime; this.recoilT = 0; }
     this.lastCrit = false;
     this.pos = new THREE.Vector3();
     this.facing = team === 0 ? Math.PI / 2 : -Math.PI / 2;
@@ -118,6 +121,7 @@ export class Unit {
     this.obj.add(this.shield);
     this.shieldPing = 0;
     if (isNeutral) { this.zzz = buildZzz(); this.zzz.visible = false; this.obj.add(this.zzz); }
+    if (this.structure) { this.shield.visible = false; this.baseFacing = this.facing; }
   }
 
   // ---------------- stats & inventory ----------------
@@ -171,12 +175,12 @@ export class Unit {
   upLevel(id) { return this.game.upLevel && this.statTeam !== NEUTRAL_TEAM ? this.game.upLevel(this.statTeam, id) : 0; }
   /** Movement slow (strongest wins). Invulnerable/tower troops ignore crowd control. */
   addSlow(pct, t) {
-    if (this.invulnerable || this.tower || this.dead) return;
+    if (this.invulnerable || this.tower || this.structure || this.dead) return;
     this.slows.push({ pct, t });
   }
   /** Push away from a point (crowd control: ignored by invulnerable/tower/prone-immobile? no — prone gets pushed too). */
   knockback(from, dist) {
-    if (this.invulnerable || this.tower || this.dead) return;
+    if (this.invulnerable || this.tower || this.structure || this.dead) return;
     const dx = this.pos.x - from.x, dz = this.pos.z - from.z, d = Math.hypot(dx, dz) || 1;
     this.kb = { x: dx / d * dist, z: dz / d * dist, t: 0.15 };
   }
@@ -301,6 +305,7 @@ export class Unit {
 
   die(source) {
     this.dead = true;
+    if (this.obstacle != null) { this.game.terrain?.removeObstacle(this.obstacle); this.obstacle = null; }
     this.deathT = 0;
     this.ring.visible = false; this.bar.visible = false; this.shield.visible = false;
     if (source && source.kills !== undefined) source.kills++;
@@ -673,6 +678,7 @@ export class Unit {
     if (this.dead) return this.updateDeath(dt);
     const g = this.game, s = this.stats;
     if (this.tower) return this.updateTower(dt, camQuat);
+    if (this.structure) return this.updateStructure(dt, camQuat);
     if (this.team === NEUTRAL_TEAM) return this.updateNeutral(dt, camQuat);
     this.atkCd -= dt;
     if (this.kb) { const f = Math.min(1, dt / this.kb.t); this.pos.x += this.kb.x * f; this.pos.z += this.kb.z * f; this.kb.x *= 1 - f; this.kb.z *= 1 - f; this.kb.t -= dt; if (this.kb.t <= 0) this.kb = null; }
@@ -903,6 +909,77 @@ export class Unit {
     return false;
   }
 
+  // ---------------- deployable buildings (artillery) ----------------
+  get built() { return !this.structure || this.buildT >= this.structure.buildTime; }
+  /** Barracks tweaks for this building type (minRange / splash), from `structureMods` upgrade effects. */
+  get structMods() { return this.game.teams?.[this.team]?.structMods?.[this.def.id] || {}; }
+  get minRange() { return Math.max(0, (this.structure?.minRange || 0) + (this.structMods.minRange || 0)); }
+  get splashRadius() { return (this.structure?.splash || 0) + (this.structMods.splash || 0); }
+  /** Can this building fire at `o` right now (alive, visible, not flying, between min and max range)? */
+  canShell(o) {
+    if (!o || o.dead || o.tower || o.team === this.team) return false;
+    if (o.team === NEUTRAL_TEAM && o.aggroTeam !== this.team) return false;
+    if (this.structure.groundOnly && o.flying) return false;
+    if (!this.game.canSee(this.team, o)) return false;
+    const d = this.edgeDist(o);
+    return d >= this.minRange && d <= this.effRange;
+  }
+  /** Artillery picks the target whose splash would hit the most enemies (ties: the closest). */
+  pickShellTarget() {
+    const g = this.game, r = this.splashRadius;
+    let best = null, bs = -1;
+    for (const o of g.units) {
+      if (!this.canShell(o)) continue;
+      let n = 0;
+      for (const e of g.units) if (!e.dead && e.team === o.team && !e.tower && !(this.structure.groundOnly && e.flying) && Math.hypot(e.pos.x - o.pos.x, e.pos.z - o.pos.z) <= r) n++;
+      const score = n * 100 - this.edgeDist(o);
+      if (score > bs) { bs = score; best = o; }
+    }
+    return best;
+  }
+  /** Building brain: construction, then turn to the target, elevate, fire a shell (Game.fireShell), recoil. */
+  updateStructure(dt, camQuat) {
+    const g = this.game, S = this.structure, r = this.rig;
+    if (this.flash > 0) { this.flash = Math.max(0, this.flash - dt * 6); const f = this.flash * 0.45; for (const m of r.matList) m.emissive.setRGB(f, f * 0.9, f * 0.9); }
+    if (!this.built) {
+      this.buildT += dt;
+      const f = Math.min(1, this.buildT / S.buildTime);
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.9 * dt / S.buildTime);   // 10% -> 100% while building
+      r.scaffold.visible = true;
+      r.yaw.scale.set(1, 0.2 + 0.8 * f, 1);
+      if (this.built) { r.scaffold.visible = false; r.yaw.scale.set(1, 1, 1); g.onStructureBuilt(this); }
+    } else {
+      this.atkCd -= dt; this.retarget -= dt;
+      const o = this.order;
+      let tg = null;
+      if (o.type === 'attack') { if (this.canShell(o.target)) tg = o.target; else if (!o.target || o.target.dead) this.order = { type: 'idle' }; }
+      if (!tg) {
+        if (this.retarget <= 0) { this.retarget = 0.3; if (!this.canShell(this.target)) this.target = this.pickShellTarget(); }
+        tg = this.canShell(this.target) ? this.target : null;
+      }
+      if (tg) {
+        const want = Math.atan2(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z);
+        let da = want - this.facing; da = Math.atan2(Math.sin(da), Math.cos(da));
+        this.facing += Math.sign(da) * Math.min(Math.abs(da), dt * 2.4);   // heavy guns turn slowly
+        const frac = Math.min(1, Math.max(0, this.edgeDist(tg) / Math.max(1, this.effRange)));
+        r.barrel.rotation.x += (r.rest - frac * (S.shell === 'howitzer' ? 0.5 : 0.3) - r.barrel.rotation.x) * Math.min(1, dt * 4);
+        if (Math.abs(da) < 0.08 && this.atkCd <= 0 && !this.disarmed) {
+          this.atkCd = Math.max(this.atkCd, -0.1) + attackInterval(this.effAttackSpeed);
+          g.fireShell(this, tg);
+          this.recoilT = 1; this.muzzleT = 0.1;
+        }
+      } else r.barrel.rotation.x += (r.rest - r.barrel.rotation.x) * Math.min(1, dt * 2);
+    }
+    this.animate(dt, 0);   // recoil + muzzle flash
+    // emplacement stays put, the gun turns: obj follows `facing` (so the HP bar math matches troops), body counter-rotates
+    r.body.rotation.y = this.baseFacing - this.facing;
+    r.yaw.rotation.y = this.facing - this.baseFacing;
+    this.obj.position.copy(this.pos);
+    this.obj.rotation.y = this.facing;
+    this.updateBar(camQuat);
+    return false;
+  }
+
   /** Wall/roof troops: stand still, shoot anything in (extended) range, never take damage. */
   updateTower(dt, camQuat) {
     const g = this.game;
@@ -993,6 +1070,13 @@ export class Unit {
 
   animate(dt, spd) {
     const r = this.rig;
+    if (this.structure) {   // buildings: barrel recoil + muzzle flash (a swing from the Dev Lab viewer counts as a shot)
+      if (this.swing > 0) { this.swing = 0; this.recoilT = 1; this.muzzleT = 0.1; }
+      this.recoilT = Math.max(0, this.recoilT - dt * 2.5);
+      r.recoil.position.z = -0.45 * Math.sin(Math.min(1, this.recoilT) * Math.PI / 2);
+      this.muzzleT -= dt; r.muzzle.visible = this.muzzleT > 0;
+      return;
+    }
     this.aimT -= dt;
     const lerp = THREE.MathUtils.lerp;
     if (this.moving) {
@@ -1122,6 +1206,7 @@ export class Unit {
     this.deathT += dt;
     const r = this.rig;
     const t = Math.min(1, this.deathT / 0.45);
+    if (this.structure) { r.root.rotation.z = t * 0.25; this.obj.position.y = -this.deathT * 0.8; return this.deathT > 2.8; }
     r.root.rotation.x = -t * Math.PI / 2 * 0.98;
     r.root.position.y = t * 0.25;
     if (this.deathT > 1.2) this.obj.position.y = -(this.deathT - 1.2) * 0.9;

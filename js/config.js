@@ -11,6 +11,9 @@ export const GAME = {
   baseLevel: 1,          // castle / HQ level every match starts at (stats: BASE_LEVELS); Fortify / Expand HQ raise it
   repair: { heal: 10, drain: 5, healPerLevel: 6, drainPerLevel: 3 },   // base repair toggle
   popCap: 40,
+  // deployable buildings (Build menu): per side at once, placement within maxDist of your base on your own side,
+  // `clearance` = free space needed around the footprint, demolish refund
+  build: { maxPerSide: 2, maxDist: 30, clearance: 0.6, refund: 0.5 },
   queueMax: 5,
   laneHalfLen: 60,       // bases sit at +/- 58
   laneHalfWidth: 14,     // the lane itself
@@ -54,6 +57,7 @@ export const FACTIONS = {
     emblem: 'em-medieval',                // pixel symbol id in index.html
     color: '#d9a441',
     units: ['viking', 'archer', 'imp', 'lancer', 'elf'],   // shop order = default buy key order (1, 2, 3...)
+    buildings: ['cannon'],                                  // Build menu (deployable structures, UNITS entries with `structure`)
   },
   modern: {
     id: 'modern',
@@ -64,6 +68,7 @@ export const FACTIONS = {
     emblem: 'em-modern',
     color: '#4aa3ff',
     units: ['police', 'gunner', 'sniper', 'riotSkirmisher', 'reconDrone'],
+    buildings: ['howitzer'],
   },
 };
 
@@ -99,6 +104,7 @@ export const DAMAGE_TYPES = {
 export const FAMILIES = {
   melee:    { id: 'melee',    name: 'Melee',    icon: 'i-sword', desc: 'Front-line fighters that must reach their target.' },
   marksman: { id: 'marksman', name: 'Marksman', icon: 'i-bow',   desc: 'Ranged attackers that shoot from behind the front line.' },
+  siege:    { id: 'siege',    name: 'Siege',    icon: 'i-siege', desc: 'Buildings from the Build menu: long-range splash, cannot move, cannot hit flying units or anything too close.' },
 };
 
 /*
@@ -174,6 +180,34 @@ export const UNITS = {
     lore: 'Ghillie hood, long rifle, zero patience for close quarters. Lies down, waits, and deletes whatever wanders into the crosshair.',
   },
 };
+
+// ---------- deployable buildings (Build menu) ----------
+// A building is a unit that never moves: same stat sheet, plus `structure`:
+//   buildTime (s, under construction it can't fire and its HP fills up), footprint (obstacle radius),
+//   minRange (can't hit anything closer), splash (radius; 100% at the center -> 50% at the edge),
+//   shell: 'cannon' (low, fast) | 'howitzer' (high arc, landing marker), flight (s), knockback (units), groundOnly.
+Object.assign(UNITS, {
+  cannon: {
+    id: 'cannon', name: 'Cannon', theme: 'medieval', family: 'siege', role: 'Artillery (building)', type: 'ranged',
+    cost: 250, trainTime: 0,
+    hp: 600, hpRegen: 0, damage: 45, damageType: 'physical', attackSpeed: 15,
+    armor: 4, ward: 0, evasion: 0, missChance: 0,
+    moveSpeed: 0, range: 16, vision: [20, 12], aggro: 16, radius: 1.6,
+    structure: { buildTime: 20, footprint: 1.6, minRange: 4, splash: 2.5, shell: 'cannon', flight: 0.55, knockback: 0.8, groundOnly: true },
+    abilities: [],
+    lore: 'Two wheels, one iron barrel and a pile of round shot behind a low stone wall. Turns a packed front line into loose change.',
+  },
+  howitzer: {
+    id: 'howitzer', name: 'Howitzer', theme: 'modern', family: 'siege', role: 'Artillery (building)', type: 'ranged',
+    cost: 300, trainTime: 0,
+    hp: 500, hpRegen: 0, damage: 60, damageType: 'physical', attackSpeed: 10,
+    armor: 3, ward: 0, evasion: 0, missChance: 0,
+    moveSpeed: 0, range: 22, vision: [20, 12], aggro: 22, radius: 1.9,
+    structure: { buildTime: 25, footprint: 1.9, minRange: 6, splash: 3.5, shell: 'howitzer', flight: 1.6, knockback: 0, groundOnly: true },
+    abilities: [],
+    lore: 'Sandbagged field gun on split trails. Lobs a shell high over the lane; a red ring on the ground is the only warning.',
+  },
+});
 
 // ---------- v0.11.0 troops ----------
 Object.assign(UNITS, {

@@ -71,6 +71,9 @@ app.controls = new Controls(() => renderer.domElement, camera, {
   },
   toggleShop: () => app.state === 'playing' && app.ui.toggleShop(),
   toggleBarracks: () => app.state === 'playing' && app.ui.toggleBarracks(),
+  toggleBuild: () => app.state === 'playing' && app.ui.toggleBuild(),
+  placeBuilding: (id, x, z) => (app.state === 'playing' ? app.game.build(app.playerTeam, id, x, z) : 'Not now'),
+  demolish: (u) => { if (app.state === 'playing' && u.team === app.playerTeam && app.game.demolish(u)) sfx('coin', 80); },
   toggleSkills: () => app.state === 'playing' && app.ui.toggleSkills(),
   toggleRepair: () => app.state === 'playing' && app.ui.toggleRepair(),
   toggleAutoLoot: () => app.state === 'playing' && app.ui.toggleAutoLoot(),
@@ -131,6 +134,8 @@ app.startMatch = (faction, difficulty) => {
     document.body.classList.remove('hurt'); void document.body.offsetWidth; document.body.classList.add('hurt');
   });
   g.on('repair', (team, on, why) => { if (team === app.playerTeam && why === 'gold') app.ui.toast('Repair stopped: out of gold', 'err'); });
+  g.on('built', (u) => { if (u.team === app.playerTeam) { app.ui.toast(`${u.def.name} ready`); sfx('train'); } });
+  g.on('demolish', (u, refund) => { if (u.team === app.playerTeam) app.ui.toast(`${u.def.name} demolished (+${refund}g)`); });
   g.on('upgrade', (team, id, lvl) => { if (team === app.playerTeam) { app.ui.toast(`Upgrade complete: ${app.ui.upgradeName(id)} Lv ${lvl}`); sfx('train'); } });
   g.on('pickup', (u, id) => { if (u.team === app.playerTeam) { app.ui.floatText(u.pos, CFG.ITEMS[id].name, 'gold'); sfx('coin', 80); app.ui.refreshSelection(true); } });
   g.on('invFull', () => app.ui.toast('Inventory full', 'err'));
@@ -216,6 +221,8 @@ app.handleEscape = () => {
   if (app.state === 'playing') {
     if (app.chat?.isOpen) app.chat.close();
     else if (app.controls.cancelTargeting()) { /* aiming cancelled */ }
+    else if (app.controls.cancelBuild()) { /* placement cancelled */ }
+    else if (app.ui.buildOpen()) app.ui.toggleBuild(false);
     else if (app.controls.armed) app.controls.setArmed(false);
     else if (app.ui.shopOpen()) app.ui.toggleShop(false);   // Esc closes the shop before it pauses
     else if (app.ui.barracksOpen()) app.ui.toggleBarracks(false);

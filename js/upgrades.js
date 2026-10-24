@@ -231,6 +231,24 @@ export const UPGRADES = {
     levelText: (l) => `${l} rooftop gunner${l > 1 ? 's' : ''}`,
   },
 
+  // ===================== BUILDINGS (Build menu artillery) =====================
+  grapeshot: {
+    id: 'grapeshot', faction: 'medieval', category: 'troop', unit: 'cannon', icon: 'u-grapeshot',
+    name: 'Grapeshot', max: 3,
+    price: [150, 250, 400], time: [15, 20, 25],
+    effects: [{ type: 'structureMods', unit: 'cannon', perLevel: { splash: 0.5 } }],
+    desc: 'Cannons load a bag of iron balls: <b>+0.5 splash radius</b> per level.',
+    levelText: (l) => `Splash radius ${2.5 + 0.5 * l}`,
+  },
+  ballisticComputer: {
+    id: 'ballisticComputer', faction: 'modern', category: 'troop', unit: 'howitzer', icon: 'u-ballistic',
+    name: 'Ballistic Computer', max: 3,
+    price: [150, 250, 400], time: [15, 20, 25],
+    effects: [{ type: 'unitStats', unit: 'howitzer', perLevel: { range: 2 } }, { type: 'structureMods', unit: 'howitzer', perLevel: { minRange: -1.5 } }],
+    desc: 'Howitzers get a fire-control computer: <b>+2 range</b> and <b>-1.5 minimum range</b> per level.',
+    levelText: (l) => `Range ${22 + 2 * l}, min range ${6 - 1.5 * l}`,
+  },
+
   // ===================== SHARED (both factions) =====================
   repairCrews: {
     id: 'repairCrews', faction: 'both', category: 'base', icon: 'u-repair',
@@ -281,7 +299,7 @@ export const upgradeTime = (U, lvl) => pick(U.time, lvl);
  */
 export const upgradesFor = (factionId) => {
   const base = (u) => u.category === 'base' && (u.faction === factionId || u.faction === 'both');
-  const units = new Set(FACTIONS[factionId]?.units || []);
+  const units = new Set([...(FACTIONS[factionId]?.units || []), ...(FACTIONS[factionId]?.buildings || [])]);   // buildings get troop-style upgrades too
   for (const U of Object.values(UPGRADES)) if (base(U)) for (const e of U.effects || []) if (e.type === 'towers') units.add(e.unit);
   return Object.values(UPGRADES).filter((U) => base(U) || (U.category === 'troop' && units.has(U.unit)));
 };

@@ -1,6 +1,7 @@
 // Dota-style camera + RTS input: box select, right-click move/attack, A-click attack, S stop.
 import * as THREE from 'three';
-import { GAME } from './config.js';
+import { GAME, UNITS } from './config.js';
+import { UNIT_BUILDERS } from './models.js';
 import { settings } from './settings.js';
 import { sfx } from './audio.js';
 
@@ -31,6 +32,7 @@ export class Controls {
   }
 
   setGame(game, team) {
+    this.cancelBuild?.();
     this.game = game; this.team = team; this.selection = []; this.groups = {}; this.armed = false; this.selectedBase = null;
     for (const m of [this.rangeMesh, this.hoverRing, this.baseRing, this.aimMesh]) if (m) game.scene.add(m);   // the Dev Lab arena has its own scene
     this.hooks.onSelectionChange?.();
@@ -69,6 +71,7 @@ export class Controls {
       this.clampTarget();
     }
     this.apply();
+    this.updateBuildGhost();
     this.updateRange(dt);
     this.updateHover();
     this.updateAiming();
@@ -342,6 +345,67 @@ export class Controls {
     for (const u of this.own()) { const k = u.abil.findIndex((x) => x.def.id === T.abil); if (u.def.id === T.type && k >= 0 && u.castAbility(k, { x: p.x, z: p.z })) n++; }
     if (n) sfx('attack');
   }
+  // ---------------- Build menu placement ----------------
+  /** Start placing building `id`: a see-through copy follows the cursor with its range rings (green = OK, red = not). */
+  startBuild(id) {
+    this.cancelBuild();
+    this.setArmed(false); this.cancelTargeting();
+    const def = UNITS[id], S = def.structure, rig = UNIT_BUILDERS[id]();
+    rig.root.scale.setScalar(1.25);
+    rig.root.rotation.y = this.team === 0 ? Math.PI / 2 : -Math.PI / 2;
+    for (const m of rig.matList) { m.transparent = true; m.opacity = 0.55; m.depthWrite = false; }
+    const ghost = new THREE.Group(); ghost.add(rig.root);
+    const ring = (r, color, w = 0.12) => {
+      const m = new THREE.Mesh(new THREE.RingGeometry(Math.max(0.01, r - w), r, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
+      m.material.userData.noFow = true; m.rotation.x = -Math.PI / 2; m.position.y = 0.08; m.renderOrder = 4; ghost.add(m); return m;
+    };
+    const foot = ring(S.footprint, 0x5dff7a, 0.25);
+    ring(def.range + def.radius, 0xffffff, 0.1);                   // max range
+    if (S.minRange) ring(S.minRange + def.radius, 0xff8a5a, 0.1);   // can't hit inside this
+    this.game.scene.add(ghost);
+    this.placing = { id, ghost, rig, foot, err: 'Move the cursor onto the map' };
+    document.body.classList.add('placing');
+    this.hooks.toast?.(`Place ${def.name}: left-click (Shift = more) · right-click / Esc cancels`);
+  }
+  cancelBuild() {
+    const P = this.placing; if (!P) return false;
+    P.ghost.parent?.remove(P.ghost);
+    P.rig.matList.forEach((m) => m.dispose());
+    P.ghost.traverse((o) => { if (o.isMesh && o.geometry.type === 'RingGeometry') { o.geometry.dispose(); o.material.dispose(); } });
+    this.placing = null;
+    document.body.classList.remove('placing');
+    return true;
+  }
+  updateBuildGhost() {
+    const P = this.placing; if (!P) return;
+    if (!this.game || this.game.over) { this.cancelBuild(); return; }
+    const p = this.groundAt(this.mouse.x, this.mouse.y);
+    P.ghost.visible = !!p && this.mouse.inside;
+    if (!p) return;
+    P.ghost.position.set(p.x, this.game.terrain?.heightAt(p.x, p.z) || 0, p.z);
+    P.x = p.x; P.z = p.z;
+    P.err = this.game.canPlace(this.team, P.id, p.x, p.z);
+    const col = P.err ? 0xff4a4a : 0x5dff7a;
+    P.foot.material.color.setHex(col);
+    for (const m of P.rig.matList) m.emissive.setHex(P.err ? 0x661111 : 0x113311);
+  }
+  placeAt(sx, sy, keep) {
+    const P = this.placing; if (!P) return;
+    this.mouse.x = sx; this.mouse.y = sy; this.updateBuildGhost();
+    if (P.err) { this.hooks.toast?.(P.err, 'err'); sfx('error', 150); return; }
+    const err = this.hooks.placeBuilding?.(P.id, P.x, P.z);
+    if (err) { this.hooks.toast?.(err, 'err'); sfx('error', 150); return; }
+    sfx('order');
+    if (!keep) this.cancelBuild();
+  }
+  /** Demolish every selected building of yours (Del / Demolish button). */
+  demolishSelected() {
+    const mine = this.selection.filter((u) => u.structure && u.team === this.team && !u.dead);
+    if (!mine.length) return;
+    for (const u of mine) this.hooks.demolish?.(u);
+    this.setSelection(this.selection.filter((u) => !mine.includes(u)));
+  }
+
   cancelTargeting() {
     if (!this.targeting) return false;
     this.targeting = null; document.body.classList.toggle('armed', this.armed);
@@ -434,6 +498,11 @@ export class Controls {
 
     addEventListener('mousedown', (e) => {
       if (!this.enabled || !isCanvas(e)) return;
+      if (this.placing) {   // Build menu placement: left = place (Shift keeps placing), right = cancel
+        if (e.button === 0) this.placeAt(e.clientX, e.clientY, e.shiftKey);
+        else if (e.button === 2) this.cancelBuild();
+        return;
+      }
       if (e.button === 0) {
         if (this.targeting) { this.targetClickAt(e.clientX, e.clientY); return; }
         if (this.armed) { this.armedClickAt(e.clientX, e.clientY); return; }
@@ -523,6 +592,8 @@ export class Controls {
       else if (e.code === k.charge) this.charge();
       else if (e.code === k.shop) this.hooks.toggleShop?.();
       else if (e.code === k.barracks) this.hooks.toggleBarracks?.();
+      else if (e.code === k.build) this.hooks.toggleBuild?.();
+      else if (e.code === 'Delete') this.demolishSelected();
       else if (e.code === k.skills) this.hooks.toggleSkills?.();
       else if (e.code === k.repair) this.hooks.toggleRepair?.();
       else if (e.code === k.autoLoot) this.hooks.toggleAutoLoot?.();

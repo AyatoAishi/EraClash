@@ -588,7 +588,88 @@ export function buildZzz() {
   return s;
 }
 
-export const UNIT_BUILDERS = { lancer: buildLancer, elf: buildElf, riotSkirmisher: buildRiotSkirmisher, reconDrone: buildReconDrone, direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
+// ======================= DEPLOYABLE BUILDINGS (artillery) =======================
+// Same rig contract as troops (root/body/matList/barY) plus: yaw (turns to aim), barrel (pivot, x = elevation),
+// recoil (slides back on firing), muzzle (flash), scaffold (shown while under construction). Forward = +z.
+function structureRig() {
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+  return { root, body, mats: new Map(), style: 'structure' };
+}
+function finishStructure(r) {
+  r.matList = [...r.mats.values()];
+  for (const mt of r.matList) mt.emissive = new THREE.Color(0x000000);
+  r.muzzle.visible = false; r.scaffold.visible = false;
+  return r;
+}
+/** Wooden scaffold poles + planks around a building site (hidden once built). */
+function scaffold(parent, half, h, mats) {
+  const g = pivot(parent, 0, 0, 0);
+  for (const [x, z] of [[-half, -half], [-half, half], [half, -half], [half, half]]) B(g, 0.16, h, 0.16, 0x8a6a42, x, h / 2, z, mats);
+  for (const y of [h * 0.45, h]) { B(g, half * 2 + 0.2, 0.1, 0.25, 0x9a7a4c, 0, y, -half, mats); B(g, half * 2 + 0.2, 0.1, 0.25, 0x9a7a4c, 0, y, half, mats); }
+  B(g, 0.12, h * 1.1, 0.12, 0x6b4a2b, -half + 0.2, h * 0.55, 0, mats).rotation.z = 0.5;   // diagonal brace
+  return g;
+}
+
+export function buildCannon() {
+  const r = structureRig(), m = r.mats;
+  // low stone emplacement (gap at the front for the muzzle)
+  for (const [x, z, w, d] of [[-1.15, 0, 0.4, 2.7], [1.15, 0, 0.4, 2.7], [0, -1.15, 1.9, 0.4], [-0.75, 1.15, 0.5, 0.4], [0.75, 1.15, 0.5, 0.4]]) B(r.body, w, 0.45, d, 0x8d8f93, x, 0.22, z, m);
+  B(r.body, 2.3, 0.08, 2.3, 0x6e6252, 0, 0.04, 0, m);
+  r.yaw = pivot(r.body, 0, 0, 0);
+  // carriage: wooden cheeks, axle, two wheels, trail
+  for (const x of [-0.42, 0.42]) B(r.yaw, 0.22, 0.6, 1.5, 0x6b4a2b, x, 0.75, -0.05, m);
+  B(r.yaw, 1.3, 0.16, 0.16, 0x3a3a3a, 0, 0.55, 0.25, m);
+  for (const x of [-0.68, 0.68]) {
+    B(r.yaw, 0.16, 1.1, 1.1, 0x5e4026, x, 0.55, 0.25, m);
+    B(r.yaw, 0.18, 0.3, 0.3, 0x4a4a4a, x, 0.55, 0.25, m);       // iron hub
+    B(r.yaw, 0.17, 1.12, 0.12, 0x4a3520, x, 0.55, 0.25, m);      // spoke
+  }
+  B(r.yaw, 0.4, 0.18, 1.2, 0x6b4a2b, 0, 0.4, -0.9, m);           // trail
+  // barrel (pivot at the trunnions): black iron, reinforcing rings, cascabel knob
+  r.barrel = pivot(r.yaw, 0, 1.05, 0.05);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  B(r.recoil, 0.44, 0.44, 1.9, 0x26282c, 0, 0, 0.45, m);
+  for (const z of [-0.3, 0.55, 1.3]) B(r.recoil, 0.52, 0.52, 0.14, 0x34363b, 0, 0, z, m);
+  B(r.recoil, 0.22, 0.22, 0.22, 0x34363b, 0, 0, -0.6, m);
+  r.muzzle = B(r.recoil, 0.5, 0.5, 0.5, 0xffb040, 0, 0, 1.6, m, { emissive: 0xff7a00 });
+  r.muzzle.castShadow = false;
+  r.barrel.rotation.x = -0.12;
+  r.rest = -0.12;
+  r.scaffold = scaffold(r.body, 1.35, 2.2, m);
+  r.barY = 2.3;
+  return finishStructure(r);
+}
+
+export function buildHowitzer() {
+  const r = structureRig(), m = r.mats;
+  const OL = 0x5b6b3a, DK = 0x46552c, ST = 0x4a4e54;
+  // concrete pad + sandbag lip
+  B(r.body, 3, 0.2, 3, 0x9a9da2, 0, 0.1, 0, m);
+  for (let k = -1; k <= 1; k++) { B(r.body, 0.9, 0.35, 0.5, 0xa8956a, k * 0.95, 0.37, -1.3, m); B(r.body, 0.5, 0.35, 0.9, 0xa8956a, -1.3, 0.37, k * 0.95, m); B(r.body, 0.5, 0.35, 0.9, 0xa8956a, 1.3, 0.37, k * 0.95, m); }
+  r.yaw = pivot(r.body, 0, 0.2, 0);
+  // split trail legs, wheels, gun shield
+  for (const s of [-1, 1]) { const leg = B(r.yaw, 0.22, 0.2, 1.7, DK, s * 0.45, 0.35, -0.85, m); leg.rotation.y = s * 0.32; B(r.yaw, 0.3, 0.12, 0.3, ST, s * 0.75, 0.25, -1.6, m); }
+  for (const s of [-1, 1]) { B(r.yaw, 0.28, 0.9, 0.9, 0x222428, s * 0.82, 0.45, 0.15, m); B(r.yaw, 0.3, 0.3, 0.3, OL, s * 0.82, 0.45, 0.15, m); }
+  B(r.yaw, 1.4, 0.3, 0.6, OL, 0, 0.75, 0.1, m);                  // cradle / axle housing
+  const shield = B(r.yaw, 1.9, 0.95, 0.1, OL, 0, 1.25, 0.55, m); shield.rotation.x = -0.12;
+  B(r.yaw, 0.6, 0.25, 0.12, DK, 0, 1.55, 0.6, m);                 // sight window frame
+  // long barrel with recuperator + muzzle brake
+  r.barrel = pivot(r.yaw, 0, 1.15, 0.15);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  B(r.recoil, 0.5, 0.45, 0.9, DK, 0, 0, -0.2, m);                // breech
+  B(r.recoil, 0.26, 0.26, 2.9, OL, 0, 0, 1.4, m);
+  B(r.recoil, 0.18, 0.18, 1.3, ST, 0, 0.25, 0.55, m);            // recuperator
+  B(r.recoil, 0.42, 0.34, 0.36, ST, 0, 0, 2.9, m);               // muzzle brake
+  r.muzzle = B(r.recoil, 0.6, 0.6, 0.6, 0xffc060, 0, 0, 3.2, m, { emissive: 0xff8a00 });
+  r.muzzle.castShadow = false;
+  r.barrel.rotation.x = -0.45;
+  r.rest = -0.45;
+  r.scaffold = scaffold(r.body, 1.55, 2.4, m);
+  r.barY = 2.6;
+  return finishStructure(r);
+}
+
+export const UNIT_BUILDERS = { cannon: buildCannon, howitzer: buildHowitzer, lancer: buildLancer, elf: buildElf, riotSkirmisher: buildRiotSkirmisher, reconDrone: buildReconDrone, direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
 
 // projectiles — built along +Z so lookAt() aims them
 export function buildArrow() {
@@ -600,6 +681,19 @@ export function buildArrow() {
   g.children.forEach((c) => (c.castShadow = false));
   return g;
 }
+/** Cannonball (black iron) and howitzer shell (olive, pointed): ArtilleryShell projectiles in game.js. */
+export function buildCannonball() {
+  const g = new THREE.Group();
+  B(g, 0.34, 0.34, 0.34, 0x1e2024, 0, 0, 0, null);
+  return g;
+}
+export function buildShell() {
+  const g = new THREE.Group();
+  B(g, 0.22, 0.22, 0.6, 0x5b6b3a, 0, 0, 0, null);
+  B(g, 0.14, 0.14, 0.2, 0xc9a050, 0, 0, 0.38, null);
+  return g;
+}
+
 export function buildBullet() {
   const g = new THREE.Group();
   const t = B(g, 0.07, 0.07, 0.9, 0xfff3b0, 0, 0, 0, null, { emissive: 0xffd040 });

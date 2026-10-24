@@ -7,6 +7,26 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.19.0', date: '2026-10-24T18:55:00+08:00', title: 'Build menu: Cannon & Howitzer',
+    sections: [
+      { title: 'New: Build menu', items: [
+        'New <b>BUILD</b> button (<b>G</b>). Pick a building, then left-click a spot on your side: a see-through preview shows its footprint (green = OK, red = blocked) and its min / max range. Shift-click places another; right-click or Esc cancels.',
+        'Placement: your own side of the river, on flat ground, within 30 of your base, clear of trees, props and other buildings. <b>Max 2</b> of each per side.',
+        'Buildings go up under scaffolding (they start at 10% HP and can be attacked while building), don\'t count toward your army limit, and pay the usual 40% bounty when destroyed.',
+        'Select one and press <b>Del</b> (or Demolish) to tear it down for a <b>50% refund</b>. Attack / Stop work on buildings too.',
+      ] },
+      { title: 'New buildings', items: [
+        '<b>Cannon</b> (Medieval, 250g, 20s): 600 HP, 4 armor. Fires a low, fast iron ball every 4s: <b>45 splash damage</b> (radius 2.5), small knockback. Range 4–16.',
+        '<b>Howitzer</b> (Modern, 300g, 25s): 500 HP, 3 armor. Lobs a shell every 6s: <b>60 splash damage</b> (radius 3.5). A <b>red ring</b> marks the landing spot during the 1.6s flight, so troops can get out of the way. Range 6–22.',
+        'Both: splash is 100% at the center and 50% at the edge, ignores evasion, can\'t hit flying units or anything inside the minimum range. They aim at the target whose splash would hit the most enemies.',
+        'New Barracks upgrades: <b>Grapeshot</b> (Cannon, +0.5 splash radius per level) and <b>Ballistic Computer</b> (Howitzer, +2 range and -1.5 minimum range per level), 3 levels each.',
+        'The enemy AI saves up for artillery after the opening and places it behind its front line.',
+        'Dev Lab: both buildings are in the Model Viewer (Buildings) and can be placed in the Sandbox.',
+      ] },
+      { title: 'Balance to watch', items: ['Splash hits clumps of cheap melee (Vikings, Police) hardest. Artillery competes with Fortify / Expand HQ for early gold.'] },
+    ],
+  },
+  {
     version: '0.18.0', date: '2026-10-24T20:30:00+08:00', title: 'Smarter AI, difficulty 1–10, Ranger tree & new items',
     sections: [
       { title: 'New — AI difficulty 1 to 10', items: [
