@@ -41,7 +41,7 @@ export const FACTIONS = {
     baseName: 'Stone Keep',
     emblem: 'em-medieval',                // pixel symbol id in index.html
     color: '#d9a441',
-    units: ['viking', 'archer', 'imp', 'sniper'],   // shop order = default buy key order (1, 2, 3...)
+    units: ['viking', 'archer', 'imp'],   // shop order = default buy key order (1, 2, 3...)
   },
   modern: {
     id: 'modern',
