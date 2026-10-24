@@ -632,7 +632,7 @@ export class Game {
   /** A building came online: true-sight towers (Sniper Tower) start revealing invisible enemies around them. */
   activateStructure(u) {
     const r = u.structure.trueSight;
-    if (r) this.detectors.push({ team: u.team, pos: u.pos, radius: r, get dead() { return u.dead; } });
+    if (r) this.detectors.push({ team: u.team, pos: u.pos, get radius() { return u.structure.trueSight || 0; }, get dead() { return u.dead; } });   // radius follows upgrades
   }
   /** Tear down your own building: refunds GAME.build.refund of what you paid. */
   demolish(u) {
@@ -809,9 +809,9 @@ export class Game {
     for (let k = 0; k < R.count; k++) {
       const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * R.radius;
       this.fireShell(src, { pos: { x: target.pos.x + Math.cos(a) * d, z: target.pos.z + Math.sin(a) * d } },
-        { rocket: true, kind: 'arrow', dmg: R.damage, splash: R.splash, delay: k * 0.05, flight: 0.9 + Math.random() * 0.3, arc: 0.6 });
+        { rocket: true, kind: R.kind || 'arrow', dmg: R.damage, splash: R.splash, delay: k * 0.05, flight: 0.9 + Math.random() * 0.3, arc: 0.6 });
     }
-    if (this.audible(src.pos.x)) sfx('bow', 40);
+    if (this.audible(src.pos.x)) sfx(R.kind === 'missile' ? 'zap' : 'bow', 40);
   }
   /** Railgun: an instant slug along the line to the target, out to full range. Hits everything on it (flying too). */
   fireLine(src, target) {
@@ -819,7 +819,9 @@ export class Game {
     src.rig.muzzle.getWorldPosition(start);
     const dx = target.pos.x - src.pos.x, dz = target.pos.z - src.pos.z, len = Math.hypot(dx, dz) || 1, ux = dx / len, uz = dz / len;
     const reach = src.effRange + src.radius;
-    const dmg = src.rollDamage();
+    let dmg = src.rollDamage();
+    const crit = S.critChance && Math.random() < S.critChance;   // Deadeye Sentinel headshot
+    if (crit) dmg *= S.critMult || 2;
     for (const o of this.units) {
       if (o.dead || o.tower || o.team === src.team || (o.team === NEUTRAL_TEAM && o.aggroTeam !== src.team)) continue;
       const rx = o.pos.x - src.pos.x, rz = o.pos.z - src.pos.z, along = rx * ux + rz * uz;
@@ -828,7 +830,7 @@ export class Game {
       const dealt = o.takeDamage(dmg * (o.flying && S.flyingBonus ? 1 + S.flyingBonus : 1), src, 'physical', { ranged: true });
       src.damageDealt += dealt;
       if (S.pierceSlow && !o.dead) o.addSlow(S.pierceSlow.pct, S.pierceSlow.t);   // Skypiercer pins its targets
-      if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
+      if (dealt > 0) this.emit(crit ? 'crit' : 'hitDmg', o.pos, dealt, false, o.team);
       this.burst(o.pos, 5, S.bolt ? [0xd8c8a0, 0xffffff] : [0xa0f0ff, 0xffffff], 2.5, 0.4, 0.8);
     }
     if (S.bolt) {   // ballista: a big bolt flies the line instead of a glowing beam
@@ -840,7 +842,7 @@ export class Game {
       return;
     }
     // the slug's trail: a thin glowing beam that fades
-    const beam = new THREE.Mesh(boxGeo(0.25, 0.25, 1), new THREE.MeshBasicMaterial({ color: 0x80f0ff, transparent: true, opacity: 0.9, depthWrite: false }));
+    const beam = new THREE.Mesh(boxGeo(0.25, 0.25, 1), new THREE.MeshBasicMaterial({ color: S.beamColor || 0x80f0ff, transparent: true, opacity: 0.9, depthWrite: false }));
     beam.material.userData.noFow = true;
     const end = new THREE.Vector3(src.pos.x + ux * reach, start.y - 0.4, src.pos.z + uz * reach);
     beam.position.lerpVectors(start, end, 0.5); beam.scale.z = start.distanceTo(end); beam.lookAt(end);

@@ -80,6 +80,31 @@ export const BUILD_TREES = {
         desc: 'Four archers; every 8s 14 arrows rain on the target area.' },
     },
   },
+  sniperTower: {
+    2: { name: 'Reinforced Overwatch', cost: 140, time: 4, stats: { hp: 600, damage: 55, range: 19, armor: 4 },
+      desc: 'Armored skirt, sandbags, a searchlight: +150 HP, 55 damage, range 19.' },
+    a: {
+      name: 'Marksman', desc: 'Heavier rifles: pierce lines, headshots, flyers.',
+      3: { name: 'Marksman Post', cost: 280, time: 6, stats: { damage: 85, attackSpeed: 22, range: 22 },
+        desc: 'Thermal scope and a ghillie net: 85 damage, range 22.' },
+      4: { name: 'Anti-Materiel Nest', cost: 500, time: 9, stats: { damage: 55, range: 24 },
+        structure: { fire: 'line', lineWidth: 0.25, beamColor: 0xfff0a0, turnRate: 3 },
+        desc: 'A .50 cal on a mount: rounds pierce everything in a line (55 each), range 24.' },
+      5: { name: 'Deadeye Sentinel', cost: 900, time: 12, stats: { hp: 800, damage: 95, range: 26 },
+        structure: { critChance: 0.25, critMult: 2, flyingBonus: 0.5 },
+        desc: 'Concrete sentinel: 95 piercing, 25% headshot (x2), +50% vs flying.' },
+    },
+    b: {
+      name: 'Fire Team', desc: 'More shooters, more targets, wider true sight.',
+      3: { name: 'Spotter Team', cost: 280, time: 6, stats: { damage: 42, attackSpeed: 30 }, structure: { multishot: 2, trueSight: 14 },
+        desc: 'A spotter calls targets: 2 targets per shot, true sight 14.' },
+      4: { name: 'Suppression Team', cost: 500, time: 9, stats: { damage: 34, attackSpeed: 36 }, structure: { multishot: 3, suppress: { pct: 25, t: 1.5 } },
+        desc: '3 targets per shot; hits slow 25% for 1.5s.' },
+      5: { name: 'Drone Command', cost: 900, time: 12, stats: { hp: 750, damage: 38, attackSpeed: 38, range: 19 },
+        structure: { trueSight: 18, rain: { every: 8, count: 10, radius: 3, damage: 30, splash: 1.4, kind: 'missile' } },
+        desc: 'A drone pad: every 8s a 10-missile strike on the target area; true sight 18.' },
+    },
+  },
 };
 
 /** The step a building would take next: { level, path, node } list (one entry, or two at the Lv 2 → 3 fork). */

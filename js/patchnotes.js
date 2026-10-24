@@ -7,6 +7,17 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.23.0', date: '2026-10-24T20:59:00+08:00', title: 'Sniper Tower upgrade tree',
+    sections: [
+      { title: 'Sniper Tower upgrades (the Archer Tower\'s counterpart)', items: [
+        'Select a Sniper Tower to upgrade it. Lv 2 <b>Reinforced Overwatch</b> (140g): 600 HP, 55 damage, range 19.',
+        'Path A, Marksman: <b>Marksman Post</b> (280g: 85 damage, range 22) → <b>Anti-Materiel Nest</b> (500g: rounds <b>pierce everything in a line</b>, 55 each, range 24) → <b>Deadeye Sentinel</b> (900g: 95 piercing, <b>25% headshot for double damage</b>, +50% vs flying).',
+        'Path B, Fire Team: <b>Spotter Team</b> (280g: <b>2 targets</b> per shot, true sight 14) → <b>Suppression Team</b> (500g: 3 targets, hits <b>slow 25%</b>) → <b>Drone Command</b> (900g: every 8s a <b>10-missile strike</b> on the target area, true sight 18).',
+        'Every level has its own model. The <b>Thermal Scope</b> Barracks upgrade is gone: its range and damage now come with path A.',
+      ] },
+    ],
+  },
+  {
     version: '0.22.0', date: '2026-10-24T20:46:00+08:00', title: 'Archer Tower upgrade tree & tougher bases',
     sections: [
       { title: 'Bases', items: [

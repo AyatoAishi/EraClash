@@ -862,23 +862,85 @@ export function buildArcherTower(level = 1, path = null) {
   r.barY = roofY + (Bp && L >= 5 ? 3 : 1.2);
   return finishStructure(r);
 }
-export function buildSniperTower() {
-  const r = structureRig(), m = r.mats, ST = 0x4a4e54, DK = 0x34373c;
-  B(r.body, 2.4, 0.3, 2.4, 0x9a9da2, 0, 0.15, 0, m);                                   // concrete pad
-  for (const [x, z] of [[-0.9, -0.9], [-0.9, 0.9], [0.9, -0.9], [0.9, 0.9]]) B(r.body, 0.22, 5, 0.22, ST, x, 2.7, z, m);
-  for (const y of [1.4, 2.8, 4.1]) for (const s of [-1, 1]) { B(r.body, 2, 0.1, 0.1, DK, 0, y, s * 0.9, m); B(r.body, 0.1, 0.1, 2, DK, s * 0.9, y, 0, m); }
-  B(r.body, 0.12, 4.6, 0.5, DK, -0.9, 2.5, 0, m);                                         // ladder rail
-  B(r.body, 2.6, 0.25, 2.6, 0x5a5e64, 0, 5.2, 0, m);                                      // deck
-  for (const s of [-1, 1]) { B(r.body, 2.6, 0.7, 0.1, 0x3a3d42, 0, 5.65, s * 1.25, m); B(r.body, 0.1, 0.7, 2.6, 0x3a3d42, s * 1.25, 5.65, 0, m); }
-  B(r.body, 2.8, 0.15, 2.8, 0x4a5a3a, 0, 7.2, 0, m);                                      // camo net roof
-  for (const [x, z] of [[-1.2, -1.2], [-1.2, 1.2], [1.2, -1.2], [1.2, 1.2]]) B(r.body, 0.1, 1.9, 0.1, ST, x, 6.2, z, m);
-  r.yaw = pivot(r.body, 0, 5.33, 0);
-  const sn = addCrew(r, buildSniper(), 0, -0.1, 0.85);
-  sn.armR.rotation.x = -1.35; sn.armL.rotation.x = -1.45; sn.armL.rotation.z = 0.35; levelCrew(sn);
-  r.muzzle = B(r.yaw, 0.35, 0.35, 0.35, 0xfff0b0, 0, 1.45, 1.5, m, { emissive: 0xffd040 }); r.muzzle.castShadow = false;
-  r.muzzleY = 5.33 + 1.45;
-  r.scaffold = scaffold(r.body, 1.4, 5.3, m);
-  r.barY = 8.2;
+// Sniper Tower: 8 looks — Lv1 steel watchtower, Lv2 Reinforced Overwatch, A3 Marksman Post, A4 Anti-Materiel Nest,
+// A5 Deadeye Sentinel, B3 Spotter Team, B4 Suppression Team, B5 Drone Command.
+export function buildSniperTower(level = 1, path = null) {
+  const r = structureRig(), m = r.mats, ST = 0x4a4e54, DK = 0x34373c, OL = 0x5b6b3a, SAND = 0xa8956a;
+  const L = level, A = L >= 3 && path === 'a', Bp = L >= 3 && path === 'b';
+  const deck = A ? (L >= 5 ? 6.6 : 6.2) : Bp ? 5.4 : 5.2, hw = Bp ? 1.6 : A && L >= 5 ? 1.45 : 1.3;
+  B(r.body, hw * 2 - 0.2, 0.3, hw * 2 - 0.2, 0x9a9da2, 0, 0.15, 0, m);                                  // pad
+  if (A && L >= 5) {   // Deadeye Sentinel: a concrete column
+    B(r.body, 2, deck - 0.3, 2, 0x8a8e94, 0, (deck - 0.3) / 2 + 0.3, 0, m);
+    for (let y = 1.2; y < deck - 0.5; y += 1.1) B(r.body, 2.04, 0.08, 2.04, 0x6a6e74, 0, y, 0, m);
+  } else {
+    const leg = hw - 0.4;
+    for (const [x, z] of [[-leg, -leg], [-leg, leg], [leg, -leg], [leg, leg]]) B(r.body, 0.22, deck - 0.2, 0.22, ST, x, deck / 2, z, m);
+    for (let y = 1.4; y < deck - 0.6; y += 1.35) for (const s of [-1, 1]) { B(r.body, leg * 2 + 0.2, 0.1, 0.1, DK, 0, y, s * leg, m); B(r.body, 0.1, 0.1, leg * 2 + 0.2, DK, s * leg, y, 0, m); }
+    B(r.body, 0.12, deck - 0.6, 0.5, DK, -leg, deck / 2 - 0.2, 0, m);                                       // ladder rail
+    if (L >= 2) for (const s of [-1, 1]) B(r.body, leg * 2 + 0.3, 1.6, 0.08, OL, 0, 1.2, s * (leg + 0.1), m);   // armored skirt
+  }
+  B(r.body, hw * 2, 0.25, hw * 2, 0x5a5e64, 0, deck, 0, m);                                                 // deck
+  // parapet: thin steel (Lv1), sandbags (Lv2+), heavy plates (path A 4+)
+  for (const s of [-1, 1]) {
+    if (L === 1) { B(r.body, hw * 2, 0.7, 0.1, 0x3a3d42, 0, deck + 0.45, s * (hw - 0.05), m); B(r.body, 0.1, 0.7, hw * 2, 0x3a3d42, s * (hw - 0.05), deck + 0.45, 0, m); }
+    else if (A && L >= 4) { B(r.body, hw * 2, 0.9, 0.18, DK, 0, deck + 0.55, s * (hw - 0.09), m); B(r.body, 0.18, 0.9, hw * 2, DK, s * (hw - 0.09), deck + 0.55, 0, m); }
+    else for (let k = -1; k <= 1; k++) { B(r.body, hw * 0.62, 0.4, 0.45, SAND, k * hw * 0.64, deck + 0.33, s * (hw - 0.22), m); B(r.body, 0.45, 0.4, hw * 0.62, SAND, s * (hw - 0.22), deck + 0.33, k * hw * 0.64, m); }
+  }
+  // roof: camo net (A), steel canopy (B), plain net (Lv1-2)
+  const roofY = deck + (A && L >= 5 ? 2.1 : 1.9);
+  for (const [x, z] of [[-hw + 0.1, -hw + 0.1], [-hw + 0.1, hw - 0.1], [hw - 0.1, -hw + 0.1], [hw - 0.1, hw - 0.1]]) B(r.body, 0.1, roofY - deck, 0.1, ST, x, (roofY + deck) / 2, z, m);
+  B(r.body, hw * 2 + 0.3, 0.15, hw * 2 + 0.3, A ? 0x3e4a2c : Bp ? 0x3a3d42 : 0x4a5a3a, 0, roofY, 0, m);
+  if (A) for (let k = 0; k < 6; k++) B(r.body, 0.5, 0.3, 0.5, [0x4a5a3a, 0x5b6b3a, 0x3a4a2a][k % 3], -hw + 0.4 + (k % 3) * hw * 0.7, roofY + 0.18, (k < 3 ? -1 : 1) * hw * 0.45, m);   // ghillie tufts
+  if (L >= 2 && !(A && L >= 4)) {   // searchlight on the roof edge
+    B(r.body, 0.35, 0.35, 0.45, DK, hw - 0.2, roofY + 0.25, hw - 0.2, m);
+    const sl = B(r.body, 0.28, 0.28, 0.06, 0xfff4c0, hw - 0.2, roofY + 0.25, hw + 0.04, m, { emissive: 0xfff0a0 }); sl.castShadow = false;
+  }
+  if (Bp && L >= 5) {   // Drone Command: radio mast + drone pad with a parked drone
+    B(r.body, 0.12, 3.2, 0.12, ST, -hw + 0.2, roofY + 1.6, -hw + 0.2, m);
+    B(r.body, 0.8, 0.08, 0.08, ST, -hw + 0.2, roofY + 2.6, -hw + 0.2, m);
+    const blink = B(r.body, 0.2, 0.2, 0.2, 0xff2020, -hw + 0.2, roofY + 3.25, -hw + 0.2, m, { emissive: 0xff0000 }); blink.castShadow = false; r.blink = blink;
+    B(r.body, 1.3, 0.08, 1.3, 0x2a2d32, 0.1, roofY + 0.12, 0.1, m);
+    B(r.body, 0.9, 0.06, 0.12, 0xf2c94c, 0.1, roofY + 0.18, 0.1, m);
+    const dr = pivot(r.body, 0.1, roofY + 0.3, 0.1);
+    B(dr, 0.5, 0.2, 0.5, 0x3a3d42, 0, 0, 0, m);
+    for (const [x, z] of [[-0.4, -0.4], [-0.4, 0.4], [0.4, -0.4], [0.4, 0.4]]) { B(dr, 0.05, 0.05, 0.3, ST, x / 2, 0, z / 2, m); B(dr, 0.4, 0.03, 0.08, 0x8a8f96, x, 0.12, z, m); }
+  }
+  r.yaw = pivot(r.body, 0, deck + 0.13, 0);
+  const crewPose = (c) => { c.armR.rotation.x = -1.35; c.armL.rotation.x = -1.45; c.armL.rotation.z = 0.35; levelCrew(c); };
+  if (A && L >= 4) {   // mounted heavy rifle (+ gunner behind it)
+    const big = L >= 5;
+    B(r.yaw, 0.5, 0.6, 0.5, DK, 0, 0.3, 0.3, m);
+    r.barrel = pivot(r.yaw, 0, 0.75, 0.3); r.recoil = pivot(r.barrel, 0, 0, 0);
+    B(r.recoil, 0.32, 0.32, 1.1, 0x2a2d32, 0, 0, -0.1, m);                                               // receiver
+    B(r.recoil, 0.12, 0.12, big ? 2.6 : 2, 0x1e2024, 0, 0, big ? 1.5 : 1.2, m);                           // barrel
+    B(r.recoil, 0.28, 0.22, 0.3, ST, 0, 0, big ? 2.85 : 2.25, m);                                         // muzzle brake
+    B(r.recoil, 0.16, 0.16, 0.6, 0x1a1a22, 0, 0.27, 0.1, m);                                              // scope
+    const lens = B(r.recoil, 0.12, 0.12, 0.04, big ? 0xff3020 : 0x4fa8e0, 0, 0.27, 0.42, m, { emissive: big ? 0xaa1000 : 0x0b2a44 }); lens.castShadow = false;
+    for (const s of [-1, 1]) { const bp = B(r.recoil, 0.06, 0.5, 0.06, ST, s * 0.15, -0.25, 1, m); bp.rotation.z = s * 0.3; }   // bipod
+    r.muzzle = B(r.recoil, 0.4, 0.4, 0.4, 0xfff0b0, 0, 0, big ? 3.15 : 2.55, m, { emissive: 0xffd040 });
+    const gn = addCrew(r, buildSniper(), 0, -0.75, 0.85); crewPose(gn);
+    r.rest = -0.03;
+    r.muzzleY = deck + 0.13 + 0.75;
+  } else {
+    const n = Bp ? (L >= 4 ? 3 : 2) : 1;
+    const sn = addCrew(r, buildSniper(), 0, -0.1, 0.85); crewPose(sn);
+    if (n >= 2) { sn.root.position.x = 0.45; const sp = buildPolice(); sp.root.scale.setScalar(0.85); sp.root.position.set(-0.55, 0, -0.2); r.yaw.add(sp.root); sp.armR.rotation.x = -1.6; sp.armL.rotation.x = -1.6; sp.matList.forEach((mt, i) => r.mats.set('spot' + i, mt));
+      B(sp.armR, 0.35, 0.18, 0.2, 0x1a1a22, -0.1, -0.62, 0.15, m); }                                        // spotter with binoculars
+    if (n >= 3) { const g2 = buildGunner(); g2.root.scale.setScalar(0.85); g2.root.position.set(0, 0, -0.75); r.yaw.add(g2.root); g2.armR.rotation.x = -1.3; g2.armL.rotation.x = -1.35; levelCrew(g2); g2.matList.forEach((mt, i) => r.mats.set('g2' + i, mt)); }
+    r.muzzle = B(r.yaw, 0.35, 0.35, 0.35, 0xfff0b0, n >= 2 ? 0.45 : 0, 1.45, 1.5, m, { emissive: 0xffd040 });
+    r.muzzleY = deck + 0.13 + 1.45;
+    if (Bp && L >= 4) {   // Suppression Team / Drone Command: tripod machine gun up front, a second sandbag course, striped canopy edge
+      B(r.yaw, 0.1, 0.6, 0.1, DK, -0.3, 0.3, 0.9, m);
+      B(r.yaw, 0.26, 0.22, 0.7, 0x2a2d32, -0.3, 0.68, 1.05, m);
+      B(r.yaw, 0.1, 0.1, 0.9, 0x1e2024, -0.3, 0.68, 1.75, m);
+      B(r.yaw, 0.16, 0.2, 0.25, OL, -0.12, 0.62, 0.95, m);
+      for (const s2 of [-1, 1]) B(r.body, hw * 2, 0.35, 0.45, SAND, 0, deck + 0.7, s2 * (hw - 0.22), m);
+      for (let k = 0; k < 8; k++) B(r.body, hw * 2 / 8, 0.1, 0.06, k % 2 ? 0x1a1a1a : 0xf2c94c, -hw + (k + 0.5) * hw * 2 / 8, roofY - 0.1, hw + 0.16, m);
+    }
+  }
+  r.muzzle.castShadow = false;
+  r.scaffold = scaffold(r.body, hw + 0.05, deck + 0.1, m);
+  r.barY = roofY + (Bp && L >= 5 ? 3.6 : 1);
   return finishStructure(r);
 }
 export function buildHwacha() {

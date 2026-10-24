@@ -232,14 +232,6 @@ export const UPGRADES = {
   },
 
   // ===================== BUILDINGS (Build menu towers; artillery upgrades live in js/buildtree.js) =====================
-  thermalScope: {
-    id: 'thermalScope', faction: 'modern', category: 'troop', unit: 'sniperTower', icon: 'u-scope',
-    name: 'Thermal Scope', max: 3,
-    price: [120, 200, 320], time: [12, 16, 20],
-    effects: [{ type: 'unitStats', unit: 'sniperTower', perLevel: { range: 2, damage: 8 } }],
-    desc: 'Sniper Towers get a thermal sight: <b>+2 range</b> and <b>+8 damage</b> per level.',
-    levelText: (l) => `Sniper Tower range ${18 + 2 * l}, damage ${45 + 8 * l}`,
-  },
   rocketRack: {
     id: 'rocketRack', faction: 'medieval', category: 'troop', unit: 'hwacha', icon: 'u-rockets',
     name: 'Rocket Rack', max: 3,
