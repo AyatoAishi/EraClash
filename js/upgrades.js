@@ -249,6 +249,39 @@ export const UPGRADES = {
     levelText: (l) => `Range ${22 + 2 * l}, min range ${6 - 1.5 * l}`,
   },
 
+  fireArrows: {
+    id: 'fireArrows', faction: 'medieval', category: 'troop', unit: 'archerTower', icon: 'u-firearrows',
+    name: 'Fire Arrows', max: 3,
+    price: [120, 200, 320], time: [12, 16, 20],
+    effects: [{ type: 'unitStats', unit: 'archerTower', perLevel: { damage: 5 } }],
+    desc: 'Archer Towers shoot pitch-soaked arrows: <b>+5 damage</b> per level.',
+    levelText: (l) => `Archer Tower damage ${20 + 5 * l}`,
+  },
+  thermalScope: {
+    id: 'thermalScope', faction: 'modern', category: 'troop', unit: 'sniperTower', icon: 'u-scope',
+    name: 'Thermal Scope', max: 3,
+    price: [120, 200, 320], time: [12, 16, 20],
+    effects: [{ type: 'unitStats', unit: 'sniperTower', perLevel: { range: 2, damage: 8 } }],
+    desc: 'Sniper Towers get a thermal sight: <b>+2 range</b> and <b>+8 damage</b> per level.',
+    levelText: (l) => `Sniper Tower range ${18 + 2 * l}, damage ${45 + 8 * l}`,
+  },
+  rocketRack: {
+    id: 'rocketRack', faction: 'medieval', category: 'troop', unit: 'hwacha', icon: 'u-rockets',
+    name: 'Rocket Rack', max: 3,
+    price: [150, 250, 400], time: [15, 20, 25],
+    effects: [{ type: 'structureMods', unit: 'hwacha', perLevel: { rockets: 2 } }],
+    desc: 'A bigger launcher frame: every Hwacha volley fires <b>+2 rockets</b> per level.',
+    levelText: (l) => `${8 + 2 * l} rockets per volley`,
+  },
+  beltFeed: {
+    id: 'beltFeed', faction: 'modern', category: 'troop', unit: 'mgNest', icon: 'u-beltfeed',
+    name: 'Belt Feed', max: 3,
+    price: [150, 250, 400], time: [15, 20, 25],
+    effects: [{ type: 'unitStats', unit: 'mgNest', perLevel: { attackSpeed: 60 } }],
+    desc: 'Linked ammo belts: Machine Gun Nests get <b>+60 attack speed</b> per level.',
+    levelText: (l) => `Attack speed ${330 + 60 * l}`,
+  },
+
   // ===================== SHARED (both factions) =====================
   repairCrews: {
     id: 'repairCrews', faction: 'both', category: 'base', icon: 'u-repair',

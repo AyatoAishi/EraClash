@@ -601,8 +601,22 @@ export class DevLab {
       h('div', { class: 'dl-row' },
         h('button', { class: 'dl-b', onclick: () => (u.hp = u.maxHp) }, 'Heal'),
         h('button', { class: 'dl-b', onclick: () => (u.invulnT = u.invulnT > 1000 ? 0 : 1e9) }, 'God mode'),
-        h('button', { class: 'dl-b', onclick: () => { if (!u.dead) { u.hp = 0; u.die(null); } } }, 'Kill')));
+        h('button', { class: 'dl-b', onclick: () => { if (!u.dead) { u.hp = 0; u.die(null); } } }, 'Kill')),
+      u.structure ? h('div', { class: 'dl-row' },
+        h('button', { class: 'dl-b', title: 'Enemy troops (holding position) in the middle of this building’s range', onclick: () => this.spawnTargets(u, false) }, '5 enemies in range'),
+        h('button', { class: 'dl-b', title: 'A flying enemy in range (towers that hit flying shoot it; artillery and the Hwacha cannot)', onclick: () => this.spawnTargets(u, true) }, '+ flying')) : null);
     this.renderInspectorStats();
+  }
+  /** Test targets for a building: enemies standing between its min and max range, in front of it. */
+  spawnTargets(b, flying) {
+    const g = this.game, foe = b.team === 0 ? 1 : 0;
+    const roster = FACTIONS[g.teams[foe].faction].units;
+    const id = flying ? Object.keys(UNITS).find((k) => UNITS[k].flying) : roster.find((k) => UNITS[k].type === 'melee') || roster[0];
+    const d = (b.minRange + b.effRange) / 2 + b.radius, dir = b.team === 0 ? 1 : -1;
+    const A = this.arena, keep = { team: A.team, count: A.count, hold: A.hold };
+    Object.assign(A, { team: foe, count: flying ? 1 : 5, hold: true });
+    this.spawnAt(id, b.pos.x + dir * d, b.pos.z + (flying ? 2 : 0));
+    Object.assign(A, keep);
   }
   renderBaseInspector(b) {
     const D = BASES[b.team];

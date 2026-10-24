@@ -204,7 +204,7 @@ export class Unit {
   get effMoveSpeed() { return this.immobile ? 0 : this.stats.moveSpeed * (1 - this.slowPct / 100) * (1 + (this.rallyT > 0 ? this.rallyBonus : 0)); }
   get damageTakenMult() { return this.stance === 'prone' ? this.ability('snipeStance').def.damageTakenMult : 1; }
   /** Projectile launch height (prone troops shoot from the ground) */
-  get muzzleY() { return this.stance === 'prone' ? 0.45 : 1.75; }
+  get muzzleY() { return this.structure ? (this.rig.muzzleY || 1.4) * 1.25 : this.stance === 'prone' ? 0.45 : 1.75; }   // towers shoot from the top
 
   /** Put an item in the first free slot. Returns slot index or -1 when full. */
   addItem(itemId) {
@@ -499,6 +499,8 @@ export class Unit {
   /** After an attack's damage lands (melee or projectile): lifesteal, on-hit slows. */
   onAttackLanded(tg, dealt, raw = 0, crit = false, shot = null) {
     if (dealt > 0) this.game.emit('hitDmg', tg.pos, dealt, crit, this.team);
+    const sup = this.structure?.suppress;   // Machine Gun Nest: every hit slows
+    if (sup && !tg.dead) tg.addSlow(sup.pct, sup.t);
     if (shot?.magic && !tg.dead) { const m = tg.takeDamage(shot.magic, this, 'magic'); this.damageDealt += m; if (m > 0) this.game.emit('hitDmg', tg.pos, m, false, this.team); }
     if (shot?.breakT && !tg.dead) tg.applyBreak(shot.breakT);
     if (this.pas.lifesteal && dealt > 0 && !this.dead) this.hp = Math.min(this.maxHp, this.hp + dealt * this.pas.lifesteal / 100);
@@ -960,15 +962,18 @@ export class Unit {
       if (tg) {
         const want = Math.atan2(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z);
         let da = want - this.facing; da = Math.atan2(Math.sin(da), Math.cos(da));
-        this.facing += Math.sign(da) * Math.min(Math.abs(da), dt * 2.4);   // heavy guns turn slowly
+        this.facing += Math.sign(da) * Math.min(Math.abs(da), dt * (S.turnRate || 2.4));   // heavy guns turn slowly
         const frac = Math.min(1, Math.max(0, this.edgeDist(tg) / Math.max(1, this.effRange)));
-        r.barrel.rotation.x += (r.rest - frac * (S.shell === 'howitzer' ? 0.5 : 0.3) - r.barrel.rotation.x) * Math.min(1, dt * 4);
-        if (Math.abs(da) < 0.08 && this.atkCd <= 0 && !this.disarmed) {
+        if (r.barrel) r.barrel.rotation.x += (r.rest - frac * (S.shell === 'howitzer' ? 0.5 : S.fire === 'direct' ? 0.05 : 0.3) - r.barrel.rotation.x) * Math.min(1, dt * 4);
+        this.aimT = 0.4;
+        if (Math.abs(da) < (S.fire === 'direct' ? 0.15 : 0.08) && this.atkCd <= 0 && !this.disarmed) {
           this.atkCd = Math.max(this.atkCd, -0.1) + attackInterval(this.effAttackSpeed);
-          g.fireShell(this, tg);
-          this.recoilT = 1; this.muzzleT = 0.1;
+          if (S.fire === 'direct') this.releaseAttack(tg);          // arrow / bullet like a ranged troop (can miss, hits flying)
+          else if (S.fire === 'volley') g.fireVolley(this, tg);   // Hwacha: a fan of rockets
+          else g.fireShell(this, tg);                              // artillery shell
+          this.recoilT = 1; this.muzzleT = S.fire === 'direct' ? 0.06 : 0.1;
         }
-      } else r.barrel.rotation.x += (r.rest - r.barrel.rotation.x) * Math.min(1, dt * 2);
+      } else if (r.barrel) r.barrel.rotation.x += (r.rest - r.barrel.rotation.x) * Math.min(1, dt * 2);
     }
     this.animate(dt, 0);   // recoil + muzzle flash
     // emplacement stays put, the gun turns: obj follows `facing` (so the HP bar math matches troops), body counter-rotates
@@ -1056,7 +1061,7 @@ export class Unit {
     return r;
   }
   /** 0 = low ground (river), 1 = high ground */
-  get groundLevel() { return this.flying ? 3 : this.game.terrain ? this.game.terrain.level(this.pos.x, this.pos.z) : 1; }
+  get groundLevel() { return this.flying ? 3 : this.structure?.highGround ? 2 : this.game.terrain ? this.game.terrain.level(this.pos.x, this.pos.z) : 1; }
 
   faceTowards(dx, dz, dt, rate) {
     if (Math.abs(dx) + Math.abs(dz) < 1e-4) return;
@@ -1073,7 +1078,7 @@ export class Unit {
     if (this.structure) {   // buildings: barrel recoil + muzzle flash (a swing from the Dev Lab viewer counts as a shot)
       if (this.swing > 0) { this.swing = 0; this.recoilT = 1; this.muzzleT = 0.1; }
       this.recoilT = Math.max(0, this.recoilT - dt * 2.5);
-      r.recoil.position.z = -0.45 * Math.sin(Math.min(1, this.recoilT) * Math.PI / 2);
+      if (r.recoil) r.recoil.position.z = -(this.structure.fire === 'direct' ? 0.1 : 0.45) * Math.sin(Math.min(1, this.recoilT) * Math.PI / 2);
       this.muzzleT -= dt; r.muzzle.visible = this.muzzleT > 0;
       return;
     }

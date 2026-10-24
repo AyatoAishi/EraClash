@@ -5,7 +5,7 @@ import { Unit } from './unit.js';
 import { UPGRADES, STAT_BOOST, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
 import { ABILITIES, ITEMS } from './config.js';
 import { NEUTRAL_TEAM, CAMP_RULES, CAMPS, CREEP_GROUPS, dropChanceForTier, creepTierOf } from './neutrals.js';
-import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ, buildCannonball, buildShell } from './models.js';
+import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ, buildCannonball, buildShell, buildRocket, CASTLE_TIERS, HQ_TIERS } from './models.js';
 import { sfx } from './audio.js';
 import { SKILL_TREES, levelInfo, formDef } from './skilltree.js';
 import { Vision } from './vision.js';
@@ -553,6 +553,22 @@ export class Game {
   // ---------------- deployable buildings (Build menu) ----------------
   /** Living buildings of a team (built or under construction). */
   buildingsOf(team) { return this.units.filter((u) => u.structure && !u.dead && u.team === team); }
+  /** Towers allowed right now (GAME.build.towersByLevel by base level) and how many stand. */
+  towerCap(team) { return GAME.build.towersByLevel[this.bases[team].level - 1] ?? 0; }
+  towerCount(team) { return this.buildingsOf(team).filter((u) => u.structure.tower).length; }
+  /** Why `team` can't add another `id` (limit reached), or null. Towers: shared cap by base level; artillery: per type. */
+  buildLimit(team, id) {
+    const def = UNITS[id];
+    if (def.structure.tower) {
+      const cap = this.towerCap(team);
+      if (this.towerCount(team) < cap) return null;
+      const next = GAME.build.towersByLevel.findIndex((n) => n > cap) + 1;
+      if (!next) return `Tower limit reached (${cap})`;
+      const tiers = team === 0 ? CASTLE_TIERS : HQ_TIERS;
+      return `Tower limit ${cap}: raise your ${team === 0 ? 'castle' : 'HQ'} to Lv ${next} (${tiers[next - 1].name})`;
+    }
+    return this.buildingsOf(team).filter((u) => u.def.id === id).length >= GAME.build.maxPerSide ? `Max ${GAME.build.maxPerSide} ${def.name}s` : null;
+  }
   /**
    * Can `team` put building `id` at (x, z)? Returns an error message, or null when the spot is fine.
    * Rules (GAME.build): your own side of the river, on normal ground, within maxDist of your base front,
@@ -565,7 +581,7 @@ export class Game {
     if (Math.sign(x) !== side) return 'Build on your own side';
     const fromBase = Math.abs(x - b.x);
     if (fromBase < GAME.baseHalfX + fp + 1) return 'Too close to the base';
-    if (fromBase > GAME.baseHalfX + B.maxDist) return 'Too far from your base';
+    if (fromBase > GAME.baseHalfX + (S.tower ? B.towerMaxDist : B.maxDist)) return S.tower ? 'Towers must stay close to your base' : 'Too far from your base';
     if (Math.abs(z) > GAME.mapHalfWidth - fp - 1) return 'Out of bounds';
     const T = this.terrain;
     if (T) {
@@ -581,7 +597,7 @@ export class Game {
   build(team, id, x, z) {
     const T = this.teams[team], def = UNITS[id];
     if (this.over) return 'Match is over';
-    if (this.buildingsOf(team).filter((u) => u.def.id === id).length >= GAME.build.maxPerSide) return `Max ${GAME.build.maxPerSide} ${def.name}s`;
+    const lim = this.buildLimit(team, id); if (lim) return lim;
     const err = this.canPlace(team, id, x, z); if (err) return err;
     if (T.gold < def.cost) return 'Not enough gold';
     T.gold -= def.cost; T.stats.goldSpent += def.cost;
@@ -598,6 +614,7 @@ export class Game {
     u.order = { type: 'idle' };
     u.obstacle = this.terrain ? this.terrain.addObstacle({ x, z, r: S.footprint, kind: 'structure' }) : null;
     if (!instant) { u.buildT = 0; u.hp = u.maxHp * 0.1; u.rig.scaffold.visible = true; u.rig.yaw.scale.set(1, 0.2, 1); }
+    else this.activateStructure(u);
     this.units.push(u);
     this.scene.add(u.obj);
     this.burst({ x, z }, 12, [0x9a7a4c, 0xd8c8a0, 0xffffff], 2.5, 0.8);
@@ -605,8 +622,14 @@ export class Game {
     return u;
   }
   onStructureBuilt(u) {
+    this.activateStructure(u);
     this.burst(u.pos, 14, [0xffffff, 0xf7c948], 3, 0.8);
     this.emit('built', u);
+  }
+  /** A building came online: true-sight towers (Sniper Tower) start revealing invisible enemies around them. */
+  activateStructure(u) {
+    const r = u.structure.trueSight;
+    if (r) this.detectors.push({ team: u.team, pos: u.pos, radius: r, get dead() { return u.dead; } });
   }
   /** Tear down your own building: refunds GAME.build.refund of what you paid. */
   demolish(u) {
@@ -628,7 +651,7 @@ export class Game {
     const ids = FACTIONS[T.faction].buildings || [];
     if (!ids.length || this.time < 90) return;
     if (!T.aiBuildGoal) {
-      const open = ids.filter((id) => this.buildingsOf(T.team).filter((u) => u.def.id === id).length < GAME.build.maxPerSide);
+      const open = ids.filter((id) => !this.buildLimit(T.team, id));
       if (!open.length || Math.random() > 0.08) return;
       T.aiBuildGoal = open[Math.floor(Math.random() * open.length)]; T.aiBuildT = 0;
       return;
@@ -640,40 +663,63 @@ export class Game {
     if (T.gold < def.cost + Math.min(saving, 100)) return;
     const b = this.bases[T.team], dir = T.team === 0 ? 1 : -1;
     for (let k = 0; k < 14; k++) {
-      const x = b.x + dir * (GAME.baseHalfX + def.structure.footprint + 3 + Math.random() * 14), z = (Math.random() - 0.5) * 22;
+      const reach = def.structure.tower ? GAME.build.towerMaxDist - def.structure.footprint - 4 : 14;
+      const x = b.x + dir * (GAME.baseHalfX + def.structure.footprint + 3 + Math.random() * reach), z = (Math.random() - 0.5) * 22;
       if (!this.canPlace(T.team, id, x, z)) { if (!this.build(T.team, id, x, z)) T.aiBuildGoal = null; return; }
     }
   }
 
   // ---------------- artillery shells ----------------
   /** Fire a shell from building `src` at `target`'s current spot (no leading: moving out of the way works). */
-  fireShell(src, target) {
+  fireShell(src, target, o = {}) {
     const S = src.structure, howitzer = S.shell === 'howitzer';
-    const mesh = howitzer ? buildShell() : buildCannonball();
+    const mesh = o.rocket ? buildRocket() : howitzer ? buildShell() : buildCannonball();
     const start = new THREE.Vector3();
     src.rig.muzzle.getWorldPosition(start);
     const end = new THREE.Vector3(target.pos.x, (this.terrain?.heightAt(target.pos.x, target.pos.z) || 0) + 0.15, target.pos.z);
     const dist = Math.hypot(end.x - start.x, end.z - start.z);
     mesh.position.copy(start);
+    mesh.visible = !o.delay;
     this.scene.add(mesh);
     let marker = null;
-    if (howitzer) {   // landing warning: a red ring that tightens until impact
+    if (howitzer && !o.rocket) {   // landing warning: a red ring that tightens until impact
       marker = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
       marker.material.userData.noFow = true;
       marker.rotation.x = -Math.PI / 2; marker.position.set(end.x, end.y + 0.05, end.z); marker.renderOrder = 3;
       marker.scale.setScalar(src.splashRadius);
       this.scene.add(marker);
     }
-    this.shells.push({ mesh, marker, src, team: src.team, start, end, t: 0, T: S.flight, apex: dist * (howitzer ? 0.45 : 0.06),
-      dmg: src.rollDamage(), splash: src.splashRadius, kb: S.knockback || 0, groundOnly: S.groundOnly });
+    this.shells.push({ mesh, marker, src, team: src.team, start, end, t: -(o.delay || 0), T: o.flight ?? S.flight, apex: dist * (o.arc ?? (howitzer ? 0.45 : 0.06)),
+      dmg: o.dmg ?? src.rollDamage(), splash: o.splash ?? src.splashRadius, kb: o.rocket ? 0 : S.knockback || 0, groundOnly: S.groundOnly, small: !!o.rocket });
+    if (o.rocket) return;
     if (this.audible(src.pos.x)) sfx('snipe', 60);
     this.burst(start, 6, [0xd8d8d8, 0x9a9a9a, 0xffb040], 2, 0.6, 1.2);   // muzzle smoke
+  }
+  /**
+   * Hwacha: `volley.count` (+ upgrades) rocket-arrows fanned over `volley.cone` around the target, landing at
+   * slightly different depths; each splashes (structure.splash) for the tower's damage. Ground only.
+   */
+  fireVolley(src, target) {
+    const S = src.structure, n = S.volley.count + (src.structMods.rockets || 0);
+    const base = Math.atan2(target.pos.x - src.pos.x, target.pos.z - src.pos.z);
+    const d0 = Math.hypot(target.pos.x - src.pos.x, target.pos.z - src.pos.z);
+    for (let k = 0; k < n; k++) {
+      const a = base + (k / Math.max(1, n - 1) - 0.5) * S.volley.cone + (Math.random() - 0.5) * 0.08;
+      const d = Math.max(src.minRange + src.radius, Math.min(src.effRange + src.radius, d0 + (Math.random() - 0.5) * 4));
+      this.fireShell(src, { pos: { x: src.pos.x + Math.sin(a) * d, z: src.pos.z + Math.cos(a) * d } },
+        { rocket: true, delay: k * 0.05, flight: S.flight + Math.random() * 0.2, arc: 0.12 });
+    }
+    if (this.audible(src.pos.x)) sfx('zap', 60);
+    const mp = new THREE.Vector3(); src.rig.muzzle.getWorldPosition(mp);
+    this.burst(mp, 10, [0xffb040, 0xff6a00, 0xd8d8d8], 2.5, 0.7, 1);
   }
   updateShells(dt) {
     const prev = new THREE.Vector3();
     for (let i = this.shells.length - 1; i >= 0; i--) {
       const p = this.shells[i];
       p.t += dt;
+      if (p.t < 0) continue;            // staggered volley: not launched yet
+      p.mesh.visible = true;
       const u = Math.min(1, p.t / p.T);
       prev.copy(p.mesh.position);
       p.mesh.position.lerpVectors(p.start, p.end, u);
@@ -706,6 +752,7 @@ export class Game {
       if (p.kb && !o.dead) o.knockback(p.end, p.kb * f);
       if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
     }
+    if (p.small) { this.burst(p.end, 5, [0xffb040, 0xff6a00, 0x5a4a3a], 2.5, 0.5, 0.8); return; }
     this.burst(p.end, 18, [0x5a4a3a, 0x8a7a6a, 0xffb040, 0x3a3a3a], 5, 0.9, 1.5);
     if (this.audible(p.end.x)) sfx('baseHit', 90);
   }

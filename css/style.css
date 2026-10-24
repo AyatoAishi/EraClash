@@ -432,7 +432,7 @@ small.passive { color: var(--gold) !important; }
 #hud #barracks { pointer-events: auto; }
 /* Build menu (artillery) */
 #hud #build { pointer-events: auto; }
-#build { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -55%); width: min(40rem, 94vw); max-height: 74vh; overflow-y: auto; padding: .9rem; display: none; background: rgba(20, 24, 34, .97); }
+#build { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -62%); width: min(46rem, 94vw); max-height: 60vh; overflow-y: auto; padding: .9rem; display: none; background: rgba(20, 24, 34, .97); }
 #build.open { display: block; }
 #build .shop-head h3 { color: #f7c948; }
 #build-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: .6rem; margin-top: .6rem; }
@@ -443,6 +443,10 @@ small.passive { color: var(--gold) !important; }
 .bcard h4 { margin: 0; font-family: var(--head); font-size: 1.15rem; color: #f7c948; }
 .bcard .bstats { color: var(--muted); line-height: 1.15; }
 .bcard .bcost { color: var(--gold); }
+#cmds button[hidden] { display: none !important; }   /* Demolish: only while a building of yours is selected */
+.bcard .blim { color: var(--bad); line-height: 1.1; margin-top: .15rem; }
+#build-items .bsec { grid-column: 1 / -1; font-family: var(--head); color: #f7c948; margin-top: .3rem; border-bottom: var(--p) solid var(--line); }
+#build-items .bsec small { font-family: var(--body); color: var(--muted); margin-left: .4rem; }
 #btn-build { width: 5.2rem; height: 5.2rem; flex: none; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem;
   position: relative; background: #2a3a26; color: var(--text); font-family: var(--arcade); font-size: .6rem; }
 #btn-build:hover, #btn-build.on { background: #3e5a2c; }

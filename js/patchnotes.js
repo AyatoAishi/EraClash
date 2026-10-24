@@ -7,6 +7,26 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.20.0', date: '2026-10-24T19:35:00+08:00', title: 'Defense towers',
+    sections: [
+      { title: 'New: Towers (Build menu)', items: [
+        'The Build menu now has a <b>Towers</b> section. Towers must stand within 15 of your base. How many you can have depends on your base level: <b>Lv 1–2: 1 · Lv 3–4: 2 · Lv 5: 3</b> (any mix). Fortify / Expand HQ unlocks more.',
+        'Towers shoot from the top: they count as <b>high ground</b> (see over trees, uphill advantage).',
+        '<b>Archer Tower</b> (Medieval, 200g, 18s): 500 HP, 20 damage every 1s, range 15, <b>hits flying</b>.',
+        '<b>Sniper Tower</b> (Modern, 220g, 20s): 450 HP, 45 damage every 2.5s, range 18, hits flying. <b>True sight 10</b>: reveals invisible enemies (Elf Night Meld) around it.',
+        '<b>Hwacha</b> (Medieval, 260g, 22s): 450 HP. Every 6s fires a fan of <b>8 rocket-arrows</b> (12 damage each, small splash), range 2–13, ground only.',
+        '<b>Machine Gun Nest</b> (Modern, 260g, 22s): 550 HP, 4 armor, 5 damage at 330 attack speed, range 11, hits flying. <b>Every hit slows 20%</b> for 1s.',
+        'New Barracks upgrades: <b>Fire Arrows</b> (Archer Tower +5 damage), <b>Thermal Scope</b> (Sniper Tower +2 range, +8 damage), <b>Rocket Rack</b> (Hwacha +2 rockets), <b>Belt Feed</b> (MG Nest +60 attack speed). 3 levels each.',
+        'The enemy AI builds towers too.',
+      ] },
+      { title: 'Testing aids', items: [
+        'A selected building shows its range: dots for max range, an <b>orange ring</b> for its minimum range (artillery, Hwacha).',
+        'Dev Lab sandbox: select a building to get <b>5 enemies in range</b> and <b>+ flying</b> test buttons in the Inspector.',
+      ] },
+      { title: 'Balance to watch', items: ['The Machine Gun Nest has the highest damage per second (about 22 against light armor) but the shortest range. Towers that hit flying units are the first real answer to Recon Drones near the base.'] },
+    ],
+  },
+  {
     version: '0.19.1', date: '2026-10-24T19:15:00+08:00', title: 'Fix: command card overflow',
     sections: [
       { title: 'Fix', items: [

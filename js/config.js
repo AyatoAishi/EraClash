@@ -13,7 +13,9 @@ export const GAME = {
   popCap: 40,
   // deployable buildings (Build menu): per side at once, placement within maxDist of your base on your own side,
   // `clearance` = free space needed around the footprint, demolish refund
-  build: { maxPerSide: 2, maxDist: 30, clearance: 0.6, refund: 0.5 },
+  build: { maxPerSide: 2, maxDist: 30, clearance: 0.6, refund: 0.5,
+    towerMaxDist: 15,                   // towers (structure.tower) stay close to home
+    towersByLevel: [1, 1, 2, 2, 3] },   // towers allowed at base level 1..5 (any mix of types)
   queueMax: 5,
   laneHalfLen: 60,       // bases sit at +/- 58
   laneHalfWidth: 14,     // the lane itself
@@ -57,7 +59,7 @@ export const FACTIONS = {
     emblem: 'em-medieval',                // pixel symbol id in index.html
     color: '#d9a441',
     units: ['viking', 'archer', 'imp', 'lancer', 'elf'],   // shop order = default buy key order (1, 2, 3...)
-    buildings: ['cannon'],                                  // Build menu (deployable structures, UNITS entries with `structure`)
+    buildings: ['cannon', 'archerTower', 'hwacha'],         // Build menu (deployable structures, UNITS entries with `structure`)
   },
   modern: {
     id: 'modern',
@@ -68,7 +70,7 @@ export const FACTIONS = {
     emblem: 'em-modern',
     color: '#4aa3ff',
     units: ['police', 'gunner', 'sniper', 'riotSkirmisher', 'reconDrone'],
-    buildings: ['howitzer'],
+    buildings: ['howitzer', 'sniperTower', 'mgNest'],
   },
 };
 
@@ -206,6 +208,59 @@ Object.assign(UNITS, {
     structure: { buildTime: 25, footprint: 1.9, minRange: 6, splash: 3.5, shell: 'howitzer', flight: 1.6, knockback: 0, groundOnly: true },
     abilities: [],
     lore: 'Sandbagged field gun on split trails. Lobs a shell high over the lane; a red ring on the ground is the only warning.',
+  },
+});
+
+// ---------- defense towers (Build menu) ----------
+// structure.tower = counts toward the tower limit (GAME.build.towersByLevel) and must stay within towerMaxDist.
+// fire: 'direct' shoots its `projectile` like a ranged troop (can miss / be evaded, hits flying),
+//       'volley' fires `volley.count` rockets in a `volley.cone` (radians) that splash where they land.
+// highGround: shoots / sees from the top (high ground level). trueSight: reveals invisible enemies within that radius.
+// suppress: { pct, t } slow on every hit. muzzleY / turnRate: shot height (model units) / turning speed (rad/s).
+Object.assign(UNITS, {
+  archerTower: {
+    id: 'archerTower', name: 'Archer Tower', theme: 'medieval', family: 'siege', role: 'Defense tower', type: 'ranged',
+    cost: 200, trainTime: 0,
+    hp: 500, hpRegen: 0, damage: 20, damageType: 'physical', attackSpeed: 60,
+    armor: 3, ward: 0, evasion: 0, missChance: 0,
+    moveSpeed: 0, range: 15, vision: [26, 16], aggro: 15, radius: 1.5,
+    projectile: { kind: 'arrow', speed: 26, arc: 0.12 },
+    structure: { tower: true, fire: 'direct', buildTime: 18, footprint: 1.5, minRange: 0, highGround: true, turnRate: 6 },
+    abilities: [],
+    lore: 'A Ranger on a timber platform with a good roof and a better view. Cheap, quick, and it shoots at anything that flies.',
+  },
+  sniperTower: {
+    id: 'sniperTower', name: 'Sniper Tower', theme: 'modern', family: 'siege', role: 'Defense tower', type: 'ranged',
+    cost: 220, trainTime: 0,
+    hp: 450, hpRegen: 0, damage: 45, damageType: 'physical', attackSpeed: 24,
+    armor: 3, ward: 0, evasion: 0, missChance: 0,
+    moveSpeed: 0, range: 18, vision: [28, 18], aggro: 18, radius: 1.5,
+    projectile: { kind: 'sniper', speed: 90, arc: 0 },
+    structure: { tower: true, fire: 'direct', buildTime: 20, footprint: 1.5, minRange: 0, highGround: true, turnRate: 4, trueSight: 10 },
+    abilities: [],
+    lore: 'Steel watchtower, camo net, one patient marksman. Spots what hides in the dark (true sight) and picks it off.',
+  },
+  hwacha: {
+    id: 'hwacha', name: 'Hwacha', theme: 'medieval', family: 'siege', role: 'Barrage tower', type: 'ranged',
+    cost: 260, trainTime: 0,
+    hp: 450, hpRegen: 0, damage: 12, damageType: 'physical', attackSpeed: 10,
+    armor: 2, ward: 0, evasion: 0, missChance: 0,
+    moveSpeed: 0, range: 13, vision: [22, 14], aggro: 13, radius: 1.6,
+    structure: { tower: true, fire: 'volley', volley: { count: 8, cone: 0.5 }, buildTime: 22, footprint: 1.6, minRange: 2, splash: 1.2, flight: 0.7,
+      groundOnly: true, turnRate: 3 },
+    abilities: [],
+    lore: 'A cart of rocket-arrows on a raised platform. Every six seconds the whole rack goes up in a hissing, fiery fan.',
+  },
+  mgNest: {
+    id: 'mgNest', name: 'Machine Gun Nest', theme: 'modern', family: 'siege', role: 'Barrage tower', type: 'ranged',
+    cost: 260, trainTime: 0,
+    hp: 550, hpRegen: 0, damage: 5, damageType: 'physical', attackSpeed: 330,
+    armor: 4, ward: 0, evasion: 0, missChance: 0,
+    moveSpeed: 0, range: 11, vision: [24, 14], aggro: 11, radius: 1.6,
+    projectile: { kind: 'bullet', speed: 60, arc: 0 },
+    structure: { tower: true, fire: 'direct', buildTime: 22, footprint: 1.6, minRange: 0, highGround: true, turnRate: 5, suppress: { pct: 20, t: 1 } },
+    abilities: [],
+    lore: 'Sandbags on a concrete bunker and a belt-fed gun that never seems to stop. Anything it hits slows down.',
   },
 });
 

@@ -33,12 +33,19 @@ export function makePortraits() {
     if (rig.style === 'rifle') { rig.armR.rotation.x = -1.3; rig.armL.rotation.x = -1.4; rig.armL.rotation.z = 0.35; }
     for (const l of rig.level || []) l.obj.rotation.x = -l.arm.rotation.x;
     sc.add(rig.root);
+    // buildings (towers / artillery) are bigger than troops: frame the whole model instead of a face
+    const big = UNITS[id]?.structure ? new THREE.Box3().setFromObject(rig.root) : null;
+    const bs = big ? big.getSize(new THREE.Vector3()) : null, bc = big ? big.getCenter(new THREE.Vector3()) : null, bd = big ? Math.max(bs.x, bs.y, bs.z) : 0;
     r.setSize(56, 56, false);
-    cam.aspect = 1; cam.position.set(0.9, 1.85, 2.5); cam.lookAt(0, 1.55, 0); cam.fov = 30; cam.updateProjectionMatrix();
+    if (big) { cam.position.set(bc.x + bd * 1.1, bc.y + bd * 0.7, bc.z + bd * 1.9); cam.lookAt(bc); }
+    else { cam.position.set(0.9, 1.85, 2.5); cam.lookAt(0, 1.55, 0); }
+    cam.aspect = 1; cam.fov = 30; cam.updateProjectionMatrix();
     r.render(sc, cam);
     const face = r.domElement.toDataURL();
     r.setSize(72, 96, false);
-    cam.aspect = 0.75; cam.position.set(1.7, 1.5, 5.6); cam.lookAt(0, 1.05, 0); cam.fov = 30; cam.updateProjectionMatrix();
+    if (big) { cam.position.set(bc.x + bd * 1.3, bc.y + bd * 0.6, bc.z + bd * 2.6); cam.lookAt(bc); }
+    else { cam.position.set(1.7, 1.5, 5.6); cam.lookAt(0, 1.05, 0); }
+    cam.aspect = 0.75; cam.fov = 30; cam.updateProjectionMatrix();
     r.render(sc, cam);
     const full = r.domElement.toDataURL();
     PORTRAITS[form ? id + ':' + form : id] = { face, full };
@@ -799,20 +806,33 @@ export class UI {
   renderBuild() {
     const g = this.app.game, team = this.app.playerTeam; if (!g || team === null) return;
     const T = g.teams[team], ids = FACTIONS[T.faction].buildings || [];
-    $('#build-items').innerHTML = ids.map((id) => {
-      const d = UNITS[id], S = d.structure, have = g.buildingsOf(team).filter((u) => u.def.id === id).length;
-      const off = have >= GAME.build.maxPerSide || T.gold < d.cost;
-      return `<button class="bcard frame${off ? ' off' : ''}" data-build="${id}">
+    // one line of what the building does, by fire type
+    const stats = (d) => {
+      const S = d.structure, every = `every ${fmt(60 / d.attackSpeed)}s`, air = S.groundOnly ? 'ground only' : 'hits flying';
+      const atk = S.fire === 'volley' ? `${S.volley.count} rockets × ${d.damage} (r ${S.splash})`
+        : S.fire === 'direct' ? `${d.damage} dmg` : `${d.damage} splash dmg (r ${S.splash})`;
+      const extra = [S.trueSight && `true sight ${S.trueSight}`, S.suppress && `hits slow ${S.suppress.pct}%`].filter(Boolean).join(' · ');
+      return `${d.hp} HP · ${d.armor} armor · ${atk}<br>range ${S.minRange ? S.minRange + '–' : ''}${d.range} · ${every} · ${air}${extra ? '<br>' + extra : ''}`;
+    };
+    const card = (id) => {
+      const d = UNITS[id], S = d.structure, lim = g.buildLimit(team, id);
+      const have = S.tower ? '' : `<small>${g.buildingsOf(team).filter((u) => u.def.id === id).length}/${GAME.build.maxPerSide}</small>`;
+      const off = !!lim || T.gold < d.cost;
+      return `<button class="bcard frame${off ? ' off' : ''}" data-build="${id}" title="${lim || ''}">
         <img src="${PORTRAITS[id]?.full || ''}" alt="">
-        <div><h4>${d.name} <small>${have}/${GAME.build.maxPerSide}</small></h4>
+        <div><h4>${d.name} ${have}</h4>
           <div class="bcost"><svg class="ico"><use href="#i-coin"/></svg>${d.cost} · ${S.buildTime}s to build</div>
-          <div class="bstats">${d.hp} HP · ${d.armor} armor · ${d.damage} splash dmg (r ${S.splash})<br>range ${S.minRange}–${d.range} · every ${fmt(60 / d.attackSpeed)}s · ground only</div></div>
+          <div class="bstats">${stats(d)}</div>${lim ? `<div class="blim">${lim}</div>` : ''}</div>
       </button>`;
-    }).join('') || '<div class="more">Nothing to build.</div>';
+    };
+    const arty = ids.filter((id) => !UNITS[id].structure.tower), towers = ids.filter((id) => UNITS[id].structure.tower);
+    const cap = g.towerCap(team);
+    $('#build-items').innerHTML = (arty.length ? `<div class="bsec">Artillery <small>max ${GAME.build.maxPerSide} of each · within ${GAME.build.maxDist} of your base</small></div>${arty.map(card).join('')}` : '')
+      + (towers.length ? `<div class="bsec">Towers <small>${g.towerCount(team)}/${cap} by base level (Lv 1–2: 1 · Lv 3–4: 2 · Lv 5: 3) · within ${GAME.build.towerMaxDist} of your base</small></div>${towers.map(card).join('')}` : '')
+      || '<div class="more">Nothing to build.</div>';
     $$('#build-items .bcard').forEach((b) => (b.onclick = () => {
-      const id = b.dataset.build;
-      const d = UNITS[id];
-      if (g.buildingsOf(team).filter((u) => u.def.id === id).length >= GAME.build.maxPerSide) { this.toast(`Max ${GAME.build.maxPerSide} ${d.name}s`, 'err'); sfx('error', 150); return; }
+      const id = b.dataset.build, d = UNITS[id], lim = g.buildLimit(team, id);
+      if (lim) { this.toast(lim, 'err'); sfx('error', 150); return; }
       if (T.gold < d.cost) { this.toast('Not enough gold', 'err'); sfx('error', 150); return; }
       sfx('click');
       this.toggleBuild(false);

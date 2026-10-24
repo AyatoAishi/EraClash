@@ -127,3 +127,10 @@ Systems are split so new features plug in without touching each other:
 - **Shells**: `Game.fireShell / updateShells / explodeShell` — arc from the muzzle to the target's spot (no leading), splash 100% → 50% at the edge, howitzer shows a landing ring.
 - **Upgrades** tweak buildings through the `structureMods` effect (`{ unit, perLevel: { minRange, splash } }` → `team.structMods`), plus normal `unitStats` (range). Buildings are included in `upgradesFor` like roster troops.
 - **AI**: `Game.aiBuild` sets `T.aiBuildGoal`, `aiSaving` holds troop purchases while it saves (unless threatened), then it places the building behind its front line.
+
+## Defense towers (v0.20.0)
+- Towers are buildings with `structure.tower: true` (archerTower, sniperTower, hwacha, mgNest in config.js). They share a cap by base level, `GAME.build.towersByLevel`, and must stay within `GAME.build.towerMaxDist`. `Game.buildLimit(team, id)` gives the reason a building can't be added (also shown on the Build menu cards).
+- `structure.fire`: `'direct'` = shoots its `projectile` through `Unit.releaseAttack` like a ranged troop (misses / evasion apply, hits flying unless `groundOnly`); `'volley'` = `Game.fireVolley` (Hwacha rockets through the shell system, `fireShell(src, target, { rocket, delay, flight, arc })`); otherwise artillery shells.
+- `structure.highGround` makes `Unit.groundLevel` 2 (vision over trees, uphill rules). `structure.trueSight` registers a detector in `game.detectors` when the building comes online (`Game.activateStructure`). `structure.suppress` slows on every hit (`Unit.onAttackLanded`).
+- Tower models carry a crew rig (`addCrew` / `levelCrew` in models.js); `rig.muzzleY` is the shot height.
+- Testing: a selected building shows its min range ring (`Controls.updateMinRange`); the Dev Lab Inspector has "5 enemies in range" / "+ flying" (`DevLab.spawnTargets`).

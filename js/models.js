@@ -599,6 +599,7 @@ function finishStructure(r) {
   r.matList = [...r.mats.values()];
   for (const mt of r.matList) mt.emissive = new THREE.Color(0x000000);
   r.muzzle.visible = false; r.scaffold.visible = false;
+  if (r.crew?.muzzle) r.crew.muzzle.visible = false;   // the crew's own rifle flash: the tower draws its own
   return r;
 }
 /** Wooden scaffold poles + planks around a building site (hidden once built). */
@@ -669,7 +670,108 @@ export function buildHowitzer() {
   return finishStructure(r);
 }
 
-export const UNIT_BUILDERS = { cannon: buildCannon, howitzer: buildHowitzer, lancer: buildLancer, elf: buildElf, riotSkirmisher: buildRiotSkirmisher, reconDrone: buildReconDrone, direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
+// ----- defense towers (direct fire / rocket volley). Same rig contract; `crew` = a troop rig standing on top -----
+/** Put a troop rig (Ranger / Sniper / Gunner) on a tower and share its materials for the hit flash. */
+function addCrew(r, crewRig, y, z = 0, s = 0.85) {
+  crewRig.root.scale.setScalar(s); crewRig.root.position.set(0, y, z);
+  r.yaw.add(crewRig.root);
+  crewRig.matList.forEach((m, i) => r.mats.set('crew' + i, m));
+  r.crew = crewRig;
+  return crewRig;
+}
+/** Level the crew's held weapons after posing the arms (troops do this every frame in Unit.levelHeld). */
+function levelCrew(rig) { for (const l of rig.level || []) l.obj.rotation.x = -l.arm.rotation.x + l.offset; }
+export function buildArcherTower() {
+  const r = structureRig(), m = r.mats;
+  B(r.body, 2.4, 0.9, 2.4, 0x8d8f93, 0, 0.45, 0, m);                                  // stone footing
+  for (const [x, z] of [[-0.95, -0.95], [-0.95, 0.95], [0.95, -0.95], [0.95, 0.95]]) B(r.body, 0.32, 3.4, 0.32, 0x6b4a2b, x, 2.6, z, m);
+  for (const y of [1.6, 3]) for (const s of [-1, 1]) { B(r.body, 2.2, 0.14, 0.14, 0x5e4026, 0, y, s * 0.95, m); B(r.body, 0.14, 0.14, 2.2, 0x5e4026, s * 0.95, y, 0, m); }
+  B(r.body, 2.7, 0.25, 2.7, 0x7a5532, 0, 4.4, 0, m);                                    // platform
+  for (const s of [-1, 1]) { B(r.body, 2.7, 0.55, 0.14, 0x6b4a2b, 0, 4.8, s * 1.28, m); B(r.body, 0.14, 0.55, 2.7, 0x6b4a2b, s * 1.28, 4.8, 0, m); }
+  for (const [x, z] of [[-1.2, -1.2], [-1.2, 1.2], [1.2, -1.2], [1.2, 1.2]]) B(r.body, 0.18, 1.6, 0.18, 0x5e4026, x, 5.3, z, m);
+  B(r.body, 3, 0.25, 3, 0x6b2a24, 0, 6.2, 0, m); B(r.body, 2, 0.35, 2, 0x7d3129, 0, 6.5, 0, m); B(r.body, 0.9, 0.35, 0.9, 0x8e3a30, 0, 6.85, 0, m);
+  r.yaw = pivot(r.body, 0, 4.52, 0);
+  addCrew(r, buildArcher(), 0, 0, 0.85);
+  r.crew.armL.rotation.x = -1.4; r.crew.armR.rotation.x = -1.3; levelCrew(r.crew);
+  r.muzzle = B(r.yaw, 0.1, 0.1, 0.1, 0xffffff, 0, 1.4, 0.6, m); r.muzzle.castShadow = false;
+  r.muzzleY = 4.52 + 1.4;
+  r.scaffold = scaffold(r.body, 1.4, 4.6, m);
+  r.barY = 7.4;
+  return finishStructure(r);
+}
+export function buildSniperTower() {
+  const r = structureRig(), m = r.mats, ST = 0x4a4e54, DK = 0x34373c;
+  B(r.body, 2.4, 0.3, 2.4, 0x9a9da2, 0, 0.15, 0, m);                                   // concrete pad
+  for (const [x, z] of [[-0.9, -0.9], [-0.9, 0.9], [0.9, -0.9], [0.9, 0.9]]) B(r.body, 0.22, 5, 0.22, ST, x, 2.7, z, m);
+  for (const y of [1.4, 2.8, 4.1]) for (const s of [-1, 1]) { B(r.body, 2, 0.1, 0.1, DK, 0, y, s * 0.9, m); B(r.body, 0.1, 0.1, 2, DK, s * 0.9, y, 0, m); }
+  B(r.body, 0.12, 4.6, 0.5, DK, -0.9, 2.5, 0, m);                                         // ladder rail
+  B(r.body, 2.6, 0.25, 2.6, 0x5a5e64, 0, 5.2, 0, m);                                      // deck
+  for (const s of [-1, 1]) { B(r.body, 2.6, 0.7, 0.1, 0x3a3d42, 0, 5.65, s * 1.25, m); B(r.body, 0.1, 0.7, 2.6, 0x3a3d42, s * 1.25, 5.65, 0, m); }
+  B(r.body, 2.8, 0.15, 2.8, 0x4a5a3a, 0, 7.2, 0, m);                                      // camo net roof
+  for (const [x, z] of [[-1.2, -1.2], [-1.2, 1.2], [1.2, -1.2], [1.2, 1.2]]) B(r.body, 0.1, 1.9, 0.1, ST, x, 6.2, z, m);
+  r.yaw = pivot(r.body, 0, 5.33, 0);
+  const sn = addCrew(r, buildSniper(), 0, -0.1, 0.85);
+  sn.armR.rotation.x = -1.35; sn.armL.rotation.x = -1.45; sn.armL.rotation.z = 0.35; levelCrew(sn);
+  r.muzzle = B(r.yaw, 0.35, 0.35, 0.35, 0xfff0b0, 0, 1.45, 1.5, m, { emissive: 0xffd040 }); r.muzzle.castShadow = false;
+  r.muzzleY = 5.33 + 1.45;
+  r.scaffold = scaffold(r.body, 1.4, 5.3, m);
+  r.barY = 8.2;
+  return finishStructure(r);
+}
+export function buildHwacha() {
+  const r = structureRig(), m = r.mats;
+  B(r.body, 2.6, 0.9, 2.6, 0x7a5532, 0, 0.45, 0, m);                                   // raised wooden firing platform
+  for (const s of [-1, 1]) B(r.body, 2.6, 0.18, 0.18, 0x5e4026, 0, 0.95, s * 1.22, m);
+  r.yaw = pivot(r.body, 0, 0.9, 0);
+  B(r.yaw, 0.9, 0.18, 2.2, 0x6b4a2b, 0, 0.45, -0.2, m);                                  // cart bed + shafts
+  for (const s of [-1, 1]) { B(r.yaw, 0.12, 0.12, 1.6, 0x5e4026, s * 0.35, 0.4, -1.3, m); B(r.yaw, 0.14, 0.9, 0.9, 0x4a3520, s * 0.6, 0.45, 0, m); }
+  // launcher frame: a grid of rocket tubes, tilted up
+  r.barrel = pivot(r.yaw, 0, 0.75, 0);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  B(r.recoil, 1.3, 0.95, 0.9, 0x7a5532, 0, 0.45, 0.1, m);
+  for (let i = 0; i < 5; i++) for (let j = 0; j < 4; j++) {
+    B(r.recoil, 0.16, 0.16, 0.35, 0x2a1d12, -0.5 + i * 0.25, 0.1 + j * 0.24, 0.6, m);     // tube mouths
+    B(r.recoil, 0.07, 0.07, 0.12, 0xc9a050, -0.5 + i * 0.25, 0.1 + j * 0.24, 0.8, m);      // arrow tips
+  }
+  r.muzzle = B(r.recoil, 1.3, 1, 0.3, 0xffb040, 0, 0.45, 0.9, m, { emissive: 0xff6a00 }); r.muzzle.castShadow = false;
+  r.barrel.rotation.x = -0.55; r.rest = -0.55;
+  r.muzzleY = 2.2;
+  r.scaffold = scaffold(r.body, 1.45, 2.4, m);
+  r.barY = 3.1;
+  return finishStructure(r);
+}
+export function buildMgNest() {
+  const r = structureRig(), m = r.mats, OL = 0x5b6b3a;
+  B(r.body, 2.8, 2.2, 2.8, 0x9a9da2, 0, 1.1, 0, m);                                     // concrete bunker
+  B(r.body, 2.9, 0.15, 2.9, 0x7a7e84, 0, 2.27, 0, m);
+  B(r.body, 0.1, 0.35, 1.6, 0x1a1a22, 1.42, 1.5, 0, m);                                   // firing slit
+  for (const [x, z, w, d] of [[0, 1.2, 2.6, 0.5], [0, -1.2, 2.6, 0.5], [1.2, 0, 0.5, 1.4], [-1.2, 0, 0.5, 1.4]]) B(r.body, w, 0.45, d, 0xa8956a, x, 2.57, z, m);
+  r.yaw = pivot(r.body, 0, 2.35, 0);
+  B(r.yaw, 0.12, 0.7, 0.12, 0x34373c, 0, 0.35, 0.4, m);                                   // tripod post
+  r.barrel = pivot(r.yaw, 0, 0.8, 0.4);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  B(r.recoil, 0.3, 0.28, 0.7, 0x2a2d32, 0, 0, 0, m);
+  B(r.recoil, 0.12, 0.12, 1.1, 0x1e2024, 0, 0, 0.85, m);
+  B(r.recoil, 0.18, 0.2, 0.25, OL, 0.2, -0.05, 0.1, m);                                   // ammo box
+  r.muzzle = B(r.recoil, 0.32, 0.32, 0.32, 0xfff3b0, 0, 0, 1.5, m, { emissive: 0xffd040 }); r.muzzle.castShadow = false;
+  r.barrel.rotation.x = -0.05; r.rest = -0.05;
+  const gn = addCrew(r, buildGunner(), 0, -0.55, 0.8);
+  gn.armR.rotation.x = -1.3; gn.armL.rotation.x = -1.35; levelCrew(gn);
+  r.muzzleY = 2.35 + 0.8;
+  r.scaffold = scaffold(r.body, 1.5, 2.8, m);
+  r.barY = 4.3;
+  return finishStructure(r);
+}
+/** Hwacha rocket-arrow (Game.fireShell volley). */
+export function buildRocket() {
+  const g = new THREE.Group();
+  B(g, 0.08, 0.08, 0.7, 0x6b4a2b, 0, 0, 0, null);
+  B(g, 0.14, 0.14, 0.22, 0x8a2a1c, 0, 0, -0.1, null);
+  const f = B(g, 0.16, 0.16, 0.2, 0xffb040, 0, 0, -0.38, null, { emissive: 0xff6a00 }); f.castShadow = false;
+  return g;
+}
+
+export const UNIT_BUILDERS = { cannon: buildCannon, howitzer: buildHowitzer, archerTower: buildArcherTower, sniperTower: buildSniperTower, hwacha: buildHwacha, mgNest: buildMgNest, lancer: buildLancer, elf: buildElf, riotSkirmisher: buildRiotSkirmisher, reconDrone: buildReconDrone, direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
 
 // projectiles — built along +Z so lookAt() aims them
 export function buildArrow() {

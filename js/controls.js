@@ -34,7 +34,7 @@ export class Controls {
   setGame(game, team) {
     this.cancelBuild?.();
     this.game = game; this.team = team; this.selection = []; this.groups = {}; this.armed = false; this.selectedBase = null;
-    for (const m of [this.rangeMesh, this.hoverRing, this.baseRing, this.aimMesh]) if (m) game.scene.add(m);   // the Dev Lab arena has its own scene
+    for (const m of [this.rangeMesh, this.minRangeMesh, this.hoverRing, this.baseRing, this.aimMesh]) if (m) game.scene.add(m);   // the Dev Lab arena has its own scene
     this.hooks.onSelectionChange?.();
   }
 
@@ -85,6 +85,21 @@ export class Controls {
   }
 
   // ---------------- single-unit attack-range circle (pixel dots) ----------------
+  /** Buildings with a minimum range (artillery, Hwacha): an orange ring shows where they can't hit. */
+  updateMinRange(one) {
+    const r = one?.structure ? one.minRange : 0;
+    if (!r) { if (this.minRangeMesh) this.minRangeMesh.visible = false; return; }
+    if (!this.minRangeMesh) {
+      this.minRangeMesh = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64), new THREE.MeshBasicMaterial({ color: 0xff8a5a, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
+      this.minRangeMesh.material.userData.noFow = true;
+      this.minRangeMesh.rotation.x = -Math.PI / 2; this.minRangeMesh.renderOrder = 1;
+      this.game.scene.add(this.minRangeMesh);
+    }
+    const rr = r + one.radius;
+    this.minRangeMesh.scale.set(rr, rr, 1);
+    this.minRangeMesh.position.set(one.pos.x, 0.09, one.pos.z);
+    this.minRangeMesh.visible = true;
+  }
   updateRange(dt) {
     const one = this.selection.length === 1 && !this.selection[0].dead ? this.selection[0] : null;
     if (!this.rangeMesh) {
@@ -99,6 +114,7 @@ export class Controls {
       this.game.scene.add(this.rangeMesh);
     }
     const m = this.rangeMesh;
+    this.updateMinRange(one);
     if (!one) { m.visible = false; this.rangeKey = ''; return; }
     const r = one.effRange + one.radius + 0.45; // where an average enemy's center gets hit
     const key = one.id + ':' + r.toFixed(2);
