@@ -73,6 +73,9 @@ export class Game {
     // map / systems (modular): terrain = obstacles + nav + height, structures = future buildables, vision = fog of war
     this.terrain = world?.terrain || null;
     this.structures = [];
+    this.detectors = [];   // true-sight sources (future Sentry Wards): { team, pos, radius, dead }
+    this.trails = [];      // Barding Rally: { team, x, z, t, bonus, mesh }
+    this.skillshots = [];  // line projectiles (Arrow Piercer)
     this.teams.forEach((T) => (T.autoLoot = false));
     this.vision = this.terrain ? new Vision(this) : null;
   }
@@ -374,6 +377,7 @@ export class Game {
       if (o.dead || o.team === u.team || o.tower) continue;
       if (o.team === NEUTRAL_TEAM && o.aggroTeam !== u.team) continue;   // leave peaceful camps alone
       if (u.team <= 1 && !this.canSee(u.team, o)) continue;              // fog of war: can't target what you can't see
+      if (o.flying && !u.ranged) continue;                                // melee can't hit flying units
       const dx = o.pos.x - u.pos.x, dz = o.pos.z - u.pos.z;
       const d2 = dx * dx + dz * dz;
       if (d2 < bd) { bd = d2; best = o; }
@@ -431,8 +435,53 @@ export class Game {
     return this.units.filter((o) => !o.dead && !o.tower && o.team !== src.team && Math.hypot(o.pos.x - src.pos.x, o.pos.z - src.pos.z) - o.radius <= r);
   }
 
+  // ---------------- trails (Barding Rally) & line projectiles ----------------
+  addTrail(team, x, z, life, bonus) {
+    const m = new THREE.Mesh(boxGeo(0.9, 0.04, 0.9), new THREE.MeshBasicMaterial({ color: 0xf2c94c, transparent: true, opacity: 0.45, depthWrite: false }));
+    m.position.set(x, 0.05 + (this.terrain?.heightAt(x) || 0), z); m.rotation.y = Math.random() * 3;
+    this.scene.add(m);
+    this.trails.push({ team, x, z, t: life, life, bonus, mesh: m });
+  }
+  updateTrails(dt) {
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      const T = this.trails[i];
+      T.t -= dt; T.mesh.material.opacity = 0.45 * Math.max(0, T.t / T.life);
+      T.mesh.visible = T.team === this.playerTeam || this.seenByViewer(T);
+      if (T.t <= 0) { this.scene.remove(T.mesh); T.mesh.material.dispose(); this.trails.splice(i, 1); continue; }
+      for (const u of this.units) {
+        if (u.dead || u.team !== T.team || u.flying || u.tower) continue;
+        if (Math.abs(u.pos.x - T.x) < 0.8 && Math.abs(u.pos.z - T.z) < 0.8) { u.rallyT = 0.35; u.rallyBonus = T.bonus; }
+      }
+    }
+  }
+  updateSkillshots(dt) {
+    for (let i = this.skillshots.length - 1; i >= 0; i--) {
+      const S = this.skillshots[i];
+      const step = Math.min(S.left, S.speed * dt);
+      const x0 = S.x, z0 = S.z;
+      S.x += S.dx * step; S.z += S.dz * step; S.left -= step;
+      S.mesh.position.x = S.x; S.mesh.position.z = S.z;
+      S.mesh.visible = S.team === this.playerTeam || this.seenByViewer(S);
+      for (const o of this.units) {
+        if (o.dead || o.tower || o.team === S.team || S.hit.has(o)) continue;
+        // distance from o to the swept segment
+        const vx = o.pos.x - x0, vz = o.pos.z - z0, t = Math.max(0, Math.min(step, vx * S.dx + vz * S.dz));
+        if (Math.hypot(o.pos.x - (x0 + S.dx * t), o.pos.z - (z0 + S.dz * t)) > S.width / 2 + o.radius) continue;
+        S.hit.add(o);
+        const src = S.src.dead ? null : S.src;
+        let dealt = o.takeDamage(S.phys * S.mult, src, 'physical');
+        dealt += o.takeDamage(S.magic * S.mult, src, 'magic');
+        if (src) src.damageDealt += dealt;
+        o.addSlow(S.slow, S.slowTime);
+        S.mult *= 1 - S.falloff;                       // each enemy hit weakens the arrow by 10% of its current value
+        this.burst(o.pos, 5, [0x9ad8ff, 0xffffff], 2, 0.4);
+      }
+      if (S.left <= 0) { this.scene.remove(S.mesh); this.skillshots.splice(i, 1); }
+    }
+  }
+
   /** Execute an active ability. Returns false if it couldn't be cast. */
-  castAbility(u, A) {
+  castAbility(u, A, aim = null) {
     if (A.id === 'snipeStance') {
       const ok = u.toggleStance();
       if (ok && u.team === this.playerTeam) sfx(u.stance === 'stand' ? 'click' : 'order');
@@ -447,6 +496,31 @@ export class Game {
       }
       if (!t || t.dead || t.brainwashed || t.tower || t.invulnerable) return false;
       this.brainwash(u, t, A);
+      return true;
+    }
+    if (A.id === 'shieldStomp') {
+      const L = Math.max(1, this.upLevel(u.statTeam, 'shieldStomp'));
+      const hits = this.enemiesInRadius(u, A.radius);
+      for (const t of hits) { u.damageDealt += t.takeDamage(A.damage[L - 1], u, A.damageType); t.knockback(u.pos, A.knockback); }
+      this.burst(u.pos, 20, [0x9aa3ab, 0xcdd3da, 0x5a6470], 5, 0.6, 1.1);
+      if (this.audible(u.pos.x)) sfx('baseHit', 120);
+      this.emit('ability', u, A, hits.length);
+      return true;
+    }
+    if (A.id === 'arrowPiercer') {
+      aim ||= u.target && !u.target.dead ? { x: u.target.pos.x, z: u.target.pos.z } : null;
+      if (!aim) return false;
+      const L = Math.max(1, this.upLevel(u.statTeam, 'arrowPiercer'));
+      let dx = aim.x - u.pos.x, dz = aim.z - u.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+      const mesh = new THREE.Group();
+      const shaft = new THREE.Mesh(boxGeo(0.12, 0.12, 1.6), sharedMat(0xd8f0ff, { emissive: 0x4a8ac0 }));
+      const glow = new THREE.Mesh(boxGeo(0.5, 0.5, 0.5), sharedMat(0x9ad8ff, { emissive: 0x3a7ab8 }));
+      glow.position.z = 0.8; mesh.add(shaft, glow);
+      mesh.position.set(u.pos.x, 1.3 + (u.pos.y || 0), u.pos.z); mesh.rotation.y = Math.atan2(dx, dz);
+      this.scene.add(mesh);
+      this.skillshots.push({ src: u, team: u.team, x: u.pos.x, z: u.pos.z, dx, dz, speed: A.speed, left: A.range, width: A.width,
+        phys: u.effDamage, magic: A.bonusMagic[L - 1], mult: 1, falloff: A.falloff, slow: A.slow, slowTime: A.slowTime, hit: new Set(), mesh });
+      if (this.audible(u.pos.x)) sfx('bow', 40);
       return true;
     }
     if (A.id === 'flurry' || A.id === 'suppressiveFire') {
@@ -580,7 +654,8 @@ export class Game {
       imp: [0xb8342a, 0x7a1f1a, 0x3a2a2a, 0xffd23a], sniper: [0x4a5a3a, 0x2f3a26, 0x1a1d22, 0x6b7b4a],
       direBear: [0x5a3a22, 0x3a2414, 0x8a6a4a], blueBear: [0x4a6a9a, 0x2f4a70, 0x9ab0d0],
       banshee: [0x8a7ab8, 0xd8d0f0, 0x9af0ff], smallBanshee: [0xa89ad0, 0xd8d0f0, 0x9af0ff],
-      alphaThug: [0xa02a2a, 0xf2c94c, 0x1a1a22], hooligan: [0x2f6b3a, 0xf0f0f0, 0x2f2f2f], outlaw: [0x2a1a10, 0x8a2a2a, 0x9aa3ab] }[u.def.id] || [0x888888];
+      alphaThug: [0xa02a2a, 0xf2c94c, 0x1a1a22], lancer: [0xb8c0c8, 0x2f62b8, 0x6b4a2a], elf: [0x4c8c36, 0xe8e2c8, 0x9ad8ff],
+      riotSkirmisher: [0x232c40, 0x9ad0ff, 0x111111], reconDrone: [0x3b4652, 0x9aa3ab, 0x4aa3ff], hooligan: [0x2f6b3a, 0xf0f0f0, 0x2f2f2f], outlaw: [0x2a1a10, 0x8a2a2a, 0x9aa3ab] }[u.def.id] || [0x888888];
     this.burst(u.pos, 14, cols, 4, 1.1);
     this.emit('death', u);
   }
@@ -809,6 +884,8 @@ export class Game {
     }
 
     this.updateProjectiles(dt);
+    this.updateSkillshots(dt);
+    this.updateTrails(dt);
     if (!this.over) { this.updateCamps(); this.updateLoot(dt); }
     this.vision?.update(dt);
     this.applyFog();

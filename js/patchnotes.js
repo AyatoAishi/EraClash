@@ -6,6 +6,35 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.11.0', date: '2026-10-24T11:15:00+08:00', title: 'Lancer, Elf, Riot Skirmisher & Recon Drone',
+    sections: [
+      { title: 'New troops — Medieval', items: [
+        '<b>Lancer</b> (160g): cavalry with a 2.2-reach lance. <b>Courage Aura</b>: allies within 3 get +2 ward and +1 HP regen (doesn\'t stack). <b>Barding Rally</b>: leaves a 2s trail; allies on it move 20% faster.',
+        '<b>Elf</b> (120g): ranged, 10 range, 28/20 vision, <b>100 mana</b> (+1/s). <b>Night Meld</b>: at night, standing still 2s without attacking makes her invisible.',
+      ] },
+      { title: 'New troops — Modern', items: [
+        '<b>Riot Skirmisher</b> (150g): shield bearer. <b>Bulwark</b> (unbreakable): basic attacks from the front 120° deal 30% less, crits included.',
+        '<b>Recon Drone</b> (160g): <b>flying</b>. <b>Penetration</b>: attacks shred 2 armor for 3s.',
+      ] },
+      { title: 'New upgrades', items: [
+        'Lancer: <b>Critical Strike</b> (5 lv, 250–4000g: 30% for +80–160% damage) and <b>Cavalry Training</b> (stat boost).',
+        'Elf: <b>Arrow Piercer</b> (5 lv, 200–3200g): aimed line shot, 25 range, attack + 0/50/100/150/250 magic, 70% slow 1s, 10% weaker per enemy hit, 50 mana, 20s; and <b>Nightreign</b> (stat boost).',
+        'Riot Skirmisher: <b>Shield Stomp</b> (5 lv, 250–4000g): 80–240 magic in 2 range + 2.5 knockback, 20s; and <b>Iron Regimen</b> (stat boost).',
+        'Recon Drone: <b>Penetration</b> (5 lv, 300–4800g): shred 4–12 armor, max level +20 attack speed; and <b>Firmware Update</b> (stat boost).',
+      ] },
+      { title: 'New systems', items: [
+        '<b>Flying units</b>: hover 3 above the ground, fly over trees and buildings, see over them, can\'t be hit by melee; ranged attacks against them miss 50%.',
+        '<b>Break</b> debuff: disables a unit\'s passives for a while (unbreakable: Immaterial, Bulwark). Broken passives show dark with a red slash. Nothing applies Break yet.',
+        '<b>Mana</b>: optional per unit (blue bar under HP). Abilities can cost mana.',
+        '<b>Invisibility</b>: invisible enemies can\'t be seen or targeted unless detected (detection comes with Sentry Wards later). Your own invisible troops look like ghosts.',
+        '<b>Aimed abilities</b>: press the key, a range line follows the cursor, left-click fires, right-click / S / Esc cancels. Some abilities have a short cast time (S interrupts).',
+        '<b>Auras</b> are now generic: the same aura never stacks, different auras add up.',
+        'Up to <b>5 actives</b> per unit (Q W E R <b>T</b>); passives are unlimited. Hotkeys now map to the 1st, 2nd… <b>active</b> ability (passives no longer take a key slot).',
+      ] },
+      { title: 'UI', items: ['Selection panel shrinks its stat column so abilities and items always stay visible on smaller screens.', 'Barracks header now explains the research queue.'] },
+    ],
+  },
+  {
     version: '0.10.4', date: '2026-10-24T10:35:00+08:00', title: 'Ranger',
     sections: [ { title: 'Changes', items: ['The <b>Archer</b> is now called the <b>Ranger</b> (stats and upgrades unchanged; Battlement now puts Rangers on the walls).'] } ],
   },

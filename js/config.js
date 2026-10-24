@@ -26,7 +26,9 @@ export const GAME = {
   defaultVision: [30, 16],
   dmgVariance: 1,        // each hit rolls damage +/- this much
   invSlots: 6,           // item slots per troop
-  maxAbilities: 4,       // passives + actives combined, per troop
+  maxActives: 5,         // active abilities per unit (hotkeys Q W E R T); passives are unlimited
+  flyHeight: 3,          // flying units hover this far above the ground
+  flyingMiss: 0.5,       // ranged attacks against flying units miss this often (melee can't hit them at all)
   spawnInvuln: 5,        // seconds of invulnerability (no damage, no CC) after spawning
 };
 
@@ -41,7 +43,7 @@ export const FACTIONS = {
     baseName: 'Stone Keep',
     emblem: 'em-medieval',                // pixel symbol id in index.html
     color: '#d9a441',
-    units: ['viking', 'archer', 'imp'],   // shop order = default buy key order (1, 2, 3...)
+    units: ['viking', 'archer', 'imp', 'sniper', 'lancer', 'elf'],   // shop order = default buy key order (1, 2, 3...)
   },
   modern: {
     id: 'modern',
@@ -51,7 +53,7 @@ export const FACTIONS = {
     baseName: 'Command HQ',
     emblem: 'em-modern',
     color: '#4aa3ff',
-    units: ['police', 'gunner', 'sniper'],
+    units: ['police', 'gunner', 'sniper', 'riotSkirmisher', 'reconDrone'],
   },
 };
 
@@ -162,6 +164,49 @@ export const UNITS = {
     lore: 'Ghillie hood, long rifle, zero patience for close quarters. Lies down, waits, and deletes whatever wanders into the crosshair.',
   },
 };
+
+// ---------- v0.11.0 troops ----------
+Object.assign(UNITS, {
+  lancer: {
+    id: 'lancer', name: 'Lancer', theme: 'medieval', family: 'melee', role: 'Cavalry lancer', type: 'melee',
+    cost: 160, trainTime: 5,
+    hp: 140, hpRegen: 1.2, damage: 18, damageType: 'physical', attackSpeed: 45,
+    armor: 4, ward: 1, evasion: 0, missChance: 0,
+    moveSpeed: 4.1, range: 2.2, vision: [30, 16], aggro: 10, radius: 0.7,
+    abilities: ['courageAura', 'bardingRally'],
+    lore: 'A knight of the Keep on a barded warhorse, banner on his back. Where he rides, the army follows a little braver and a little faster.',
+  },
+  elf: {
+    id: 'elf', name: 'Elf', theme: 'medieval', family: 'marksman', role: 'Night ranger', type: 'ranged',
+    cost: 120, trainTime: 3,
+    hp: 100, hpRegen: 0.6, damage: 19, damageType: 'physical', attackSpeed: 55,
+    armor: 1, ward: 3, evasion: 0, missChance: 0,
+    moveSpeed: 3.2, range: 10, vision: [28, 20], aggro: 13, radius: 0.45,
+    mana: 100, manaRegen: 1,
+    projectile: { kind: 'arrow', speed: 20, arc: 0.18 },
+    abilities: ['nightMeld'],
+    lore: 'Long hair, blue eyes, armor of woven leaves. Sees farther in the dark than any human, and when the moon is up she simply stops being there.',
+  },
+  riotSkirmisher: {
+    id: 'riotSkirmisher', name: 'Riot Skirmisher', theme: 'modern', family: 'melee', role: 'Shield bearer', type: 'melee',
+    cost: 150, trainTime: 2.5,
+    hp: 120, hpRegen: 1, damage: 19, damageType: 'physical', attackSpeed: 45,
+    armor: 3, ward: 4, evasion: 0, missChance: 0,
+    moveSpeed: 2.9, range: 2, vision: [30, 16], aggro: 9, radius: 0.55,
+    abilities: ['bulwark'],
+    lore: 'Heavier than a patrol officer and twice as stubborn. The riot shield never drops: whatever comes from the front hits the polycarbonate first.',
+  },
+  reconDrone: {
+    id: 'reconDrone', name: 'Recon Drone', theme: 'modern', family: 'marksman', role: 'Flying harasser', type: 'ranged', flying: true,
+    cost: 160, trainTime: 4.5,
+    hp: 70, hpRegen: 0.1, damage: 20, damageType: 'physical', attackSpeed: 40,
+    armor: 2, ward: 0, evasion: 0, missChance: 0,
+    moveSpeed: 3.3, range: 2, vision: [30, 16], aggro: 10, radius: 0.5,
+    projectile: { kind: 'bullet', speed: 60, arc: 0 },
+    abilities: ['penetration'],
+    lore: 'A quad-rotor with two carbines bolted underneath. Flies over walls and trees, sees everything, and chews through armor. Swords can\'t reach it.',
+  },
+});
 
 // ---------- creeps: ordinary units too (hireable by any roster, spawned by camps in neutrals.js) ----------
 Object.assign(UNITS, {
@@ -284,7 +329,7 @@ export const ABILITIES = {
   // ---------- neutral creep abilities ----------
   resentment: { id: 'resentment', kind: 'passive', name: 'Resentment', icon: 'a-resent', threshold: 30, bonusDamage: 5, bonusAS: 30, duration: 3,
     desc: 'After taking 30 damage, gains +5 damage and +30 attack speed for 3 seconds.' },
-  immaterial: { id: 'immaterial', kind: 'passive', name: 'Immaterial', icon: 'a-immaterial', static: { bonusEvasion: 50 }, desc: '50% chance to evade attacks.' },
+  immaterial: { id: 'immaterial', kind: 'passive', name: 'Immaterial', icon: 'a-immaterial', unbreakable: true, static: { bonusEvasion: 50 }, desc: '50% chance to evade attacks. Can\'t be broken.' },
   brainwash: { id: 'brainwash', kind: 'active', name: 'Brainwash', icon: 'a-brainwash', cooldown: 20, castRange: 8, duration: 15, castChance: 0.25,
     desc: 'Each fight (and each time the 20s cooldown ends mid-fight) the Banshee has a 25% chance to cast it, a few seconds in: one enemy troop it is fighting loses its will for 15s — it switches sides, attacks its former allies, then despawns (no bounty).' },
   moraleAura: { id: 'moraleAura', kind: 'passive', name: 'Morale Aura', icon: 'a-morale', aura: { radius: 4, bonusArmor: 2 },
@@ -308,12 +353,33 @@ export const ABILITIES = {
     id: 'deathSplatter', kind: 'passive', name: 'Death Splatter', icon: 'u-deathsplat', granted: true,
     desc: 'When this Imp dies, it automatically triggers Splatter.',
   },
+  // ---------- v0.11.0 ----------
+  courageAura: { id: 'courageAura', kind: 'passive', name: 'Courage Aura', icon: 'a-courage', aura: { radius: 3, bonusWard: 2, bonusRegen: 1 },
+    desc: 'Allies (and itself) within 3 range gain +2 ward and +1 HP regen. Doesn\'t stack with other Courage Auras.' },
+  bardingRally: { id: 'bardingRally', kind: 'passive', name: 'Barding Rally', icon: 'a-rally', dropEvery: 0.25, trailTime: 2, speedBonus: 0.2,
+    desc: 'While moving, leaves a trail that lasts 2s. Allies walking on it move 20% faster.' },
+  critStrike: { id: 'critStrike', kind: 'passive', name: 'Critical Strike', icon: 'u-crit', granted: true, chance: 0.3, bonus: [0.8, 1.0, 1.2, 1.4, 1.6],
+    desc: '30% chance on attack to deal +80/100/120/140/160% damage (by Critical Strike level).' },
+  arrowPiercer: { id: 'arrowPiercer', kind: 'active', name: 'Arrow Piercer', icon: 'u-piercer', granted: true, cast: 'line',
+    castTime: 0.4, cooldown: 20, manaCost: 50, speed: 10, range: 25, width: 1, bonusMagic: [0, 50, 100, 150, 250], falloff: 0.1, slow: 70, slowTime: 1,
+    ai: { whenAttacking: true },
+    desc: 'Aim a piercing arrow in a line (25 range). Hits every enemy on its path for the Elf\'s attack damage + 0/50/100/150/250 magic and slows 70% for 1s. Each enemy hit weakens it by 10%. Costs 50 mana.' },
+  nightMeld: { id: 'nightMeld', kind: 'passive', name: 'Night Meld', icon: 'a-nightmeld', stillFor: 2,
+    desc: 'At night, standing still for 2s without attacking makes the Elf invisible. Moving or attacking breaks it.' },
+  shieldStomp: { id: 'shieldStomp', kind: 'active', name: 'Shield Stomp', icon: 'u-stomp', granted: true,
+    castTime: 0.3, cooldown: 20, radius: 2, damage: [80, 120, 160, 200, 240], damageType: 'magic', knockback: 2.5,
+    ai: { whenAttacking: true },
+    desc: 'Slams the shield down: 80/120/160/200/240 magic damage to enemies within 2 range and knocks them 2.5 away.' },
+  bulwark: { id: 'bulwark', kind: 'passive', name: 'Bulwark', icon: 'a-bulwark', unbreakable: true, reduction: 0.3, arc: Math.PI * 2 / 3,
+    desc: 'Basic attacks from the front (120°) deal 30% less damage, crits included. On-hit extras are not reduced. Can\'t be broken.' },
+  penetration: { id: 'penetration', kind: 'passive', name: 'Penetration', icon: 'a-penetration', shred: [2, 4, 6, 8, 10, 12], duration: 3, maxBonusAS: 20,
+    desc: 'Attacks reduce the target\'s armor by 2 (4–12 with the Penetration upgrade) for 3s. Max upgrade: +20 attack speed.' },
 };
 export const PASSIVES = ABILITIES;   // back-compat alias
 
 // sanity check: no troop may exceed the ability cap
 for (const u of Object.values(UNITS)) {
-  if ((u.abilities || []).length > GAME.maxAbilities) console.warn(`${u.id} has more than ${GAME.maxAbilities} abilities`);
+  if ((u.abilities || []).filter((a) => ABILITIES[a]?.kind === 'active').length > GAME.maxActives) console.warn(`${u.id} has more than ${GAME.maxActives} actives`);
   for (const a of u.abilities || []) if (!ABILITIES[a]) console.warn(`${u.id}: unknown ability ${a}`);
 }
 

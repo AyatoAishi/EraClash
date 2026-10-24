@@ -71,6 +71,7 @@ export class Controls {
     this.apply();
     this.updateRange(dt);
     this.updateHover();
+    this.updateAiming();
     // prune dead units out of selection
     const gone = (u) => u.dead || (u.team !== this.team && !u.obj.visible);   // enemies that slip into the fog drop out of selection
     if (this.selection.some(gone)) {
@@ -142,7 +143,7 @@ export class Controls {
       if (u.immobile) pts.push([0.7, 0.35], [1.4, 0.35]);            // prone: body lies forward
       for (const [fwd, y] of pts) {
         const p = { x: u.pos.x + Math.sin(u.facing) * fwd * 1.25, z: u.pos.z + Math.cos(u.facing) * fwd * 1.25 };
-        const s = this.toScreen(p, y);
+        const s = this.toScreen(p, y + (u.flying ? u.pos.y : 0));
         const d2 = (s.x - sx) ** 2 + ((s.y - sy) * 0.75) ** 2;
         if (d2 < bd) { bd = d2; best = u; }
       }
@@ -297,7 +298,14 @@ export class Controls {
     units.forEach((u) => u.command({ type: 'charge' }));
     sfx('attack');
   }
-  /** Cast ability slot i on every selected troop of the primary troop's type. */
+  /** Hotkey k (Q W E R T) = the k-th ACTIVE ability of the primary selected troop. */
+  castActive(k) {
+    const units = this.own();
+    if (!units.length) return false;
+    const i = units[0].activeSlot(k);
+    return i >= 0 ? this.castSlot(i) : false;
+  }
+  /** Cast ability slot i on every selected troop of the primary troop's type. Ground-targeted abilities arm a targeting cursor first. */
   castSlot(i) {
     const units = this.own();
     if (!units.length) return false;
@@ -305,10 +313,45 @@ export class Controls {
     const a = units[0].abil[i];
     if (!a) return false;
     if (a.def.kind !== 'active') { this.hooks.toast?.(`${a.def.name} is passive`); return false; }
+    const ready = units.filter((u) => u.def.id === type && u.abil[i]?.st.cd <= 0 && (u.abil[i].def.manaCost || 0) <= u.mana && !u.casting);
+    if (!ready.length) { this.hooks.toast?.((a.def.manaCost || 0) > units[0].mana ? `Not enough mana for ${a.def.name}` : `${a.def.name} not ready`); return false; }
+    if (a.def.cast === 'line') { this.setArmed(false); this.targeting = { slot: i, def: a.def, type }; document.body.classList.add('armed'); return true; }
     let n = 0;
-    for (const u of units) if (u.def.id === type && u.castAbility(i)) n++;
-    if (!n) this.hooks.toast?.(`${a.def.name} not ready`);
+    for (const u of ready) if (u.castAbility(i)) n++;
     return n > 0;
+  }
+  /** Ground-targeted cast: every ready troop of that type fires toward the clicked point. */
+  targetClickAt(sx, sy) {
+    const T = this.targeting; this.cancelTargeting();
+    const p = this.groundAt(sx, sy); if (!T || !p) return;
+    let n = 0;
+    for (const u of this.own()) if (u.def.id === T.type && u.castAbility(T.slot, { x: p.x, z: p.z })) n++;
+    if (n) sfx('attack');
+  }
+  cancelTargeting() {
+    if (!this.targeting) return false;
+    this.targeting = null; document.body.classList.toggle('armed', this.armed);
+    if (this.aimMesh) this.aimMesh.visible = false;
+    return true;
+  }
+  /** Line indicator from the primary caster toward the cursor (Dota-style range preview). */
+  updateAiming() {
+    const T = this.targeting;
+    if (!T || !this.game) { if (this.aimMesh) this.aimMesh.visible = false; return; }
+    const u = this.own().find((x) => x.def.id === T.type);
+    if (!u) return this.cancelTargeting();
+    if (!this.aimMesh) {
+      this.aimMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.05, 1), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, transparent: true, opacity: 0.35, depthWrite: false }));
+      this.aimMesh.material.userData.noFow = true; this.aimMesh.renderOrder = 6;
+      this.game.scene.add(this.aimMesh);
+    }
+    const p = this.groundAt(this.mouse.x, this.mouse.y); if (!p) return;
+    let dx = p.x - u.pos.x, dz = p.z - u.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+    const L = T.def.range;
+    const m = this.aimMesh;
+    m.visible = true; m.scale.set(T.def.width, 1, L);
+    m.position.set(u.pos.x + dx * L / 2, 0.12 + Math.max(0, u.pos.y || 0), u.pos.z + dz * L / 2);
+    m.rotation.y = Math.atan2(dx, dz);
   }
   setArmed(v) {
     this.armed = v && this.own().length > 0;
@@ -374,9 +417,11 @@ export class Controls {
     addEventListener('mousedown', (e) => {
       if (!this.enabled || !isCanvas(e)) return;
       if (e.button === 0) {
+        if (this.targeting) { this.targetClickAt(e.clientX, e.clientY); return; }
         if (this.armed) { this.armedClickAt(e.clientX, e.clientY); return; }
         this.drag = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, box: false, shift: e.shiftKey };
       } else if (e.button === 2) {
+        if (this.cancelTargeting()) return;
         if (this.armed) { this.setArmed(false); return; }
         this.rightClickAt(e.clientX, e.clientY);
       } else if (e.button === 1) {
@@ -433,8 +478,8 @@ export class Controls {
         if (id) { e.preventDefault(); this.hooks.buy?.(id, e.shiftKey); return; }
       }
       // 2) ability slots (Q W E R by default)
-      const slot = ['abil1', 'abil2', 'abil3', 'abil4'].findIndex((a) => k[a] === e.code);
-      if (slot >= 0 && this.own().length) { e.preventDefault(); this.castSlot(slot); return; }
+      const slot = ['abil1', 'abil2', 'abil3', 'abil4', 'abil5'].findIndex((a) => k[a] === e.code);
+      if (slot >= 0 && this.own().length) { e.preventDefault(); this.castActive(slot); return; }
       // 3) control groups
       if (e.code.startsWith('Digit') && e.code !== 'Digit0') {
         const n = e.code.slice(5);
@@ -456,7 +501,7 @@ export class Controls {
         return;
       }
       if (e.code === k.attackMove) { e.preventDefault(); this.setArmed(true); }
-      else if (e.code === k.stop) { this.setArmed(false); this.stop(); }
+      else if (e.code === k.stop) { this.cancelTargeting(); this.setArmed(false); this.stop(); }
       else if (e.code === k.charge) this.charge();
       else if (e.code === k.shop) this.hooks.toggleShop?.();
       else if (e.code === k.barracks) this.hooks.toggleBarracks?.();

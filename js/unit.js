@@ -45,12 +45,18 @@ export class Unit {
     this.recalcStats();
     this.hp = this.stats.hp;
     // abilities: up to 4 slots (passives + actives). Each slot keeps its own state `st`.
-    this.abil = (this.def.abilities || []).slice(0, GAME.maxAbilities).map((id) => ({
+    let nAct = 0;
+    this.abil = (this.def.abilities || []).filter((id) => ABILITIES[id] && (ABILITIES[id].kind !== 'active' || ++nAct <= GAME.maxActives)).map((id) => ({
       def: ABILITIES[id],
       st: { active: false, stacks: 0, bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, target: null, sinceAttack: 99, scanT: Math.random() * 0.2, cd: 0 },
     }));
     this.pas = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, armorPierce: 0, lifesteal: 0 };   // summed passive bonuses
     this.slows = [];                   // [{ pct, t }] movement slows (strongest applies)
+    this.flying = !!this.def.flying;   // flying: hovers, ignores obstacles/terrain for movement & sight, melee can't hit it
+    this.maxMana = this.def.mana || 0; this.mana = this.maxMana;
+    this.breakT = 0;                   // Break debuff: passives disabled (except unbreakable ones)
+    this.stillT = 0;                   // seconds standing still without attacking (Night Meld)
+    this.invisible = false;
     this.syncAbilities();
     this.invulnT = GAME.spawnInvuln;   // spawn protection
     this.lastCrit = false;
@@ -144,7 +150,8 @@ export class Unit {
   syncAbilities() {
     const granted = this.game.teams?.[this.team]?.grants?.[this.def.id] || [];
     for (const id of granted) {
-      if (this.abil.length >= GAME.maxAbilities || this.ability(id)) continue;
+      if (this.ability(id)) continue;
+      if (ABILITIES[id].kind === 'active' && this.abil.filter((a) => a.def.kind === 'active').length >= GAME.maxActives) continue;
       this.abil.push({ def: ABILITIES[id], st: { active: false, stacks: 0, bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, target: null, sinceAttack: 99, scanT: 0, cd: 0, buffT: 0 } });
     }
   }
@@ -161,7 +168,14 @@ export class Unit {
     this.kb = { x: dx / d * dist, z: dz / d * dist, t: 0.15 };
   }
   get slowPct() { return this.slows.reduce((m, s) => Math.max(m, s.pct), 0); }
-  get armor() { return this.stats.armor + this.pas.bonusArmor; }
+  get armor() { return this.stats.armor + this.pas.bonusArmor - (this.shredT > 0 ? this.shred : 0); }
+  get broken() { return this.breakT > 0; }
+  /** Break: disables breakable passives for `t` seconds (Dota-style). */
+  applyBreak(t) { if (this.invulnerable || this.tower || this.dead) return; this.breakT = Math.max(this.breakT, t); }
+  /** Armor reduction debuff (strongest wins, refreshes). */
+  applyShred(v, t) { if (this.tower || this.dead) return; if (!(this.shredT > 0) || v >= this.shred) this.shred = v; this.shredT = t; }
+  /** Index of the k-th ACTIVE ability in this.abil (hotkeys Q W E R T map to actives in order). */
+  activeSlot(k) { let n = -1; for (let i = 0; i < this.abil.length; i++) if (this.abil[i].def.kind === 'active' && ++n === k) return i; return -1; }
   get ward() { return this.stats.ward + this.pas.bonusWard; }
   /** Invulnerable: takes no damage and (future) can't be crowd-controlled. Can still be targeted. */
   get invulnerable() { return this.invulnT > 0; }
@@ -169,8 +183,8 @@ export class Unit {
   get rangeRadius() { return this.effRange + this.radius; }
   /** Snipe Stance state: 'stand' | 'channel' | 'prone' (null if the troop has no stance) */
   get stance() { return this.ability('snipeStance')?.st.mode || null; }
-  get immobile() { const m = this.stance; return m === 'channel' || m === 'prone' || m === 'standup'; }
-  get effMoveSpeed() { return this.immobile ? 0 : this.stats.moveSpeed * (1 - this.slowPct / 100); }
+  get immobile() { const m = this.stance; return m === 'channel' || m === 'prone' || m === 'standup' || !!this.casting; }
+  get effMoveSpeed() { return this.immobile ? 0 : this.stats.moveSpeed * (1 - this.slowPct / 100) * (1 + (this.rallyT > 0 ? this.rallyBonus : 0)); }
   get damageTakenMult() { return this.stance === 'prone' ? this.ability('snipeStance').def.damageTakenMult : 1; }
   /** Projectile launch height (prone troops shoot from the ground) */
   get muzzleY() { return this.stance === 'prone' ? 0.45 : 1.75; }
@@ -218,6 +232,12 @@ export class Unit {
       // Old Man Shield: flat block on basic attacks, before armor
       const sh = ITEMS.oldManShield;
       if (this.hasItem('oldManShield') && Math.random() < sh.blockChance) raw = Math.max(0, raw - (sh.block[0] + Math.random() * (sh.block[1] - sh.block[0])));
+      // Bulwark: basic attacks from the front (incl. crits) deal less; on-hit extras are separate damage calls
+      const bw = this.ability('bulwark');
+      if (bw && source?.pos && !(this.broken && !bw.def.unbreakable)) {
+        const ang = Math.atan2(source.pos.x - this.pos.x, source.pos.z - this.pos.z) - this.facing;
+        if (Math.abs(Math.atan2(Math.sin(ang), Math.cos(ang))) <= bw.def.arc / 2) raw *= 1 - bw.def.reduction;
+      }
       // Riot Helmet: armor burst after being shot (applies from the NEXT hit)
       if (opts.ranged && this.hasItem('riotHelmet')) { this.helmetT = ITEMS.riotHelmet.helmet.duration; this.helmetArmor = ITEMS.riotHelmet.helmet.armor; }
     }
@@ -254,7 +274,22 @@ export class Unit {
   /** Passive logic + active cooldowns. Aura-style passives rescan 5x/sec. */
   updatePassive(dt) {
     const sum = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, armorPierce: 0, lifesteal: 0 };
+    if (this.maxMana && this.mana < this.maxMana) this.mana = Math.min(this.maxMana, this.mana + (this.def.manaRegen || 0) * dt);
+    if (this.breakT > 0) this.breakT -= dt;
+    if (this.shredT > 0) this.shredT -= dt;
+    if (this.rallyT > 0) this.rallyT -= dt;
+    this.updateCasting(dt);
+    // standing still without attacking (Night Meld etc.)
+    this.stillT = this.moving || (this.aimT > 0) || this.casting ? 0 : this.stillT + dt;
+    let invis = false;
     for (const { def: P, st: s } of this.abil) {
+      // Break: breakable passives are switched off entirely
+      if (P.kind === 'passive' && this.broken && !P.unbreakable) {
+        s.active = false; s.broken = true;
+        s.bonusDamage = s.bonusAS = s.bonusRegen = s.bonusEvasion = s.bonusArmor = s.bonusWard = s.bonusRange = s.lifesteal = 0;
+        continue;
+      }
+      s.broken = false;
       if (P.kind === 'active') {
         s.cd = Math.max(0, s.cd - dt);
         if (P.id === 'flurry' || P.id === 'suppressiveFire') {
@@ -290,8 +325,19 @@ export class Unit {
         s.active = s.buffT > 0;
         s.bonusDamage = s.active ? P.bonusDamage : 0;
         s.bonusAS = s.active ? P.bonusAS : 0;
-      } else if (P.id === 'moraleAura' || P.id === 'cleave') {
-        s.active = true;                    // handled by the receivers / on hit
+      } else if (P.aura || P.id === 'cleave' || P.id === 'bulwark' || P.id === 'critStrike') {
+        s.active = true;                    // handled by the receivers / on hit / in takeDamage / rollDamage
+      } else if (P.id === 'nightMeld') {
+        s.active = !!this.game.dayNight?.night && this.stillT >= P.stillFor && !this.tower;
+        if (s.active) invis = true;
+      } else if (P.id === 'bardingRally') {
+        s.active = this.moving;
+        s.dropT = (s.dropT || 0) - dt;
+        if (this.moving && s.dropT <= 0) { s.dropT = P.dropEvery; this.game.addTrail?.(this.team, this.pos.x, this.pos.z, P.trailTime, P.speedBonus); }
+      } else if (P.id === 'penetration') {
+        const L = this.upLevel('penetration');
+        s.active = true;
+        s.bonusAS = L >= 5 ? P.maxBonusAS : 0;
       } else if (P.id === 'swiftStep') {
         s.active = this.moving;
         s.bonusEvasion = s.active ? P.evasion : 0;
@@ -321,18 +367,28 @@ export class Unit {
       }
       sum.bonusDamage += s.bonusDamage; sum.bonusAS += s.bonusAS; sum.bonusRegen += s.bonusRegen; sum.bonusEvasion += s.bonusEvasion; sum.bonusArmor += s.bonusArmor || 0; sum.bonusWard += s.bonusWard || 0; sum.bonusRange += s.bonusRange || 0; sum.lifesteal += s.lifesteal || 0;
     }
-    // auras received (non-stacking): Morale Aura
+    this.invisible = invis;
+    // auras received: every aura ability (def.aura) from allies in range. The same aura never stacks (strongest
+    // copy wins); different auras add up. A broken aura carrier stops emitting.
     this.auraScan = (this.auraScan || 0) - dt;
     if (this.auraScan <= 0) {
-      this.auraScan = 0.2; this.auraArmor = 0;
+      this.auraScan = 0.2;
+      const got = {};
       for (const u of this.game.units) {
         if (u.dead || u.team !== this.team || !u.abil.length) continue;
-        const a = u.ability('moraleAura'); if (!a) continue;
-        const r = a.def.aura.radius;
-        if ((u.pos.x - this.pos.x) ** 2 + (u.pos.z - this.pos.z) ** 2 <= r * r) this.auraArmor = Math.max(this.auraArmor, a.def.aura.bonusArmor);
+        for (const { def: A } of u.abil) {
+          if (!A.aura || (u.broken && !A.unbreakable)) continue;
+          const r = A.aura.radius;
+          if ((u.pos.x - this.pos.x) ** 2 + (u.pos.z - this.pos.z) ** 2 > r * r) continue;
+          const cur = (got[A.id] ||= {});
+          for (const [k, v] of Object.entries(A.aura)) if (k !== 'radius') cur[k] = Math.max(cur[k] || 0, v);
+        }
       }
+      this.auraBonus = { bonusArmor: 0, bonusWard: 0, bonusRegen: 0, bonusDamage: 0, bonusAS: 0 };
+      for (const a of Object.values(got)) for (const [k, v] of Object.entries(a)) this.auraBonus[k] = (this.auraBonus[k] || 0) + v;
+      this.auras = Object.keys(got);
     }
-    sum.bonusArmor += this.auraArmor || 0;
+    if (this.auraBonus) for (const [k, v] of Object.entries(this.auraBonus)) sum[k] = (sum[k] || 0) + v;
     if (this.helmetT > 0) { this.helmetT -= dt; sum.bonusArmor += this.helmetArmor || 0; }
     if (this.disarmT > 0) this.disarmT -= dt;
     this.pas = sum;
@@ -340,6 +396,7 @@ export class Unit {
 
   /** Called when a swing/shot starts against `tg`. */
   onAttackStart(tg) {
+    this.stillT = 0; this.invisible = false;
     if (tg && tg.team !== undefined) this.game.vision?.reveal(this, tg.team);   // attacking gives your position away
     const f = this.ability('fervor');
     if (f) { if (f.st.target !== tg) { f.st.target = tg; f.st.stacks = 0; } f.st.sinceAttack = 0; }
@@ -362,6 +419,11 @@ export class Unit {
       be.st.stacks = (be.st.stacks || 0) + 1;
       if (be.st.stacks >= every) { be.st.stacks = 0; d = Math.round(d * (1 + crit)); this.lastCrit = true; }
     }
+    const cs = this.ability('critStrike');
+    if (cs && !cs.st.broken && Math.random() < cs.def.chance) {
+      const L = Math.max(1, this.upLevel('criticalStrike'));
+      d = Math.round(d * (1 + cs.def.bonus[L - 1])); this.lastCrit = true;
+    }
     const e = this.ability('eagleEye');
     if (e && Math.random() < e.def.chance) { d += e.def.bonusDamage; this.lastCrit = true; }
     return d;
@@ -372,6 +434,9 @@ export class Unit {
     if (dealt > 0) this.game.emit('hitDmg', tg.pos, dealt, crit, this.team);
     if (this.pas.lifesteal && dealt > 0 && !this.dead) this.hp = Math.min(this.maxHp, this.hp + dealt * this.pas.lifesteal / 100);
     const g = this.game;
+    // Penetration: armor shred on the target
+    const pen = this.ability('penetration');
+    if (pen && !pen.st.broken && !tg.dead) tg.applyShred(pen.def.shred[this.upLevel('penetration')], pen.def.duration);
     // Shackles (melee carriers): chance to disarm
     if (!this.ranged && this.hasItem('shackles') && !tg.dead && !tg.invulnerable && !tg.tower && !tg.disarmed && Math.random() < ITEMS.shackles.disarm.chance) {
       tg.disarmT = ITEMS.shackles.disarm.duration; tg.pendingHit = null;
@@ -404,21 +469,47 @@ export class Unit {
   /** Dota-style hit check for an ATTACK from `attacker`: returns 'miss' | 'evade' | null (hit). */
   dodgeCheck(attacker) {
     if (attacker?.stats?.missChance && Math.random() * 100 < attacker.stats.missChance) return 'miss';
+    // flying: ranged attacks miss often (melee can't target flying at all)
+    if (this.flying) { if (attacker?.ranged && Math.random() < GAME.flyingMiss) return 'miss'; }
     // high ground: ranged attacks from the river up onto the banks can miss
-    if (attacker?.ranged && !attacker.tower && attacker.groundLevel < this.groundLevel && Math.random() < GAME.highGround.uphillMiss) return 'uphill';
+    else if (attacker?.ranged && !attacker.tower && attacker.groundLevel < this.groundLevel && Math.random() < GAME.highGround.uphillMiss) return 'uphill';
     const ev = this.effEvasion;
     if (ev > 0 && Math.random() * 100 < ev) return 'evade';
     return null;
   }
 
   /** Activate ability in slot i (0-3). Returns true if it fired. */
-  castAbility(i) {
+  /**
+   * Cast ability slot i. `aim` = {x,z} for ground-targeted abilities. Abilities with a castTime wind up first
+   * (unit stops; S cancels). Mana and cooldown are spent when the cast goes off.
+   */
+  castAbility(i, aim = null) {
     const a = this.abil[i];
-    if (!a || this.dead || a.def.kind !== 'active' || a.st.cd > 0) return false;
-    if (!this.game.castAbility(this, a.def)) return false;
+    if (!a || this.dead || a.def.kind !== 'active' || a.st.cd > 0 || this.casting) return false;
+    if ((a.def.manaCost || 0) > this.mana) return false;
+    if (a.def.castTime) {
+      this.casting = { i, t: a.def.castTime, aim };
+      this.pendingHit = null; this.swing = 0;
+      if (aim) this.faceTowards(aim.x - this.pos.x, aim.z - this.pos.z, 1, 1);
+      return true;
+    }
+    return this.finishCast(i, aim);
+  }
+  finishCast(i, aim) {
+    const a = this.abil[i];
+    if (!a || this.dead || (a.def.manaCost || 0) > this.mana) return false;
+    if (!this.game.castAbility(this, a.def, aim)) return false;
+    this.mana -= a.def.manaCost || 0;
     // Snipe Stance: going prone costs the short cooldown; standing up sets its own cooldown when it finishes
     a.st.cd = a.def.id === 'snipeStance' && a.st.mode !== 'channel' ? 0 : (a.def.cooldown || 0);
+    this.stillT = 0;
     return true;
+  }
+  updateCasting(dt) {
+    const c = this.casting; if (!c) return;
+    if (c.aim) this.faceTowards(c.aim.x - this.pos.x, c.aim.z - this.pos.z, dt, 14);
+    c.t -= dt;
+    if (c.t <= 0) { this.casting = null; this.finishCast(c.i, c.aim); }
   }
 
   /** Snipe Stance toggle: stand -> channel (immobile) -> prone; recast while channeling/prone -> stand. */
@@ -440,6 +531,7 @@ export class Unit {
     let cancelled = false;
     if (a && a.st.mode === 'channel') { a.st.mode = 'stand'; a.st.cd = 0; cancelled = true; }
     if (this.pendingHit) { this.pendingHit = null; this.swing = 0; cancelled = true; }
+    if (this.casting) { this.casting = null; cancelled = true; }
     return cancelled;
   }
 
@@ -461,6 +553,8 @@ export class Unit {
         } else st.idleT = 0;
         continue;
       }
+      if (A.id === 'arrowPiercer' && this.target && !this.target.dead && this.aimT > 0 && this.mana >= (A.manaCost || 0)) { this.castAbility(i, { x: this.target.pos.x, z: this.target.pos.z }); continue; }
+      if (A.id === 'shieldStomp' && this.aimT > 0 && this.game.enemiesInRadius(this, A.radius + 0.3).length) { this.castAbility(i); continue; }
       if (A.id === 'splatter') {
         const n = this.game.enemiesInRadius(this, A.radius).length;
         if (n >= A.aiCast.minTargets || (n >= 1 && this.hp / this.maxHp < A.aiCast.lowHpPct)) this.castAbility(i);
@@ -518,6 +612,7 @@ export class Unit {
     const o = this.order;
     if (o.type === 'attack') {
       if (!o.target || o.target.dead) this.order = { type: 'idle' };
+      else if (o.target.flying && !this.ranged) this.command({ type: 'attackMove', point: { x: o.target.pos.x, z: o.target.pos.z } });   // melee can't hit flyers
       else if (!o.target.isBase && !g.canSee(this.team, o.target)) this.command({ type: 'attackMove', point: { x: o.target.pos.x, z: o.target.pos.z } });   // lost in the fog: go to the last seen spot
       else engage = o.target;
     }
@@ -551,7 +646,7 @@ export class Unit {
     }
 
     let attacking = false;
-    if (this.stance === 'channel' || this.stance === 'standup') { engage = null; goal = null; attacking = true; }   // channeling: can't move or shoot
+    if (this.stance === 'channel' || this.stance === 'standup' || this.casting) { engage = null; goal = null; attacking = true; }   // channeling: can't move or shoot
     if (engage) {
       const dist = engage.isBase ? g.distToBase(this, engage.team) : this.edgeDist(engage);
       if (dist <= this.effRange) {
@@ -583,7 +678,7 @@ export class Unit {
     }
     let sx = 0, sz = 0;
     for (const u of g.units) {
-      if (u === this || u.dead) continue;
+      if (u === this || u.dead || u.flying !== this.flying) continue;   // flyers and walkers don't bump into each other
       const dx = this.pos.x - u.pos.x, dz = this.pos.z - u.pos.z;
       const min = this.radius + u.radius + 0.12;
       const d2 = dx * dx + dz * dz;
@@ -636,8 +731,8 @@ export class Unit {
     }
     if (this.nState === 'chase') {
       let tg = this.nTarget;
-      if (!tg || tg.dead) {   // look for another enemy of the same team nearby
-        tg = this.nTarget = g.units.find((o) => !o.dead && !o.tower && o.team === this.aggroTeam && this.edgeDist(o) < 7) || null;
+      if (!tg || tg.dead || (tg.flying && !this.ranged)) {   // look for another enemy of the same team nearby (melee: no flyers)
+        tg = this.nTarget = g.units.find((o) => !o.dead && !o.tower && o.team === this.aggroTeam && !(o.flying && !this.ranged) && this.edgeDist(o) < 7) || null;
       }
       if (!tg || fromHome > R.leash || g.time - this.lastHitT > R.giveUpAfter) { this.nState = 'return'; this.nTarget = null; this.aggroTeam = null; for (const x of this.abil) x.st.roll = undefined; }
       else {
@@ -680,7 +775,7 @@ export class Unit {
     }
     let sx = 0, sz = 0;
     for (const o of g.units) {
-      if (o === this || o.dead || o.tower) continue;
+      if (o === this || o.dead || o.tower || o.flying !== this.flying) continue;
       const dx = this.pos.x - o.pos.x, dz = this.pos.z - o.pos.z, min = this.radius + o.radius + 0.12, d2 = dx * dx + dz * dz;
       if (d2 < min * min && d2 > 1e-6) { const dd = Math.sqrt(d2), push = (min - dd) / min; sx += dx / dd * push; sz += dz / dd * push; }
     }
@@ -743,7 +838,7 @@ export class Unit {
 
   /** Next point to walk toward on the way to `goal`: straight if the line is clear, else an A* path (cached, re-planned when the goal moves or the map changes). */
   steer(goal, dt) {
-    const T = this.game.terrain; if (!T) return goal;
+    const T = this.game.terrain; if (!T || this.flying) return goal;   // flying: straight over everything
     const p = this.pos;
     const nav = this.nav || (this.nav = { gx: 1e9, gz: 1e9, path: null, t: 0, ver: -1, direct: true });
     nav.t -= dt;
@@ -761,8 +856,8 @@ export class Unit {
   /** Keep out of obstacles and stand on the terrain (river = low ground). */
   groundPos() {
     const T = this.game.terrain; if (!T) return;
-    T.resolve(this.pos, this.radius * 0.9);
-    this.pos.y = T.heightAt(this.pos.x);
+    if (!this.flying) T.resolve(this.pos, this.radius * 0.9);
+    this.pos.y = T.heightAt(this.pos.x) + (this.flying ? GAME.flyHeight : 0);
   }
   /** Vision radius right now (nightF 0 = day, 1 = night). */
   visionRadius(nightF = 0) {
@@ -773,7 +868,7 @@ export class Unit {
     return r;
   }
   /** 0 = low ground (river), 1 = high ground */
-  get groundLevel() { return this.game.terrain ? this.game.terrain.level(this.pos.x) : 1; }
+  get groundLevel() { return this.flying ? 2 : this.game.terrain ? this.game.terrain.level(this.pos.x) : 1; }
 
   faceTowards(dx, dz, dt, rate) {
     if (Math.abs(dx) + Math.abs(dz) < 1e-4) return;
@@ -865,6 +960,17 @@ export class Unit {
     if (r.hover) {   // banshees float and bob
       this.bobT = (this.bobT || 0) + dt * 3;
       r.body.position.y = 0.35 + Math.sin(this.bobT) * 0.12;
+    }
+    if (this.invisible !== this._lookInvis) {   // own side sees an invisible troop as a ghost
+      this._lookInvis = this.invisible;
+      for (const m of r.matList) { m.transparent = this.invisible; m.opacity = this.invisible ? 0.35 : 1; m.needsUpdate = true; }
+    }
+    if (this.flying) {   // propellers + gentle bob; selection ring stays on the ground
+      this.bobT = (this.bobT || 0) + dt * 2.5;
+      r.body.position.y = Math.sin(this.bobT) * 0.15;
+      if (r.props) for (const pr of r.props) pr.rotation.y += dt * 40;
+      if (r.muzzle && r.style === 'drone') { this.muzzleT -= dt; r.muzzle.visible = this.muzzleT > 0; }
+      this.ring.position.y = -GAME.flyHeight + 0.06;
     }
     if (this.zzz) {
       this.zzz.visible = !!this.sleeping;

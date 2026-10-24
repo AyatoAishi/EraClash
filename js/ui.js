@@ -11,7 +11,7 @@ import { CAMPS, CAMP_RULES } from './neutrals.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const SLOT_KEYS = ['abil1', 'abil2', 'abil3', 'abil4'];
+const SLOT_KEYS = ['abil1', 'abil2', 'abil3', 'abil4', 'abil5'];   // k-th ACTIVE ability -> hotkey
 /** Display numbers with at most 2 decimals (3.9499999 -> 3.95, 4 -> 4). Strings pass through. */
 export const fmt = (n) => (typeof n === 'number' ? +n.toFixed(2) : n);
 
@@ -266,6 +266,9 @@ export class UI {
     if (P.id === 'loneWolf') return s.active ? '+' + P.bonusDamage : '';
     if (P.id === 'eagleEye') return Math.round(P.chance * 100) + '%';
     if (P.id === 'swiftStep') return s.active ? P.evasion + '%' : '';
+    if (P.id === 'nightMeld') return s.active ? 'INV' : '';
+    if (P.id === 'critStrike') return Math.round(P.chance * 100) + '%';
+    if (P.id === 'penetration') return '-' + P.shred[u.upLevel('penetration')];
     return s.stacks || '';
   }
 
@@ -459,7 +462,7 @@ export class UI {
             <div><span>HP regen</span><b>${u.hpRegen}/s</b></div>
           </div>
           <div class="resrow">${defRow(u.armor, u.ward, u.damageType)}</div>
-          ${u.abilities.map((id, k) => { const A = ABILITIES[id]; return `<div class="tpass">${pIcon(id)}<div><b>${A.name} <small class="${A.kind}">${A.kind}${A.kind === 'active' ? ' · ' + keyLabel(settings.keys[SLOT_KEYS[k]]) : ''}</small></b><span>${A.desc}</span></div></div>`; }).join('')}
+          ${(() => { let na = -1; return u.abilities.map((id) => { const A = ABILITIES[id]; if (A.kind === 'active') na++; return `<div class="tpass">${pIcon(id)}<div><b>${A.name} <small class="${A.kind}">${A.kind}${A.kind === 'active' && SLOT_KEYS[na] ? ' · ' + keyLabel(settings.keys[SLOT_KEYS[na]]) : ''}${A.unbreakable ? ' · unbreakable' : ''}</small></b><span>${A.desc}</span></div></div>`; }).join(''); })()}
           <div class="tnote">${vs}</div>
         </div>`;
       troops.appendChild(c);
@@ -495,7 +498,7 @@ export class UI {
         <div><kbd>${keyLabel(k.attackMove)}</kbd> then <kbd>LMB</kbd> = attack. Click an enemy to focus it, or ground to attack-move.</div>
         <div><kbd>${keyLabel(k.stop)}</kbd> stop: cancel the current action and hold position. <kbd>${keyLabel(k.charge)}</kbd> charge: back to auto-attacking the enemy base.</div>
         <div><kbd>${keyLabel(k.shop)}</kbd> open the Shop. While it's open, each troop's buy key (default <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>) buys it, <kbd>Shift</kbd> buys 5, <kbd>Esc</kbd> closes it. <kbd>${keyLabel(k.selectAll)}</kbd> selects all your troops.</div>
-        <div><kbd>${keyLabel(k.abil1)}</kbd> <kbd>${keyLabel(k.abil2)}</kbd> <kbd>${keyLabel(k.abil3)}</kbd> <kbd>${keyLabel(k.abil4)}</kbd> use ability slots 1–4 of the selected troop (every selected troop of that type casts). You can also click the ability icon.</div>
+        <div><kbd>${keyLabel(k.abil1)}</kbd> <kbd>${keyLabel(k.abil2)}</kbd> <kbd>${keyLabel(k.abil3)}</kbd> <kbd>${keyLabel(k.abil4)}</kbd> use the selected troop's 1st–4th <b>active</b> ability (5th: <kbd>${keyLabel(k.abil5)}</kbd>) (every selected troop of that type casts). You can also click the ability icon.</div>
         <div><kbd>RMB</kbd> on a dropped item = closest selected troop picks it up. <kbd>${keyLabel(k.autoLoot)}</kbd> toggles <b>Auto-loot</b> (creep drops go straight to the killer's inventory).</div>
         <div><kbd>Ctrl+1-9</kbd> save group, <kbd>1-9</kbd> recall, double-tap to jump camera.</div>
         <div>Push the mouse against a screen edge or use the arrow keys to scroll. <kbd>${keyLabel(k.centerBase)}</kbd> jumps home. Minimap: <kbd>LMB</kbd> jump/drag camera, <kbd>RMB</kbd> move troops.</div>
@@ -846,7 +849,9 @@ export class UI {
     $('#sp-hpfill').style.width = (f * 100) + '%';
     $('#sp-hpfill').style.background = f > 0.5 ? 'var(--hp)' : f > 0.25 ? 'var(--gold)' : 'var(--bad)';
     $('#sp-hptext').textContent = `${Math.ceil(p.hp)} / ${Math.round(p.maxHp)}`;
-    $('#sp-order').textContent = `${FAMILIES[p.family].name} · ` + (p.invulnerable ? `SHIELDED ${p.invulnT.toFixed(1)}s · ` : '') + (p.disarmed ? `DISARMED ${p.disarmT.toFixed(1)}s · ` : '') + (p.brainwashed ? `BRAINWASHED ${p.brainwashed.t.toFixed(1)}s · ` : '') + (p.sleeping ? 'SLEEPING · ' : '') + (p.stance === 'prone' ? 'PRONE · ' : p.stance === 'channel' ? 'SETTING UP · ' : p.stance === 'standup' ? 'STANDING UP · ' : '') + (single ? ORDER_LABEL[p.order.type] : `${sel.length} units · ${ORDER_LABEL[p.order.type]}`);
+    $('#sp-mana').style.display = p.maxMana ? '' : 'none';
+    if (p.maxMana) { $('#sp-manafill').style.width = (p.mana / p.maxMana * 100) + '%'; $('#sp-manatext').textContent = `${Math.floor(p.mana)} / ${p.maxMana}`; }
+    $('#sp-order').textContent = `${FAMILIES[p.family].name} · ` + (p.invulnerable ? `SHIELDED ${p.invulnT.toFixed(1)}s · ` : '') + (p.disarmed ? `DISARMED ${p.disarmT.toFixed(1)}s · ` : '') + (p.broken ? `BROKEN ${p.breakT.toFixed(1)}s · ` : '') + (p.invisible ? 'INVISIBLE · ' : '') + (p.flying ? 'FLYING · ' : '') + (p.casting ? 'CASTING · ' : '') + (p.brainwashed ? `BRAINWASHED ${p.brainwashed.t.toFixed(1)}s · ` : '') + (p.sleeping ? 'SLEEPING · ' : '') + (p.stance === 'prone' ? 'PRONE · ' : p.stance === 'channel' ? 'SETTING UP · ' : p.stance === 'standup' ? 'STANDING UP · ' : '') + (single ? ORDER_LABEL[p.order.type] : `${sel.length} units · ${ORDER_LABEL[p.order.type]}`);
     const s = p.stats, bn = p.bonus;
     const stat = (label, val, bonus) => `<div><span>${label}</span><b>${fmt(val)}</b>${bonus ? `<em>+${fmt(bonus)}</em>` : ''}</div>`;
     $('#sp-stats').innerHTML =
@@ -870,8 +875,9 @@ export class UI {
   renderAbilityBar(p, isEnemy) {
     const bar = $('#sp-abil');
     if (!p.abil.length) { bar.innerHTML = ''; return; }
+    let nAct = -1;
     bar.innerHTML = `<div class="lbl">ABILITIES</div><div class="aslots">${p.abil.map(({ def: A }, k) => {
-      const key = A.kind === 'active' && !isEnemy ? keyLabel(settings.keys[SLOT_KEYS[k]]) : '';
+      const key = A.kind === 'active' && !isEnemy && SLOT_KEYS[++nAct] ? keyLabel(settings.keys[SLOT_KEYS[nAct]]) : '';
       return `<div class="aslot ${A.kind}" data-slot="${k}" data-tip="ability:${A.id}" data-key="${key}"><svg><use href="#${A.icon}"/></svg>${key ? `<kbd>${key}</kbd>` : ''}<i class="cdv"></i><i class="badge"></i></div>`;
     }).join('')}</div>`;
     $$('.aslot', bar).forEach((el) => {
@@ -886,8 +892,10 @@ export class UI {
       const { def: A, st } = entry;
       const on = A.id === 'snipeStance' ? ((st.mode === 'stand' || st.mode === 'prone' || !st.mode) && st.cd <= 0) : A.kind === 'active' ? st.cd <= 0 : (A.id === 'eagleEye' || A.id === 'bullsEye' || st.active);
       el.classList.toggle('toggled', A.id === 'snipeStance' && st.mode === 'prone');
-      el.classList.toggle('on', on);
-      $('.badge', el).textContent = this.abilityBadge(p, entry);
+      el.classList.toggle('on', on && !st.broken);
+      el.classList.toggle('broken', !!st.broken);
+      el.classList.toggle('nomana', A.kind === 'active' && (A.manaCost || 0) > p.mana);
+      $('.badge', el).textContent = st.broken ? 'X' : this.abilityBadge(p, entry);
       const cdMax = Math.max(A.cooldown || 0, A.standCooldown || 0);
       $('.cdv', el).style.height = A.kind === 'active' && cdMax && st.cd > 0 ? Math.min(100, st.cd / (st.cd > (A.cooldown || 0) ? cdMax : A.cooldown) * 100) + '%' : '0';
       if (this.tipEl === el) this.renderTip();

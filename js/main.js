@@ -178,7 +178,8 @@ addEventListener('keydown', (e) => {
   if (e.code !== 'Escape') return;
   const s = app.ui.screen;
   if (app.state === 'playing') {
-    if (app.controls.armed) app.controls.setArmed(false);
+    if (app.controls.cancelTargeting()) { /* aiming cancelled */ }
+    else if (app.controls.armed) app.controls.setArmed(false);
     else if (app.ui.shopOpen()) app.ui.toggleShop(false);   // Esc closes the shop before it pauses
     else if (app.ui.barracksOpen()) app.ui.toggleBarracks(false);
     else app.pause();

@@ -304,6 +304,147 @@ export function buildSniper() {
 }
 
 // ---------- neutral creeps ----------
+
+// ---------- v0.11.0 troops ----------
+export function buildLancer() {
+  // rider (humanoid) on a barded warhorse: horse legs drive the walk cycle
+  const p = { skin: 0xe2b08a, pants: 0x5a6470, boots: 0x3a3f46, shirt: 0x8a939c, sleeve: 0x8a939c, belt: 0x4a2f1a };
+  const r = humanoid(p); const m = r.mats;
+  r.legL.parent.remove(r.legL); r.legR.parent.remove(r.legR);
+  const up = 1.05;
+  for (const part of [r.torso, r.head, r.armL, r.armR]) part.position.y += up;
+  // rider legs hanging over the saddle
+  for (const sx of [-1, 1]) { B(r.body, 0.22, 0.5, 0.3, 0x5a6470, sx * 0.38, 1.55, 0.1, m); B(r.body, 0.24, 0.16, 0.34, 0x3a3f46, sx * 0.4, 1.28, 0.14, m); }
+  // armor + helmet with plume
+  B(r.torso, 0.7, 0.6, 0.46, 0xb8c0c8, 0, 0.05, 0, m);
+  B(r.torso, 0.3, 0.3, 0.05, 0x2f62b8, 0, 0.05, 0.24, m);           // blue tabard
+  B(r.torso, 0.1, 0.3, 0.05, 0xffffff, 0, 0.05, 0.265, m);          // white cross
+  B(r.torso, 0.3, 0.1, 0.05, 0xffffff, 0, 0.1, 0.265, m);
+  B(r.head, 0.58, 0.56, 0.58, 0xb8c0c8, 0, 0.04, 0, m);
+  B(r.head, 0.44, 0.06, 0.04, 0x111111, 0, 0.06, 0.3, m);           // visor slit
+  B(r.head, 0.12, 0.26, 0.4, 0xc0392b, 0, 0.42, -0.04, m);          // plume
+  // banner on the back
+  const flag = pivot(r.torso, 0.2, 0.2, -0.28);
+  B(flag, 0.05, 1.6, 0.05, 0x5b3d22, 0, 0.7, 0, m);
+  B(flag, 0.04, 0.5, 0.6, 0x2f62b8, 0, 1.25, -0.32, m);
+  B(flag, 0.045, 0.1, 0.6, 0xffffff, 0, 1.25, -0.32, m);
+  // lance
+  const lance = pivot(r.handR, 0, 0, 0);
+  B(lance, 0.1, 0.1, 2.4, 0x7b5130, 0, 0, 0.9, m);
+  B(lance, 0.2, 0.2, 0.3, 0xc9d1d8, 0, 0, 2.2, m);
+  B(lance, 0.26, 0.26, 0.12, 0xb8c0c8, 0, 0, 0.1, m);              // vamplate
+  r.weapon = lance;
+  // horse with barding
+  const horse = 0x6b4a2a, bard = 0x2f62b8;
+  B(r.body, 0.8, 0.7, 1.7, horse, 0, 1.05, -0.05, m);
+  B(r.body, 0.86, 0.5, 1.2, bard, 0, 1.05, -0.05, m);               // caparison
+  B(r.body, 0.88, 0.08, 1.22, 0xffffff, 0, 0.82, -0.05, m);
+  B(r.body, 0.36, 0.7, 0.4, horse, 0, 1.55, 0.75, m);               // neck
+  B(r.body, 0.32, 0.36, 0.7, horse, 0, 1.85, 1.0, m);               // head
+  B(r.body, 0.34, 0.2, 0.3, 0x9aa3ab, 0, 1.95, 1.05, m);            // chanfron
+  B(r.body, 0.1, 0.5, 0.3, 0x2a1a10, 0, 1.6, 0.55, m);              // mane
+  B(r.body, 0.18, 0.6, 0.18, 0x2a1a10, 0, 1.0, -0.95, m);           // tail
+  const legs = [];
+  for (const [x, z] of [[-0.26, 0.5], [0.26, 0.5], [-0.26, -0.6], [0.26, -0.6]]) {
+    const leg = pivot(r.body, x, 0.75, z);
+    B(leg, 0.2, 0.62, 0.22, horse, 0, -0.32, 0, m);
+    B(leg, 0.24, 0.14, 0.26, 0x2a1a10, 0, -0.68, 0, m);
+    legs.push(leg);
+  }
+  r.legL = legs[0]; r.legR = legs[1]; r.extraLegs = [legs[2], legs[3]];
+  r.scale = 1.05;
+  return finalize(r);
+}
+
+export function buildElf() {
+  const p = { skin: 0xf2d6be, pants: 0x3f6a2a, boots: 0x5a4630, shirt: 0x4c8c36, sleeve: 0x4c8c36, belt: 0x6b4423 };
+  const r = humanoid(p); const m = r.mats;
+  // leaf armor plates
+  for (const [x, y, c] of [[-0.18, 0.18, 0x5aa040], [0.18, 0.18, 0x3f7a2e], [-0.18, -0.08, 0x3f7a2e], [0.18, -0.08, 0x5aa040]]) B(r.torso, 0.26, 0.22, 0.06, c, x, y, 0.22, m);
+  B(r.armL, 0.26, 0.14, 0.28, 0x5aa040, 0, -0.08, 0, m); B(r.armR, 0.26, 0.14, 0.28, 0x5aa040, 0, -0.08, 0, m);
+  // long silver hair, pointed ears, blue eyes
+  B(r.head, 0.56, 0.14, 0.56, 0xe8e2c8, 0, 0.27, -0.02, m);
+  B(r.head, 0.56, 0.75, 0.14, 0xe8e2c8, 0, -0.12, -0.28, m);
+  B(r.head, 0.1, 0.5, 0.4, 0xe8e2c8, -0.27, 0.0, -0.08, m); B(r.head, 0.1, 0.5, 0.4, 0xe8e2c8, 0.27, 0.0, -0.08, m);
+  B(r.head, 0.08, 0.18, 0.08, 0xf2d6be, -0.31, 0.12, 0, m); B(r.head, 0.08, 0.18, 0.08, 0xf2d6be, 0.31, 0.12, 0, m);
+  B(r.head, 0.09, 0.09, 0.02, 0x4aa3ff, -0.12, 0.04, 0.258, m); B(r.head, 0.09, 0.09, 0.02, 0x4aa3ff, 0.12, 0.04, 0.258, m);
+  B(r.head, 0.3, 0.06, 0.04, 0xc9a050, 0, 0.22, 0.27, m);            // circlet
+  // quiver
+  const q = pivot(r.torso, 0.15, 0.12, -0.3); q.rotation.z = -0.35;
+  B(q, 0.2, 0.62, 0.2, 0x4a6a2a, 0, 0, 0, m);
+  for (const x of [-0.05, 0.05]) B(q, 0.06, 0.14, 0.03, 0x9ad8ff, x, 0.42, 0, m);
+  // elegant longbow
+  const bow = pivot(r.handL, 0, -0.02, 0.04);
+  const seg = [[-0.7, -0.02], [-0.55, 0.1], [-0.36, 0.18], [-0.12, 0.2], [0.12, 0.2], [0.36, 0.18], [0.55, 0.1], [0.7, -0.02]];
+  seg.forEach(([y, z]) => B(bow, 0.06, 0.2, 0.06, 0xd8c890, 0, y, z, m));
+  B(bow, 0.08, 0.16, 0.1, 0x3f7a2e, 0, 0, 0.2, m);
+  const str = B(bow, 0.02, 1.4, 0.02, 0xeeeeee, 0, 0, -0.02, m); str.castShadow = false;
+  const nock = pivot(bow, 0, 0, 0);
+  B(nock, 0.035, 0.035, 0.75, 0xd8c890, 0, 0.0, 0.3, m);
+  B(nock, 0.06, 0.06, 0.08, 0x9ad8ff, 0, 0.0, 0.68, m);
+  r.level = [{ obj: bow, arm: r.armL, offset: 0 }];
+  r.nockedArrow = nock;
+  r.style = 'bow';
+  return finalize(r);
+}
+
+export function buildRiotSkirmisher() {
+  const p = { skin: 0xd09a74, pants: 0x161c2a, boots: 0x0d0d0d, shirt: 0x1c2436, sleeve: 0x1c2436, belt: 0x0d0d0d };
+  const r = humanoid(p); const m = r.mats;
+  // bulky body armor + pads
+  B(r.torso, 0.84, 0.66, 0.54, 0x232c40, 0, 0.04, 0, m);
+  B(r.armL, 0.3, 0.18, 0.32, 0x232c40, 0, -0.06, 0, m); B(r.armR, 0.3, 0.18, 0.32, 0x232c40, 0, -0.06, 0, m);
+  B(r.legL, 0.3, 0.16, 0.1, 0x232c40, 0, -0.4, 0.17, m); B(r.legR, 0.3, 0.16, 0.1, 0x232c40, 0, -0.4, 0.17, m);
+  B(r.torso, 0.5, 0.1, 0.04, 0xf2f2f2, 0, 0.2, 0.28, m);            // RIOT stripe
+  // full helmet with visor
+  B(r.head, 0.6, 0.58, 0.6, 0x1a1f2a, 0, 0.04, 0, m);
+  B(r.head, 0.5, 0.26, 0.04, 0x9ad0ff, 0, 0.02, 0.31, m, { transparent: true, opacity: 0.6 });
+  // tonfa
+  const tonfa = pivot(r.handR, 0, 0, 0);
+  B(tonfa, 0.09, 0.09, 0.85, 0x111111, 0, 0, 0.3, m); B(tonfa, 0.08, 0.22, 0.08, 0x111111, 0, -0.08, 0.1, m);
+  r.weapon = tonfa;
+  // big riot shield held in front (always on guard)
+  const sh = pivot(r.body, -0.12, 1.05, 0.55);
+  B(sh, 0.9, 1.5, 0.08, 0x9ad0ff, 0, 0, 0, m, { transparent: true, opacity: 0.5 });
+  B(sh, 0.94, 0.08, 0.1, 0x2a2a2a, 0, 0.74, 0, m); B(sh, 0.94, 0.08, 0.1, 0x2a2a2a, 0, -0.74, 0, m);
+  B(sh, 0.6, 0.12, 0.1, 0xffffff, 0, 0.3, 0.01, m);
+  r.shield = sh;
+  r.armL.rotation.x = -1.2;
+  r.scale = 1.12;
+  const out = finalize(r);
+  out.armL.rotation.x = -1.2;
+  return out;
+}
+
+export function buildReconDrone() {
+  const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
+  const m = new Map(); const r = { root, body, mats: m };
+  r.torso = pivot(body, 0, 0.6, 0);
+  B(r.torso, 0.9, 0.3, 0.9, 0x3b4652, 0, 0, 0, m);
+  B(r.torso, 0.5, 0.2, 0.5, 0x23282e, 0, 0.22, 0, m);
+  B(r.torso, 0.16, 0.12, 0.08, 0x4aa3ff, 0, 0, 0.47, m, { emissive: 0x2a6ab0 });   // camera eye
+  r.props = [];
+  for (const [x, z] of [[-0.6, 0.6], [0.6, 0.6], [-0.6, -0.6], [0.6, -0.6]]) {
+    B(r.torso, 0.5, 0.08, 0.1, 0x23282e, x / 2, 0.05, z / 2, m).rotation.y = Math.atan2(x, z);
+    B(r.torso, 0.14, 0.18, 0.14, 0x15181c, x, 0.12, z, m);
+    const pr = pivot(r.torso, x, 0.24, z);
+    B(pr, 0.7, 0.03, 0.1, 0x9aa3ab, 0, 0, 0, m); B(pr, 0.1, 0.03, 0.7, 0x9aa3ab, 0, 0, 0, m);
+    r.props.push(pr);
+  }
+  // twin carbines underneath
+  for (const x of [-0.22, 0.22]) { B(r.torso, 0.1, 0.12, 0.7, 0x15181c, x, -0.24, 0.2, m); B(r.torso, 0.05, 0.05, 0.3, 0x0d0f12, x, -0.22, 0.65, m); }
+  const flash = B(r.torso, 0.25, 0.15, 0.2, 0xfff0a0, 0, -0.22, 0.85, null, { emissive: 0xffc030 });
+  flash.castShadow = false; flash.visible = false;
+  r.muzzle = flash;
+  // dummy limbs so the shared animator works
+  r.head = pivot(r.torso, 0, 0, 0);
+  r.legL = pivot(body, 0, 0, 0); r.legR = pivot(body, 0, 0, 0);
+  r.armL = pivot(body, 0, 0, 0); r.armR = pivot(body, 0, 0, 0);
+  r.handL = pivot(r.armL, 0, 0, 0); r.handR = pivot(r.armR, 0, 0, 0);
+  r.style = 'drone';
+  return finalize(r);
+}
+
 /** Floating loot cube on the ground. */
 export function buildLoot(color) {
   // drawn on top of everything (depthTest off) so drops stay visible under tree canopies
@@ -433,7 +574,7 @@ export function buildZzz() {
   return s;
 }
 
-export const UNIT_BUILDERS = { direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
+export const UNIT_BUILDERS = { lancer: buildLancer, elf: buildElf, riotSkirmisher: buildRiotSkirmisher, reconDrone: buildReconDrone, direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
 
 // projectiles — built along +Z so lookAt() aims them
 export function buildArrow() {

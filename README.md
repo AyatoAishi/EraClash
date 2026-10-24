@@ -104,3 +104,11 @@ Systems are split so new features plug in without touching each other:
 ## Units are ownerless (v0.10.2)
 - `UNITS` holds every unit with one schema (no `faction` field; `theme` is cosmetic). Who can hire what = `FACTIONS[x].units`; what camps spawn = `CAMPS[i].units`. A future card mini-game / Enchantress-style recruit just picks unit ids and calls `game.spawn(team, id)` (any team 0/1/2).
 - Bounty = `GAME.bountyPct x (unit.paid ?? def.cost)` for every kill.
+
+## v0.11.0 systems
+- Flying: `def.flying` → `unit.flying` (hover `GAME.flyHeight`, no obstacle collision, no separation with walkers, vision ignores LOS/level, melee can't target, ranged miss `GAME.flyingMiss`).
+- Break: `unit.applyBreak(t)`; passives with `unbreakable: true` keep working. Mana: `def.mana / manaRegen`, ability `manaCost`.
+- Invisibility: `unit.invisible` (set by passives, e.g. Night Meld); `Vision.detects(team,p)` reads `game.detectors` (future Sentry Wards).
+- Casting: ability `castTime`, `cast: 'line'` (aimed). `Unit.castAbility(i, aim)` → `finishCast`. Controls `targeting` mode draws the line.
+- Auras: any passive with `aura: { radius, bonusX... }` is applied by `Unit.updatePassive` to allies (same aura = max, different auras add).
+- Trails: `Game.addTrail` / `updateTrails` (Barding Rally). Line projectiles: `Game.skillshots` (Arrow Piercer).

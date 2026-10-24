@@ -50,7 +50,13 @@ export class Vision {
     if (team === null || team === undefined || team > 1) return true;
     if (u.team === team || u.tower) return true;
     if (u.revealT && u.revealT[team] > this.game.time) return true;
+    if (u.invisible && !this.detects(team, u.pos)) return false;      // invisible: only detection (future Sentry Ward / true sight) reveals it
     return this.seen(team, u.pos);
+  }
+  /** True sight at point p for `team`. Sources: game.detectors [{ team, pos, radius, dead }] (Sentry Wards etc. later). */
+  detects(team, p) {
+    for (const d of this.game.detectors || []) if (!d.dead && d.team === team && Math.hypot(d.pos.x - p.x, d.pos.z - p.z) <= d.radius) return true;
+    return false;
   }
   /** Called when `u` attacks something on `victimTeam`. */
   reveal(u, victimTeam) {
@@ -61,7 +67,7 @@ export class Vision {
   sources(team) {
     const g = this.game, f = g.dayNight?.f || 0, out = [];
     const lerp = (v) => v[0] + (v[1] - v[0]) * f;
-    for (const u of g.units) if (!u.dead && u.team === team) out.push({ x: u.pos.x, z: u.pos.z, r: u.visionRadius(f), level: u.groundLevel });
+    for (const u of g.units) if (!u.dead && u.team === team) out.push({ x: u.pos.x, z: u.pos.z, r: u.visionRadius(f), level: u.groundLevel, air: u.flying });
     const b = g.bases[team];
     if (b && !b.dead) out.push({ x: b.x, z: 0, r: lerp(GAME.baseVision), level: 1 });
     for (const s of g.structures || []) if (!s.dead && s.team === team) out.push({ x: s.pos.x, z: s.pos.z, r: s.visionRadius(f), level: this.terrain.level(s.pos.x) });
@@ -84,7 +90,7 @@ export class Vision {
     // troops standing in the same cell see the same thing: keep only the biggest radius per cell
     const best = new Map();
     for (const s of this.sources(team)) {
-      const k = Math.floor((s.x - x0) / vc) * 4096 + Math.floor((s.z - z0) / vc) * 2 + s.level;
+      const k = Math.floor((s.x - x0) / vc) * 4096 + Math.floor((s.z - z0) / vc) * 8 + s.level * 2 + (s.air ? 1 : 0);
       const b = best.get(k); if (!b || b.r < s.r) best.set(k, s);
     }
     for (const s of best.values()) {
@@ -99,6 +105,7 @@ export class Vision {
         const cx = ix + 0.5, cz = iz + 0.5, dx = cx - sx, dz = cz - sz;
         if (dx * dx + dz * dz > rc * rc) continue;
         if (s.level < lvl[i]) continue;                      // low ground can't see up
+        if (s.air) { vis[i] = 1; continue; }                 // flying: sees over trees and buildings
         // line of sight through the blocker grid (the blocker cell itself is visible)
         const n = Math.ceil(Math.hypot(dx, dz) * 2);
         let ok = true;

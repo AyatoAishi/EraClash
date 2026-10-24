@@ -28,6 +28,7 @@ export const ACTIONS = [
   { id: 'abil2',      scope: 'ability', label: 'Ability slot 2' },
   { id: 'abil3',      scope: 'ability', label: 'Ability slot 3' },
   { id: 'abil4',      scope: 'ability', label: 'Ability slot 4' },
+  { id: 'abil5',      scope: 'ability', label: 'Ability slot 5' },
   // one buy key per troop, generated from the roster
   ...Object.values(FACTIONS).flatMap((f) => f.units.map((id) => ({
     id: 'buy_' + id, scope: 'shop:' + f.id, label: `Buy ${UNITS[id].name}`, faction: f.id,
@@ -55,6 +56,7 @@ export const DEFAULTS = {
     abil2: 'KeyW',
     abil3: 'KeyE',
     abil4: 'KeyR',
+    abil5: 'KeyT',
     // shop: troop #1 = 1, #2 = 2, ... per faction
     ...Object.fromEntries(Object.values(FACTIONS).flatMap((f) => f.units.map((id, i) => ['buy_' + id, 'Digit' + (i + 1)]))),
   },

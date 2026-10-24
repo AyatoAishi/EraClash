@@ -546,3 +546,27 @@ small.passive { color: var(--gold) !important; }
 .fcard:hover .emblem svg, .fcard.on .emblem svg { transform: translateY(-.25rem); }
 .fcard .frow b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .fcard .frow span { white-space: nowrap; }
+
+/* v0.11.0: mana, Break */
+.sp-mana { height: .8rem; margin-top: .2rem; }
+.sp-mana i { background: #3a7ad8 !important; }
+.sp-mana span { font-size: .85rem; line-height: .8rem; }
+.aslot.broken { background: #1a0707 !important; box-shadow: inset 0 0 0 calc(var(--p) * .6) #d83a2a !important; }
+.aslot.broken svg { filter: grayscale(1) brightness(.4); }
+.aslot.broken .badge { color: #ff5252; }
+.aslot.broken::after { content: ''; position: absolute; left: 10%; right: 10%; top: 50%; height: calc(var(--p) * .8); background: #d83a2a; transform: rotate(-35deg); }
+.aslot.nomana svg { filter: saturate(.3) brightness(.7) hue-rotate(180deg); }
+/* v0.11.0: info column shrinks so abilities + items always stay visible */
+.sp-info { flex: 1 1 10rem !important; min-width: 0; }
+#sp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+#sp-stats div { min-width: 0; overflow: hidden; white-space: nowrap; }
+#sp-order { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sp-info { min-width: 8rem !important; }
+@media (max-width: 1500px) {
+  #cmdcard { width: clamp(21rem, calc(100vw - 256px - 36rem), 34rem) !important; }
+  .aslots { grid-template-columns: repeat(2, 2.1rem); grid-auto-rows: 2.1rem; }
+  #sp-inv .slots { grid-template-columns: repeat(3, 2.1rem); grid-auto-rows: 2.1rem; }
+  #sp-main { gap: .5rem; }
+  #sp-portrait { width: 5.6rem; height: 5.6rem; }
+  .sp-port { width: 5.6rem; }
+}
