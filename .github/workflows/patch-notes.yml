@@ -1,0 +1,31 @@
+name: Auto patch notes
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: patch-notes
+  cancel-in-progress: false
+jobs:
+  notes:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Write patch notes for pushed commits
+        run: node scripts/auto-patchnotes.mjs
+      - name: Commit if changed
+        run: |
+          if git diff --quiet; then echo "No new notes"; exit 0; fi
+          node --check js/patchnotes.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Patch notes: auto entry [skip ci]"
+          for i in 1 2 3; do git pull --rebase origin main && git push && exit 0; sleep 5; done
+          exit 1

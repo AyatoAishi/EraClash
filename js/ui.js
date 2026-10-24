@@ -418,7 +418,7 @@ export class UI {
     $('#ver').textContent = 'v' + CURRENT_VERSION;
     $('#patch-list').innerHTML = PATCH_NOTES.map((p, k) => `
       <article class="patch${k === 0 ? ' latest' : ''}">
-        <header><span class="pv">v${p.version}</span><b>${p.title}</b>${k === 0 ? '<em>LATEST</em>' : ''}<time>${formatPatchDate(p.date)}</time></header>
+        <header><span class="pv">v${p.version}</span><b>${p.title}</b>${k === 0 ? '<em>LATEST</em>' : ''}${p.author ? `<small class="pa">by ${p.author}</small>` : ''}<time>${formatPatchDate(p.date)}</time></header>
         ${p.sections.map((s) => `<h4>${s.title}</h4><ul>${s.items.map((it) => `<li>${it}</li>`).join('')}</ul>`).join('')}
       </article>`).join('');
   }

@@ -3,6 +3,7 @@
 //  version: MAJOR.MINOR.PATCH  (minor = new features/troops, patch = balance & small fixes)
 //  date: ISO with timezone (Asia/Manila)
 //  sections: { title, items: [string] }   — items may contain <b>, <em>
+//  author: optional GitHub name (auto entries written by .github/workflows/patch-notes.yml)
 // ============================================================
 export const PATCH_NOTES = [
   {

@@ -570,3 +570,6 @@ small.passive { color: var(--gold) !important; }
   #sp-portrait { width: 5.6rem; height: 5.6rem; }
   .sp-port { width: 5.6rem; }
 }
+
+/* patch notes: author tag (auto entries from collaborators) */
+.pa { color: var(--muted); font-size: .95rem; margin-left: .4rem; }
