@@ -7,6 +7,12 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.16.1', date: '2026-10-24T15:10:00+08:00', title: 'Cursor lock removed',
+    sections: [
+      { title: 'Removed', items: ['The <b>cursor lock</b> from 0.16.0 felt off, so it is gone: the normal cursor and edge-panning are back, and the two cursor options were removed from Options → Gameplay.'] },
+    ],
+  },
+  {
     version: '0.16.0', date: '2026-10-24T16:30:00+08:00', title: 'Fast forward, new shop, cursor lock & camp leash',
     sections: [
       { title: 'New — Fast forward (vs AI)', items: ['Speed buttons at the top left: <b>1×</b>, <b>2×</b>, <b>3×</b>. Only in matches against the AI; every match starts at 1×.'] },

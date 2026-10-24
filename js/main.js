@@ -6,7 +6,6 @@ import { settings } from './settings.js';
 import { createWorld } from './world.js';
 import { installFogShader, updateFogTexture, FOW } from './fow.js';
 import { Chat } from './chat.js';
-import { CursorLock } from './cursorlock.js';
 import { Game } from './game.js';
 import { Controls } from './controls.js';
 import { UI, makePortraits } from './ui.js';
@@ -91,7 +90,6 @@ app.controls = new Controls(() => renderer.domElement, camera, {
 });
 app.ui = new UI(app);
 app.chat = new Chat(app);
-app.cursorLock = new CursorLock(app);
 app.devlab = new DevLab(app, { renderer, scene, world, camera });
 app.applyGraphics();
 
@@ -209,8 +207,7 @@ app.openDevLab = () => {
 };
 app.closeDevLab = () => { app.devlab.close(); startDemo(); app.ui.show('main'); };
 
-// Esc: one place for what it does in each screen (also called by the cursor lock, which the browser
-// releases on Esc instead of sending us the key).
+// Esc: one place for what it does in each screen.
 app.handleEscape = () => {
   if (app.state === 'devlab') { app.devlab.onEscape(); return; }
   const s = app.ui.screen;
@@ -235,7 +232,6 @@ let menuT = 0, fpsAcc = 0, fpsN = 0;
 const fpsEl = document.getElementById('fps');
 function frame() {
   requestAnimationFrame(frame);
-  app.cursorLock.update(); if (app.cursorLock.locked) app.cursorLock.render();
   const dt = Math.min(clock.getDelta(), 0.05) * (app.state === 'playing' ? app.timeScale || 1 : 1);   // /speed
   const g = app.game;
   if (app.state === 'devlab') {

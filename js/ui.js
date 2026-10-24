@@ -419,9 +419,6 @@ export class UI {
     qc.addEventListener('change', () => { settings.gameplay.quickCast = qc.checked; saveSettings(); });
     const ep = $('#o-edge'); ep.checked = settings.gameplay.edgePan;
     ep.addEventListener('change', () => { settings.gameplay.edgePan = ep.checked; saveSettings(); });
-    const cl = $('#o-cursorlock'); cl.checked = settings.gameplay.cursorLock;
-    cl.addEventListener('change', () => { settings.gameplay.cursorLock = cl.checked; saveSettings(); });
-    bindRange('#o-csens', () => settings.gameplay.cursorSens, (v) => (settings.gameplay.cursorSens = v), (v) => v.toFixed(1) + 'x');
     bindRange('#o-pan', () => settings.gameplay.panSpeed, (v) => (settings.gameplay.panSpeed = v), (v) => v.toFixed(1) + 'x');
     bindRange('#o-zoom', () => settings.gameplay.zoomSpeed, (v) => (settings.gameplay.zoomSpeed = v), (v) => v.toFixed(1) + 'x');
   }
