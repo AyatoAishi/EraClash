@@ -370,6 +370,7 @@ export class Game {
     for (const c of this.units) {
       if (c.dead || c.team !== NEUTRAL_TEAM || c.camp !== n.camp) continue;
       if (Math.hypot(c.pos.x - n.pos.x, c.pos.z - n.pos.z) > 9 && c !== n) continue;
+      if (c.nState === 'return' && !c.inBox) continue;   // anti-cheese: a creep walking home only re-aggros once back inside its box
       if (c.nState !== 'chase' || !c.nTarget || c.nTarget.dead) c.nTarget = src;
       c.nState = 'chase';
       c.aggroTeam = src.team;

@@ -6,6 +6,7 @@ import { settings } from './settings.js';
 import { createWorld } from './world.js';
 import { installFogShader, updateFogTexture, FOW } from './fow.js';
 import { Chat } from './chat.js';
+import { CursorLock } from './cursorlock.js';
 import { Game } from './game.js';
 import { Controls } from './controls.js';
 import { UI, makePortraits } from './ui.js';
@@ -75,12 +76,22 @@ app.controls = new Controls(() => renderer.domElement, camera, {
   toggleAutoLoot: () => app.state === 'playing' && app.ui.toggleAutoLoot(),
   openChat: () => app.chat?.open(),
   shopOpen: () => app.ui.shopOpen(),
-  roster: () => (app.playerFaction ? FACTIONS[app.playerFaction].units : []),
-  buy: (id, many) => { const i = FACTIONS[app.playerFaction].units.indexOf(id); for (let k = 0; k < (many ? 5 : 1); k++) if (!app.trainSlot(i, k > 0)) break; },
-  onCenter: () => app.controls.centerOn(app.playerTeam === 0 ? -GAME.baseX + 14 : GAME.baseX - 14),
+  recent: (slot, many) => { const id = app.recentHires[slot]; if (id) app.hire(id, many ? 5 : 1); },
+  // Space: alternates base <-> the middle of your selected troops (always base when nothing is selected)
+  onCenter: () => {
+    const c = app.controls, sel = c.own().filter((u) => !u.dead);
+    if (app.lastCenter === 'base' && sel.length) {
+      c.centerOn(sel.reduce((a, u) => a + u.pos.x, 0) / sel.length, sel.reduce((a, u) => a + u.pos.z, 0) / sel.length);
+      app.lastCenter = 'units';
+    } else {
+      c.centerOn(app.playerTeam === 0 ? -GAME.baseX + 14 : GAME.baseX - 14);
+      app.lastCenter = 'base';
+    }
+  },
 });
 app.ui = new UI(app);
 app.chat = new Chat(app);
+app.cursorLock = new CursorLock(app);
 app.devlab = new DevLab(app, { renderer, scene, world, camera });
 app.applyGraphics();
 
@@ -109,6 +120,7 @@ app.startMatch = (faction, difficulty) => {
   app.game = g;
   app.controls.setGame(g, app.playerTeam);
   app.timeScale = 1;
+  app.recentHires = [];
   app.chat?.clear(); app.chat?.line(`Press ${settings.keys.chat === 'Enter' ? 'Enter' : settings.keys.chat} to chat. Type /help for test commands (vs AI only).`, 'sys');
   app.controls.height = 34;
   app.controls.centerOn(app.playerTeam === 0 ? -GAME.baseX + 16 : GAME.baseX - 16);
@@ -156,14 +168,22 @@ app.startMatch = (faction, difficulty) => {
   setMusicMood('battle');
 };
 
-app.trainSlot = (i, quiet = false) => {
-  if (app.state !== 'playing') return false;
-  const id = FACTIONS[app.playerFaction].units[i];
-  if (!id) return false;
-  const err = app.game.train(app.playerTeam, id);
-  if (err) { if (!quiet) { app.ui.toast(err, 'err'); sfx('error', 150); } return false; }
-  sfx('click');
-  return true;
+// Hire `count` of one troop. Every successful hire bumps it to the front of the "recent" list
+// (the shop's quick-hire keys). Only troops in your faction's roster can be hired.
+app.recentHires = [];
+app.hire = (id, count = 1) => {
+  if (app.state !== 'playing' || !FACTIONS[app.playerFaction].units.includes(id)) return 0;
+  let n = 0;
+  for (; n < count; n++) {
+    const err = app.game.train(app.playerTeam, id);
+    if (err) { if (!n) { app.ui.toast(err, 'err'); sfx('error', 150); } break; }
+  }
+  if (n) {
+    sfx('click');
+    app.recentHires = [id, ...app.recentHires.filter((x) => x !== id)].slice(0, 3);
+    app.ui.renderRecent();
+  }
+  return n;
 };
 app.pause = () => {
   if (app.state !== 'playing') return;
@@ -189,8 +209,9 @@ app.openDevLab = () => {
 };
 app.closeDevLab = () => { app.devlab.close(); startDemo(); app.ui.show('main'); };
 
-addEventListener('keydown', (e) => {
-  if (e.code !== 'Escape') return;
+// Esc: one place for what it does in each screen (also called by the cursor lock, which the browser
+// releases on Esc instead of sending us the key).
+app.handleEscape = () => {
   if (app.state === 'devlab') { app.devlab.onEscape(); return; }
   const s = app.ui.screen;
   if (app.state === 'playing') {
@@ -205,7 +226,8 @@ addEventListener('keydown', (e) => {
   else if (s === 'help') app.ui.show(app.ui.helpReturn);
   else if (s === 'patch') app.ui.show('main');
   else if (s === 'mode' || s === 'faction') app.ui.show(s === 'faction' ? 'mode' : 'main');
-});
+};
+addEventListener('keydown', (e) => { if (e.code === 'Escape') app.handleEscape(); });
 
 // ---------------- loop ----------------
 const clock = new THREE.Clock();
@@ -213,6 +235,7 @@ let menuT = 0, fpsAcc = 0, fpsN = 0;
 const fpsEl = document.getElementById('fps');
 function frame() {
   requestAnimationFrame(frame);
+  app.cursorLock.update(); if (app.cursorLock.locked) app.cursorLock.render();
   const dt = Math.min(clock.getDelta(), 0.05) * (app.state === 'playing' ? app.timeScale || 1 : 1);   // /speed
   const g = app.game;
   if (app.state === 'devlab') {

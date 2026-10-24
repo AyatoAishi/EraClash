@@ -143,6 +143,12 @@ export class UI {
     $('#barracks-close').addEventListener('click', () => this.toggleBarracks(false));
     $('#btn-repair').addEventListener('click', () => this.toggleRepair());
     $('#btn-autoloot').addEventListener('click', () => this.toggleAutoLoot());
+    // fast forward (vs AI only): 1x / 2x / 3x
+    $$('#speedctl button').forEach((b) => b.addEventListener('click', () => {
+      const g = this.app.game;
+      if (!g || !g.teams.some((T, t) => t !== this.app.playerTeam && T.isAI)) return;
+      this.app.timeScale = +b.dataset.speed; sfx('click');
+    }));
 
     $$('.tabs').forEach((tabs) => {
       tabs.addEventListener('click', (e) => {
@@ -324,7 +330,7 @@ export class UI {
       const groups = [
         ['general', SCOPE_LABEL.general, null],
         ['ability', SCOPE_LABEL.ability, null],
-        ...Object.values(FACTIONS).map((f) => ['shop:' + f.id, `Shop: ${f.name} (only while the shop is open)`, f.id]),
+        ['shop', SCOPE_LABEL.shop, null],
       ];
       for (const [scope, title] of groups) {
         list.insertAdjacentHTML('beforeend', `<div class="kb-head">${title}</div>`);
@@ -413,6 +419,9 @@ export class UI {
     qc.addEventListener('change', () => { settings.gameplay.quickCast = qc.checked; saveSettings(); });
     const ep = $('#o-edge'); ep.checked = settings.gameplay.edgePan;
     ep.addEventListener('change', () => { settings.gameplay.edgePan = ep.checked; saveSettings(); });
+    const cl = $('#o-cursorlock'); cl.checked = settings.gameplay.cursorLock;
+    cl.addEventListener('change', () => { settings.gameplay.cursorLock = cl.checked; saveSettings(); });
+    bindRange('#o-csens', () => settings.gameplay.cursorSens, (v) => (settings.gameplay.cursorSens = v), (v) => v.toFixed(1) + 'x');
     bindRange('#o-pan', () => settings.gameplay.panSpeed, (v) => (settings.gameplay.panSpeed = v), (v) => v.toFixed(1) + 'x');
     bindRange('#o-zoom', () => settings.gameplay.zoomSpeed, (v) => (settings.gameplay.zoomSpeed = v), (v) => v.toFixed(1) + 'x');
   }
@@ -504,11 +513,11 @@ export class UI {
         <div><kbd>RMB</kbd> on ground = move (melee in front, ranged behind). On an enemy/base = attack it. On a dropped item = pick it up.</div>
         <div><kbd>${keyLabel(k.attackMove)}</kbd> then <kbd>LMB</kbd> = attack. Click an enemy to focus it, or ground to attack-move.</div>
         <div><kbd>${keyLabel(k.stop)}</kbd> stop: cancel the current action and hold position. <kbd>${keyLabel(k.charge)}</kbd> charge: back to auto-attacking the enemy base.</div>
-        <div><kbd>${keyLabel(k.shop)}</kbd> open the Shop. While it's open, each troop's buy key (default <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>) buys it, <kbd>Shift</kbd> buys 5, <kbd>Esc</kbd> closes it. <kbd>${keyLabel(k.selectAll)}</kbd> selects all your troops.</div>
+        <div><kbd>${keyLabel(k.shop)}</kbd> open the Shop. Click a troop to hire it (search + list/card view at the top); your 3 most recent hires get quick keys <kbd>${keyLabel(k.recent1)}</kbd> <kbd>${keyLabel(k.recent2)}</kbd> <kbd>${keyLabel(k.recent3)}</kbd> while it's open, <kbd>Shift</kbd> hires 5, <kbd>Esc</kbd> closes it. <kbd>${keyLabel(k.selectAll)}</kbd> selects all your troops.</div>
         <div><kbd>${keyLabel(k.abil1)}</kbd> <kbd>${keyLabel(k.abil2)}</kbd> <kbd>${keyLabel(k.abil3)}</kbd> <kbd>${keyLabel(k.abil4)}</kbd> use the selected troop's 1st–4th <b>active</b> ability (5th: <kbd>${keyLabel(k.abil5)}</kbd>) (every selected troop of that type casts). You can also click the ability icon.</div>
         <div><kbd>RMB</kbd> on a dropped item = closest selected troop picks it up. <kbd>${keyLabel(k.autoLoot)}</kbd> toggles <b>Auto-loot</b> (creep drops go straight to the killer's inventory).</div>
         <div><kbd>Ctrl+1-9</kbd> save group, <kbd>1-9</kbd> recall, double-tap to jump camera.</div>
-        <div>Push the mouse against a screen edge or use the arrow keys to scroll. <kbd>${keyLabel(k.centerBase)}</kbd> jumps home. Minimap: <kbd>LMB</kbd> jump/drag camera, <kbd>RMB</kbd> move troops.</div>
+        <div>Push the mouse against a screen edge or use the arrow keys to scroll. <kbd>${keyLabel(k.centerBase)}</kbd> jumps home; press again to jump to your selected troops (it alternates). Minimap: <kbd>LMB</kbd> jump/drag camera, <kbd>RMB</kbd> move troops.</div>
       </div>`;
   }
 
@@ -542,23 +551,86 @@ export class UI {
     if (!box) return;
     const f = FACTIONS[this.app.playerFaction || 'medieval'];
     $('#shop-title').textContent = f.team === 0 ? 'War Camp' : 'Recruitment';  // 'Barracks' is reserved for the upgrade building
+    this.wireShopTools();
     box.innerHTML = '';
-    this.roster().forEach((id, i) => {
+    for (const id of this.roster()) {
       const u = UNITS[id];
       const b = document.createElement('button');
       b.className = 'sitem frame';
       b.dataset.id = id;
+      // what the search box matches: name, role, family, attack type, ability names
+      b.dataset.q = [u.name, u.role, FAMILIES[u.family]?.name, u.type, ...u.abilities.map((a) => ABILITIES[a]?.name || a)].join(' ').toLowerCase();
       b.innerHTML = `
         <img src="${PORTRAITS[id].face}" alt="">
-        <kbd>${keyLabel(settings.keys['buy_' + id])}</kbd>
         <div>
           <div class="nm">${typeIcon(u)}${u.name}${u.abilities.map((a) => pIcon(a, 'class="pico sm"')).join('')}</div>
-          <div class="ln">${famTag(u)} ${u.role}</div>
-          <div class="ln">HP <b>${u.hp}</b> · ARM <b>${u.armor}</b> · DMG <b>${u.damage}</b> · RNG <b>${u.type === 'ranged' ? u.range : 'melee'}</b></div>
+          <div class="ln role">${famTag(u)} ${u.role}</div>
+          <div class="ln st">HP <b>${u.hp}</b> · ARM <b>${u.armor}</b> · DMG <b>${u.damage}</b> · RNG <b>${u.type === 'ranged' ? u.range : 'melee'}</b></div>
+          <div class="ln cs">HP <b>${u.hp}</b> · DMG <b>${u.damage}</b></div>
         </div>
         <div class="price"><svg class="ico"><use href="#i-coin"/></svg><b>${u.cost}</b></div>`;
-      b.onclick = (e) => { const n = e.shiftKey ? 5 : 1; for (let k = 0; k < n; k++) if (!this.app.trainSlot(i, k > 0)) break; };
+      b.onclick = (e) => this.app.hire(id, e.shiftKey ? 5 : 1);
       box.appendChild(b);
+    }
+    $('#shop-search').value = '';
+    this.applyShopView();
+    this.filterShop();
+    this.renderRecent();
+  }
+  wireShopTools() {
+    if (this._shopWired) return;
+    this._shopWired = true;
+    const input = $('#shop-search');
+    input.addEventListener('input', () => this.filterShop());
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();   // typing never triggers hotkeys
+      if (e.key === 'Escape') { e.preventDefault(); if (input.value) { input.value = ''; this.filterShop(); } else input.blur(); }
+      else if (e.key === 'Enter') {   // Enter hires the first match (Shift+Enter = 5)
+        e.preventDefault();
+        const first = [...$('#shop-items').children].find((b) => !b.classList.contains('hidden'));
+        if (first) this.app.hire(first.dataset.id, e.shiftKey ? 5 : 1);
+      }
+    });
+    for (const b of document.querySelectorAll('.shop-view button')) {
+      b.addEventListener('click', () => { sfx('click'); settings.gameplay.shopView = b.dataset.view; saveSettings(); this.applyShopView(); });
+    }
+  }
+  applyShopView() {
+    const v = settings.gameplay.shopView === 'card' ? 'card' : 'list';
+    const box = $('#shop-items');
+    box.className = v;
+    for (const b of document.querySelectorAll('.shop-view button')) b.classList.toggle('on', b.dataset.view === v);
+    this.fitShopList();
+  }
+  /** List view shows at most 5 rows, then scrolls (row height depends on UI scale, so measure it). */
+  fitShopList() {
+    const box = $('#shop-items');
+    if (box.className !== 'list' || !this.shopOpen()) { box.style.maxHeight = ''; return; }
+    const row = [...box.children].find((b) => !b.classList.contains('hidden'));
+    const gap = parseFloat(getComputedStyle(box).rowGap) || 0;
+    box.style.maxHeight = row ? `${row.offsetHeight * 5 + gap * 4 + 2}px` : '';
+  }
+  filterShop() {
+    const words = $('#shop-search').value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    for (const b of $('#shop-items').children) {
+      const hit = words.every((w) => b.dataset.q.includes(w));
+      b.classList.toggle('hidden', !hit); shown += hit;
+    }
+    $('#shop-empty').classList.toggle('hidden', shown > 0);
+  }
+  /** The quick-hire strip: your 3 most recently hired troops and their keys (only work while the shop is open). */
+  renderRecent() {
+    const el = $('#shop-recent'); if (!el) return;
+    const ids = this.app.recentHires || [];
+    if (!ids.length) { el.innerHTML = `Recent: hire a troop and it gets a quick key (<kbd>${keyLabel(settings.keys.recent1)}</kbd> <kbd>${keyLabel(settings.keys.recent2)}</kbd> <kbd>${keyLabel(settings.keys.recent3)}</kbd>)`; return; }
+    el.innerHTML = 'Recent:';
+    ids.forEach((id, i) => {
+      const b = document.createElement('button');
+      b.className = 'rh frame';
+      b.innerHTML = `<kbd>${keyLabel(settings.keys['recent' + (i + 1)])}</kbd><img src="${PORTRAITS[id].face}" alt="">${UNITS[id].name}`;
+      b.onclick = (e) => this.app.hire(id, e.shiftKey ? 5 : 1);
+      el.appendChild(b);
     });
   }
 
@@ -699,6 +771,7 @@ export class UI {
     if (open === el.classList.contains('open')) return;
     el.classList.toggle('open', open);
     $('#btn-shop').classList.toggle('on', open);
+    if (open) this.fitShopList();
     sfx(open ? 'shop' : 'click');
   }
 
@@ -777,6 +850,9 @@ export class UI {
     this.renderBarracks();
     this.renderRepair();
     this.renderAutoLoot();
+    const vsAI = g.teams.some((T2, t) => t !== this.app.playerTeam && T2.isAI);
+    $('#speedctl').classList.toggle('hidden', !vsAI);
+    $$('#speedctl button').forEach((b) => b.classList.toggle('on', +b.dataset.speed === (this.app.timeScale || 1)));
     // nudge: idle gold piling up and shop closed -> pulse the shop button
     $('#btn-shop').classList.toggle('pulse', T.gold >= cheapest * 3 && !$('#shop').classList.contains('open') && !T.queue.length);
     this.renderQueue();

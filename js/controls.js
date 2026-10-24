@@ -487,10 +487,10 @@ export class Controls {
       this.keys.add(e.code);
       if (!this.enabled || e.repeat) return;
       const k = settings.keys;
-      // 1) shop open -> its buy keys win over everything else (control groups, abilities)
+      // 1) shop open -> quick-hire keys (3 most recent troops) win over control groups / abilities
       if (!e.ctrlKey && !e.metaKey && this.hooks.shopOpen?.()) {
-        const id = (this.hooks.roster?.() || []).find((uid) => k['buy_' + uid] === e.code);
-        if (id) { e.preventDefault(); this.hooks.buy?.(id, e.shiftKey); return; }
+        const slot = ['recent1', 'recent2', 'recent3'].findIndex((a) => k[a] === e.code);
+        if (slot >= 0) { e.preventDefault(); this.hooks.recent?.(slot, e.shiftKey); return; }
       }
       // 2) ability slots (Q W E R by default)
       const slot = ['abil1', 'abil2', 'abil3', 'abil4', 'abil5'].findIndex((a) => k[a] === e.code);

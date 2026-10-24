@@ -14,7 +14,8 @@ export const CAMP_RULES = {
   boxRadius: 4,       // spawn box (must be empty to spawn)
   leash: 11,          // max chase distance from home
   giveUpAfter: 5,     // seconds without being hit -> go home
-  returnRegen: 0.15,  // fraction of max HP healed per second while walking home
+  chaseWindow: 3,     // seconds a creep may chase OUTSIDE its spawn box before it gives up
+  giveUpHeal: { pct: 0.05, time: 4 },   // on giving up: heal 5% max HP/s for 4s (camp creeps only)
   dropChance: 0.20,   // per creep killed, Tier 1
   dropFalloff: 0.20,  // each tier up drops 20% less often (T2 16%, T3 12.8%...)
   dayAggroRange: 2,   // during the day, enemies this close wake the camp; at night camps sleep

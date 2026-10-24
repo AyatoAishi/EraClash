@@ -7,6 +7,25 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.16.0', date: '2026-10-24T16:30:00+08:00', title: 'Fast forward, new shop, cursor lock & camp leash',
+    sections: [
+      { title: 'New — Fast forward (vs AI)', items: ['Speed buttons at the top left: <b>1×</b>, <b>2×</b>, <b>3×</b>. Only in matches against the AI; every match starts at 1×.'] },
+      { title: 'Reworked — Shop', items: [
+        'Per-troop buy keys are gone. Instead your <b>3 most recently hired troops</b> get quick-hire keys (<b>1</b> <b>2</b> <b>3</b> by default, rebindable) while the shop is open, shown in a "Recent" strip at the top. Shift still hires 5.',
+        'New <b>search box</b> (name, role, family, ability) and a <b>list / card view</b> toggle (remembered). List view shows up to 5 troops and scrolls. In the search box, <b>Enter</b> hires the first match.',
+      ] },
+      { title: 'New — Cursor lock', items: [
+        'During a match the cursor is <b>locked inside the game</b> (no more slipping onto a second monitor, the tab bar or the taskbar, so edge-panning works on every side). Click into the match to lock it; <b>Esc</b> releases it and still does its normal job.',
+        'Options → Gameplay: turn it off, and set the cursor speed while locked.',
+      ] },
+      { title: 'Camera', items: ['<b>Space</b> now alternates: your base, then the middle of your selected troops, then your base again. With nothing selected it always goes to the base.'] },
+      { title: 'Neutral camps — no more ranged cheese', items: [
+        'A creep that chases outside its camp gets <b>3 seconds</b>, then gives up and walks home. It only chases again once it is back inside its camp.',
+        'Giving up heals it <b>5% max HP per second for 4 seconds</b> (neutral camp creeps only, never creeps you hire).',
+      ] },
+    ],
+  },
+  {
     version: '0.15.0', date: '2026-10-24T14:30:00+08:00', title: 'Chat, test commands, tiered camps & troop creator',
     sections: [
       { title: 'New — Chat & test commands', items: [

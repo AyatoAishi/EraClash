@@ -282,8 +282,9 @@ body.ingame #hud { display: block; }
 #cmds.dim button { opacity: .4; }
 
 /* shop */
-#shop { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -55%); width: min(34rem, 92vw); max-height: 70vh; overflow-y: auto; padding: .9rem; display: none; background: rgba(20, 24, 34, .97); }
-#shop.open { display: block; }
+#shop { position: absolute; left: 50%; top: 6.6rem; transform: translateX(-50%); width: min(34rem, 92vw); max-height: calc(100vh - 7.4rem); padding: .9rem; display: none; flex-direction: column; background: rgba(20, 24, 34, .97); }
+#shop.open { display: flex; }
+#shop-items { flex: 1 1 auto; min-height: 0; }
 .shop-head { display: flex; align-items: center; gap: .7rem; margin-bottom: .7rem; }
 .shop-head h3 { font-family: var(--arcade); margin: 0; font-size: 0.92rem; color: var(--gold); }
 .shop-head small { color: var(--muted); font-size: 1rem; }
@@ -594,3 +595,45 @@ small.passive { color: var(--gold) !important; }
 #chat.open input { display: block; }
 #chat.open .chat-log { overflow-y: auto; max-height: 16rem; background: rgba(7, 9, 13, .5); }
 #chat.open .cl.old { opacity: 1; }
+
+/* fast forward (vs AI): top left */
+#speedctl { position: absolute; top: calc(var(--p) * 2); left: calc(var(--p) * 2); display: flex; align-items: center; gap: .25rem; padding: .3rem .4rem; background: rgba(20, 24, 34, .94); pointer-events: auto; }
+#speedctl span { font-family: var(--head); font-size: .8rem; color: var(--muted); margin: 0 .3rem 0 .15rem; }
+#speedctl button { font-family: var(--head); font-size: 1rem; min-width: 2.4rem; padding: .25rem .4rem; border: 0; cursor: pointer; color: var(--muted); background: #07090d; box-shadow: inset 0 0 0 calc(var(--p) * .5) var(--line); }
+#speedctl button:hover { color: var(--text); }
+#speedctl button.on { color: #07090d; background: var(--gold); box-shadow: none; }
+#speedctl.hidden { display: none; }
+#topbar { width: min(62rem, calc(100vw - 30rem)) !important; }
+
+/* ---- shop: search, list/card view, recent quick-hire ---- */
+.shop-tools { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+.shop-search { flex: 1; display: flex; align-items: center; gap: .4rem; padding: .25rem .5rem; background: #07090d; }
+.shop-search .ico { width: 1rem; height: 1rem; flex: none; }
+.shop-search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 1.15rem; }
+.shop-view { display: flex; gap: .3rem; }
+.shop-view button.on { background: #3a4668; box-shadow: inset 0 0 0 calc(var(--p) * .5) var(--gold); }
+#shop-recent { display: flex; gap: .4rem; align-items: center; margin-bottom: .5rem; min-height: 2rem; color: var(--muted); font-size: 1rem; }
+#shop-recent .rh { display: flex; align-items: center; gap: .35rem; padding: .2rem .45rem .2rem .2rem; border: 0; cursor: pointer; background: var(--panel2); color: var(--text); font: inherit; font-size: 1rem; }
+#shop-recent .rh:hover { background: #2c3550; }
+#shop-recent .rh img { width: 1.6rem; height: 1.6rem; background: #07090d; }
+#shop-empty { color: var(--muted); text-align: center; padding: 1rem; }
+.sitem.hidden, #shop-empty.hidden { display: none; }
+/* list view: rows, scrolls after 5 */
+#shop-items.list { overflow-y: auto; padding-right: .2rem; }
+/* card view: portrait on top, compact stats */
+#shop-items.card { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); overflow-y: auto; padding-right: .2rem; }
+#shop-items.card .sitem { grid-template-columns: 1fr; justify-items: center; text-align: center; gap: .3rem; padding: .5rem .4rem; }
+#shop-items.card .sitem img { width: 4.6rem; height: 4.6rem; }
+#shop-items.card .sitem .nm { justify-content: center; flex-wrap: wrap; font-size: .66rem; }
+#shop-items.card .sitem .ln.role, #shop-items.card .sitem .ln.st { font-size: .95rem; }
+#shop-items.card .sitem .ln.st { display: none; }
+#shop-items.card .sitem .ln.cs { display: block; }
+.sitem .ln.cs { display: none; font-size: .95rem; }
+
+/* virtual cursor (cursor lock): drawn by us while the real one is pointer-locked */
+#vcursor { position: fixed; left: 0; top: 0; width: 18px; height: 27px; pointer-events: none; z-index: 9999; display: none; image-rendering: pixelated; }
+#vcursor svg { width: 100%; height: 100%; display: block; }
+#vcursor.aim svg { display: none; }
+#vcursor.aim::before, #vcursor.aim::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 0 1px #000; }
+#vcursor.aim::before { left: -9px; top: -1px; width: 19px; height: 2px; }
+#vcursor.aim::after { left: -1px; top: -9px; width: 2px; height: 19px; }

@@ -725,11 +725,21 @@ export class Unit {
     this.updatePassive(dt);
     if (this.dead) return false;
     const regen = this.stats.hpRegen + this.pas.bonusRegen;
-    if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + (regen + (this.nState === 'return' ? this.maxHp * R.returnRegen : 0)) * dt);
+    if (this.giveUpHealT > 0) this.giveUpHealT -= dt;
+    if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + (regen + (this.giveUpHealT > 0 ? this.maxHp * R.giveUpHeal.pct : 0)) * dt);
     if (this.pendingHit) { this.pendingHit.t -= dt; if (this.pendingHit.t <= 0) { this.releaseAttack(this.pendingHit.target); this.pendingHit = null; } }
 
     const home = this.home, fromHome = Math.hypot(this.pos.x - home.x, this.pos.z - home.z);
     let goal = null, attacking = false, speedMult = 1;
+    // spawn box (the camp ring): chasing outside it is only allowed for a short window
+    const box = this.camp ? { x: this.camp.x, z: this.camp.z } : home;
+    this.inBox = Math.hypot(this.pos.x - box.x, this.pos.z - box.z) <= R.boxRadius;
+    this.outT = this.nState === 'chase' && !this.inBox ? (this.outT || 0) + dt : 0;
+    const giveUp = () => {
+      this.nState = 'return'; this.nTarget = null; this.aggroTeam = null; this.outT = 0;
+      this.giveUpHealT = R.giveUpHeal.time;   // neutral-brain only: hired copies of creeps never get this
+      for (const x of this.abil) x.st.roll = undefined;
+    };
     // day: anyone walking within 2 range wakes the camp. night: asleep until attacked.
     const night = g.dayNight?.night;
     this.sleeping = night && this.nState === 'home';
@@ -746,7 +756,7 @@ export class Unit {
       if (!tg || tg.dead || (tg.flying && !this.ranged)) {   // look for another enemy of the same team nearby (melee: no flyers)
         tg = this.nTarget = g.units.find((o) => !o.dead && !o.tower && o.team === this.aggroTeam && !(o.flying && !this.ranged) && this.edgeDist(o) < 7) || null;
       }
-      if (!tg || fromHome > R.leash || g.time - this.lastHitT > R.giveUpAfter) { this.nState = 'return'; this.nTarget = null; this.aggroTeam = null; for (const x of this.abil) x.st.roll = undefined; }
+      if (!tg || fromHome > R.leash || this.outT > R.chaseWindow || g.time - this.lastHitT > R.giveUpAfter) giveUp();
       else {
         // actives: cast on their own when useful
         for (let i = 0; i < this.abil.length; i++) {
@@ -777,6 +787,7 @@ export class Unit {
     if (this.nState === 'return') {
       goal = home; speedMult = 1.4;
       if (fromHome < 0.4) { this.nState = 'home'; goal = null; }
+      else if (this.inBox && this.aggroTeam != null) this.nState = 'chase';   // hit again once back in the box: fight
     } else if (this.nState === 'home' && fromHome > 0.6) goal = home;
 
     let vx = 0, vz = 0;

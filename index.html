@@ -17,6 +17,22 @@
 
 <!-- pixel icon sprites -->
 <svg width="0" height="0" style="position:absolute">
+  <symbol id="i-viewlist" viewBox="0 0 16 16" shape-rendering="crispEdges">
+    <rect x="1" y="2" width="3" height="3" fill="#e8c860"/><rect x="5" y="2" width="10" height="3" fill="#cfd6e6"/>
+    <rect x="1" y="7" width="3" height="3" fill="#e8c860"/><rect x="5" y="7" width="10" height="3" fill="#cfd6e6"/>
+    <rect x="1" y="12" width="3" height="3" fill="#e8c860"/><rect x="5" y="12" width="10" height="3" fill="#cfd6e6"/>
+  </symbol>
+  <symbol id="i-viewcard" viewBox="0 0 16 16" shape-rendering="crispEdges">
+    <rect x="1" y="1" width="6" height="6" fill="#cfd6e6"/><rect x="9" y="1" width="6" height="6" fill="#cfd6e6"/>
+    <rect x="1" y="9" width="6" height="6" fill="#cfd6e6"/><rect x="9" y="9" width="6" height="6" fill="#cfd6e6"/>
+    <rect x="2" y="2" width="4" height="2" fill="#e8c860"/><rect x="10" y="2" width="4" height="2" fill="#e8c860"/>
+    <rect x="2" y="10" width="4" height="2" fill="#e8c860"/><rect x="10" y="10" width="4" height="2" fill="#e8c860"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 16 16" shape-rendering="crispEdges">
+    <rect x="3" y="1" width="6" height="2" fill="#cfd6e6"/><rect x="3" y="9" width="6" height="2" fill="#cfd6e6"/>
+    <rect x="1" y="3" width="2" height="6" fill="#cfd6e6"/><rect x="9" y="3" width="2" height="6" fill="#cfd6e6"/>
+    <rect x="10" y="10" width="2" height="2" fill="#e8c860"/><rect x="12" y="12" width="3" height="3" fill="#e8c860"/>
+  </symbol>
   <symbol id="i-shop" viewBox="0 0 16 16" shape-rendering="crispEdges">
     <rect x="1" y="5" width="14" height="10" fill="#1a0f06"/>
     <rect x="2" y="6" width="12" height="8" fill="#8a5a2b"/>
@@ -211,6 +227,8 @@
       <label class="opt"><span>Combat text (MISS / EVADE / DISARMED…)</span><input type="checkbox" id="o-ctext"></label>
     </div>
     <div class="tabpage" data-page="gameplay">
+      <label class="opt"><span>Lock cursor to the game window during matches (stops it escaping to another monitor, the tab bar or the taskbar; Esc releases it, click to lock again)</span><input type="checkbox" id="o-cursorlock"></label>
+      <label class="opt"><span>Cursor speed while locked</span><input type="range" id="o-csens" min="0.3" max="3" step="0.1"><output id="o-csens-v"></output></label>
       <label class="opt"><span>Screen-edge camera pan</span><input type="checkbox" id="o-edge"></label>
       <label class="opt"><span>Camera pan speed</span><input type="range" id="o-pan" min="0.4" max="2.5" step="0.1"><output id="o-pan-v"></output></label>
       <label class="opt"><span>Quick cast (aimed abilities fire at the cursor on key press)</span><input type="checkbox" id="o-quickcast"></label>
@@ -237,7 +255,7 @@
       <div class="hgrid">
         <div><b>Goal.</b> Destroy the enemy base. Medieval always holds the <b>left</b>, Modern the <b>right</b>.</div>
         <div><b>Gold.</b> Both sides start with 100 gold and earn <b>2.5 gold / second</b>. Every enemy troop you kill pays a <b>bounty of 40% of its hiring cost</b> (a 50g Police Officer = 20g). Self-destructs give no bounty to the enemy.</div>
-        <div><b>Training.</b> Open the Shop (<kbd data-keyof="shop">B</kbd>) and press a troop's buy key or click it. Bought troops queue up (max 5) and walk out of your base. Click a queued troop to cancel it for a full refund. Army limit: 40.</div>
+        <div><b>Training.</b> Open the Shop (<kbd data-keyof="shop">B</kbd>) and click a troop (search box and list/card view at the top). Your 3 most recently hired troops get quick-hire keys (<kbd data-keyof="recent1">1</kbd> <kbd data-keyof="recent2">2</kbd> <kbd data-keyof="recent3">3</kbd>) while the shop is open. Bought troops queue up (max 5) and walk out of your base. Click a queued troop to cancel it for a full refund. Army limit: 40.</div>
         <div><b>Auto-charge.</b> Fresh troops march at the enemy base and fight anything in their path. Your orders override this; <kbd data-keyof="charge">C</kbd> sends them charging again.</div>
         <div><b>Melee vs ranged.</b> Melee troops must touch their target. Ranged troops shoot from their range circle (select one troop to see it) — projectiles always hit, but they're fragile. In formations, ranged troops automatically stand behind melee.</div>
         <div><b>Damage types.</b> <b>Physical</b> is reduced by <b>Armor</b>, <b>Magic</b> is reduced by <b>Ward</b>, <b>True</b> ignores both. All current troops deal physical damage and have 0 Ward. Each hit rolls ±1 damage.</div>
@@ -319,6 +337,7 @@
     </div>
     <div id="base-1" class="basebar"><div class="bname"></div><div class="bbar"><i></i><span></span></div></div>
   </div>
+  <div id="speedctl" class="frame" title="Game speed (vs AI only)"><span>SPEED</span><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="3">3×</button></div>
   <div id="corner">
     <button id="btn-help" class="sq frame" title="Help"><svg class="ico"><use href="#i-help"/></svg></button>
     <button id="btn-pause" class="sq frame" title="Pause (Esc)"><svg class="ico"><use href="#i-pause"/></svg></button>
@@ -342,7 +361,16 @@
       <div><h3 id="shop-title">Barracks</h3><small>Click to buy · Shift+click buys 5 · <kbd id="shop-key" data-keyof="shop">B</kbd> close</small></div>
       <button id="shop-close" class="sq frame small" title="Close">×</button>
     </div>
+    <div class="shop-tools">
+      <label class="shop-search frame"><svg class="ico"><use href="#i-search"/></svg><input id="shop-search" type="text" placeholder="Search troops…" autocomplete="off" spellcheck="false"></label>
+      <div class="shop-view">
+        <button class="sq frame small" data-view="list" title="List view"><svg class="ico"><use href="#i-viewlist"/></svg></button>
+        <button class="sq frame small" data-view="card" title="Card view"><svg class="ico"><use href="#i-viewcard"/></svg></button>
+      </div>
+    </div>
+    <div id="shop-recent"></div>
     <div id="shop-items"></div>
+    <div id="shop-empty" class="hidden">No troop matches that search.</div>
   </div>
 
   <div id="bottom">
