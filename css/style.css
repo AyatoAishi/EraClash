@@ -659,11 +659,11 @@ body.placing #view canvas { cursor: copy; }
 #btn-skills .sk-dot { display: none; position: absolute; top: .3rem; left: .3rem; width: .7rem; height: .7rem; background: var(--gold); box-shadow: 0 0 0 calc(var(--p) * .5) #000; animation: skblink 1s steps(2) infinite; }
 #btn-skills.ready .sk-dot { display: block; }
 @keyframes skblink { 50% { opacity: .25; } }
-#cmdcard { width: clamp(29rem, calc(100vw - 256px - 38rem), 34rem) !important; }
+#cmdcard { width: clamp(35rem, calc(100vw - 256px - 38rem), 40rem) !important; }
 #queue { min-width: 7.5rem !important; }
 @media (max-width: 1500px) {
-  #cmdcard { width: clamp(25rem, calc(100vw - 256px - 36rem), 36rem) !important; }
-  #btn-skills, #btn-barracks, #btn-shop, #btn-repair { width: 4.2rem !important; }
+  #cmdcard { width: clamp(31rem, calc(100vw - 256px - 36rem), 42rem) !important; }
+  #btn-skills, #btn-barracks, #btn-build, #btn-shop, #btn-repair { width: 4.2rem !important; }
   .cc-top { gap: .4rem !important; }
   #queue { min-width: 6rem !important; }
 }

@@ -7,6 +7,14 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.19.1', date: '2026-10-24T19:15:00+08:00', title: 'Fix: command card overflow',
+    sections: [
+      { title: 'Fix', items: [
+        'The command card never got wider when <b>BUILD</b> was added — with 5 buttons now in that row, <b>REPAIR</b> was shoved off the right edge. Widened the card\'s size (regular and narrow-screen layouts) to fit all five.',
+      ] },
+    ],
+  },
+  {
     version: '0.19.0', date: '2026-10-24T18:55:00+08:00', title: 'Build menu: Cannon & Howitzer',
     sections: [
       { title: 'New: Build menu', items: [
