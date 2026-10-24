@@ -7,6 +7,15 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.20.1', date: '2026-10-24T19:59:00+08:00', title: 'Hwacha buff',
+    sections: [
+      { title: 'Balance', items: [
+        '<b>Hwacha</b> was well behind the Machine Gun Nest. Rockets per volley 8 → <b>10</b>, damage per rocket 12 → <b>14</b>, volley every 6s → <b>5s</b>, splash radius 1.2 → <b>1.5</b>. Against a group in a test, damage over 15s went from 167 to 329 (MG Nest: 371).',
+        'Rocket Rack now reads 12 / 14 / 16 rockets per volley.',
+      ] },
+    ],
+  },
+  {
     version: '0.20.0', date: '2026-10-24T19:35:00+08:00', title: 'Defense towers',
     sections: [
       { title: 'New: Towers (Build menu)', items: [

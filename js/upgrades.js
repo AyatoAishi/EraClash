@@ -271,7 +271,7 @@ export const UPGRADES = {
     price: [150, 250, 400], time: [15, 20, 25],
     effects: [{ type: 'structureMods', unit: 'hwacha', perLevel: { rockets: 2 } }],
     desc: 'A bigger launcher frame: every Hwacha volley fires <b>+2 rockets</b> per level.',
-    levelText: (l) => `${8 + 2 * l} rockets per volley`,
+    levelText: (l) => `${10 + 2 * l} rockets per volley`,
   },
   beltFeed: {
     id: 'beltFeed', faction: 'modern', category: 'troop', unit: 'mgNest', icon: 'u-beltfeed',

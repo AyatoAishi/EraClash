@@ -243,13 +243,13 @@ Object.assign(UNITS, {
   hwacha: {
     id: 'hwacha', name: 'Hwacha', theme: 'medieval', family: 'siege', role: 'Barrage tower', type: 'ranged',
     cost: 260, trainTime: 0,
-    hp: 450, hpRegen: 0, damage: 12, damageType: 'physical', attackSpeed: 10,
+    hp: 450, hpRegen: 0, damage: 14, damageType: 'physical', attackSpeed: 12,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 0, range: 13, vision: [22, 14], aggro: 13, radius: 1.6,
-    structure: { tower: true, fire: 'volley', volley: { count: 8, cone: 0.5 }, buildTime: 22, footprint: 1.6, minRange: 2, splash: 1.2, flight: 0.7,
+    structure: { tower: true, fire: 'volley', volley: { count: 10, cone: 0.5 }, buildTime: 22, footprint: 1.6, minRange: 2, splash: 1.5, flight: 0.7,
       groundOnly: true, turnRate: 3 },
     abilities: [],
-    lore: 'A cart of rocket-arrows on a raised platform. Every six seconds the whole rack goes up in a hissing, fiery fan.',
+    lore: 'A cart of rocket-arrows on a raised platform. Every five seconds the whole rack goes up in a hissing, fiery fan.',
   },
   mgNest: {
     id: 'mgNest', name: 'Machine Gun Nest', theme: 'modern', family: 'siege', role: 'Barrage tower', type: 'ranged',
