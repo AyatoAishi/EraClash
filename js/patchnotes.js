@@ -7,6 +7,15 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.12.1', date: '2026-10-24T12:59:00+08:00', title: 'Auto-update',
+    sections: [
+      { title: 'New', items: [
+        'The game now <b>updates itself from GitHub</b>: start.bat pulls the latest version before launching, and the running server checks every minute. New builds show an <b>Update downloaded → Reload</b> banner (the main menu just reloads).',
+        'Run <b>setup-git.bat</b> once to link your folder; <b>push.bat</b> sends your changes (pulls your teammate\'s first). Your unpushed work is never overwritten.',
+      ] },
+    ],
+  },
+  {
     version: '0.12.0', date: '2026-10-24T12:25:00+08:00', title: 'Banshee rework',
     sections: [
       { title: 'Changes', items: [

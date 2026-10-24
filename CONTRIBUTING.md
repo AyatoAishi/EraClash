@@ -14,6 +14,14 @@ Do this **every time** before you start, and again right before you push. Two pe
 - If a pull gives you a conflict, fix it or ask. Don't delete the other person's lines to make it go away.
 - Tell each other what you're working on ("I'm editing the Lancer"), especially in `js/config.js` and `js/upgrades.js`. Almost every change goes through those two files, so that's where conflicts happen.
 
+## 1b. Automatic sync (Windows)
+
+Run **`setup-git.bat` once**. It links your game folder to this repo without touching your files. After that:
+
+- **`start.bat`** pulls the latest `main` before starting, and the running server keeps pulling every 60 seconds. When something new lands, the game shows **"Update downloaded → Reload"** (and reloads by itself on the main menu).
+- **`push.bat`** sends your work: it asks for a title and the bullet lines (your patch note), commits, **pulls your teammate's changes first**, then pushes.
+- Auto-pull is fast-forward only, so it never overwrites work you haven't pushed. If you have local changes it just waits and tells you to run `push.bat`.
+
 ## 2. Commit messages = patch notes
 
 Every push to `main` runs a GitHub Action (`.github/workflows/patch-notes.yml`). It **writes the in-game patch notes for you** from your commit message, so write the message for the players:

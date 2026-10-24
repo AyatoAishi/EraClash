@@ -223,6 +223,27 @@ function frame() {
 startDemo();
 app.ui.show('main');
 frame();
+// ---------------- auto-update (server.js pulls from GitHub; we just notice the new build) ----------------
+(() => {
+  let first = null, shown = false;
+  const check = async () => {
+    try {
+      const b = await (await fetch('/__build', { cache: 'no-store' })).json();
+      if (!first) { first = b.hash; return; }
+      if (b.hash !== first && !shown) {
+        if (app.state === 'menu') { location.reload(); return; }   // nothing to lose on the menu: just reload
+        shown = true;
+        const el = document.createElement('div');
+        el.className = 'update-banner frame';
+        el.innerHTML = `<b>Update downloaded</b><span>${b.subject || b.hash}</span><button class="btn small">Reload</button><button class="btn ghost small">Later</button>`;
+        el.querySelector('.btn:not(.ghost)').onclick = () => location.reload();
+        el.querySelector('.btn.ghost').onclick = () => el.remove();
+        document.body.appendChild(el);
+      }
+    } catch { /* python server / offline: no auto-update */ }
+  };
+  check(); setInterval(check, 30000);
+})();
 window.__app = app; // handy for debugging in devtools
 window.__cfg = CFG;
 import('./upgrades.js').then((m) => (window.__up = m));  // live-tweak balance from the console: __cfg.UNITS.police.damage = 9

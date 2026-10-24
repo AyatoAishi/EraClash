@@ -573,3 +573,8 @@ small.passive { color: var(--gold) !important; }
 
 /* patch notes: author tag (auto entries from collaborators) */
 .pa { color: var(--muted); font-size: .95rem; margin-left: .4rem; }
+
+/* auto-update banner */
+.update-banner { position: fixed; top: 6rem; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: .7rem; padding: .6rem .9rem; background: rgba(20, 24, 34, .97); }
+.update-banner b { color: var(--hp); font-family: var(--head); text-transform: uppercase; }
+.update-banner span { color: var(--muted); max-width: 26rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
