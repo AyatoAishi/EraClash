@@ -71,6 +71,7 @@ app.controls = new Controls(() => renderer.domElement, camera, {
   },
   toggleShop: () => app.state === 'playing' && app.ui.toggleShop(),
   toggleBarracks: () => app.state === 'playing' && app.ui.toggleBarracks(),
+  toggleSkills: () => app.state === 'playing' && app.ui.toggleSkills(),
   toggleRepair: () => app.state === 'playing' && app.ui.toggleRepair(),
   toggleAutoLoot: () => app.state === 'playing' && app.ui.toggleAutoLoot(),
   openChat: () => app.chat?.open(),
@@ -217,6 +218,7 @@ app.handleEscape = () => {
     else if (app.controls.armed) app.controls.setArmed(false);
     else if (app.ui.shopOpen()) app.ui.toggleShop(false);   // Esc closes the shop before it pauses
     else if (app.ui.barracksOpen()) app.ui.toggleBarracks(false);
+    else if (app.ui.skillsOpen()) app.ui.toggleSkills(false);
     else app.pause();
   } else if (s === 'pause') app.resume();
   else if (s === 'options') app.ui.show(app.ui.optionsReturn);

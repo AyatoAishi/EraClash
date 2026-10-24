@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { UNITS, GAME, ITEMS, ABILITIES, DAMAGE_TYPES, defenseMult, attackInterval } from './config.js';
 import { UPGRADES, STAT_BOOST } from './upgrades.js';
 import { NEUTRAL_TEAM, CAMP_RULES } from './neutrals.js';
-import { UNIT_BUILDERS, buildZzz } from './models.js';
+import { UNIT_BUILDERS, buildZzz, applyLook } from './models.js';
+import { formDef } from './skilltree.js';
 import { settings } from './settings.js';
 
 let UID = 0;
@@ -34,7 +35,9 @@ export class Unit {
   constructor(game, defId, team) {
     this.id = ++UID;
     this.game = game;
-    this.def = UNITS[defId];
+    // skill-tree form: same troop id, evolved numbers/name/look (only troops born after the pick)
+    this.def = formDef(defId, game.teams?.[team]?.forms?.[defId]);
+    this.form = this.def.form || null;
     this.team = team;
     this.ranged = this.def.type === 'ranged';
     this.family = this.def.family;
@@ -47,7 +50,7 @@ export class Unit {
     // abilities: up to 4 slots (passives + actives). Each slot keeps its own state `st`.
     let nAct = 0;
     this.abil = (this.def.abilities || []).filter((id) => ABILITIES[id] && (ABILITIES[id].kind !== 'active' || ++nAct <= GAME.maxActives)).map((id) => ({
-      def: ABILITIES[id],
+      def: this.abilDef(id),
       st: { active: false, stacks: 0, bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, target: null, sinceAttack: 99, scanT: Math.random() * 0.2, cd: 0 },
     }));
     this.pas = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, armorPierce: 0, lifesteal: 0 };   // summed passive bonuses
@@ -79,7 +82,7 @@ export class Unit {
     this.damageDealt = 0;
     this.selected = false;
 
-    const rig = UNIT_BUILDERS[defId]();
+    const rig = applyLook(UNIT_BUILDERS[defId](), this.def.look);
     this.rig = rig;
     rig.root.scale.setScalar(1.25 * (rig.scale || 1));
     if (rig.style === 'rifle') { rig.armR.rotation.x = -1.2; rig.armL.rotation.x = -1.35; rig.armL.rotation.z = 0.35; }
@@ -152,9 +155,11 @@ export class Unit {
     for (const id of granted) {
       if (this.ability(id)) continue;
       if (ABILITIES[id].kind === 'active' && this.abil.filter((a) => a.def.kind === 'active').length >= GAME.maxActives) continue;
-      this.abil.push({ def: ABILITIES[id], st: { active: false, stacks: 0, bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, target: null, sinceAttack: 99, scanT: 0, cd: 0, buffT: 0 } });
+      this.abil.push({ def: this.abilDef(id), st: { active: false, stacks: 0, bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, target: null, sinceAttack: 99, scanT: 0, cd: 0, buffT: 0 } });
     }
   }
+  /** Ability definition with this troop's form overrides (e.g. Chaotic Viking: Fury without a stack cap). */
+  abilDef(id) { const m = this.def.abilityMods?.[id]; return m ? { ...ABILITIES[id], ...m } : ABILITIES[id]; }
   upLevel(id) { return this.game.upLevel && this.statTeam !== NEUTRAL_TEAM ? this.game.upLevel(this.statTeam, id) : 0; }
   /** Movement slow (strongest wins). Invulnerable/tower troops ignore crowd control. */
   addSlow(pct, t) {
@@ -280,6 +285,7 @@ export class Unit {
     if (this.shredT > 0) this.shredT -= dt;
     if (this.rallyT > 0) this.rallyT -= dt;
     if (this.curse) { this.curse.t -= dt; if (this.curse.t <= 0) this.curse = null; }
+    if (this.fury) { this.fury.t -= dt; if (this.fury.t <= 0) this.fury = null; }
     if (this.curseHasteT > 0) this.curseHasteT -= dt;
     if (this.raised && !this.dead) { this.raised.t -= dt; if (this.raised.t <= 0) { this.game.despawnBrainwashed(this); return; } }
     this.updateCasting(dt);
@@ -443,6 +449,20 @@ export class Unit {
     // Banshee Curse: mark the target (rises for our side if it dies while cursed)
     const bc = this.ability('bansheeCurse');
     if (bc && !bc.st.broken && !tg.dead && !tg.tower) tg.curse = { t: bc.def.duration, team: this.team, src: this, def: bc.def };
+    // Fury stacks on the target (any Frenzy line Viking put them there): every troop of that type on that
+    // team deals +perStack damage per stack. Then a Fury carrier adds/refreshes a stack.
+    const fz = tg.fury;
+    if (fz && fz.t > 0 && fz.team === this.team && fz.unit === this.def.id && !tg.dead && fz.stacks > 0) this.damageDealt += tg.takeDamage(fz.stacks * fz.per, this, 'physical');
+    const fu = this.ability('fury');
+    if (fu && !fu.st.broken && !tg.dead && !tg.tower) {
+      if (!fz || fz.t <= 0 || fz.team !== this.team || fz.unit !== this.def.id) tg.fury = { team: this.team, unit: this.def.id, stacks: 0, per: fu.def.perStack, t: 0 };
+      const F = tg.fury, cap = fu.def.maxStacks;
+      F.stacks = cap > 0 ? Math.min(cap, F.stacks + 1) : F.stacks + 1;
+      F.t = fu.def.duration; F.per = Math.max(F.per, fu.def.perStack);
+    }
+    // Chain Lightning: chance to zap the target and jump through nearby enemies
+    const cl = this.ability('chainLightning');
+    if (cl && !cl.st.broken && !tg.dead && Math.random() < cl.def.chance) g.chainLightning(this, tg, cl.def);
     // Penetration: armor shred on the target
     const pen = this.ability('penetration');
     if (pen && !pen.st.broken && !tg.dead) tg.applyShred(pen.def.shred[this.upLevel('penetration')], pen.def.duration);
@@ -881,7 +901,7 @@ export class Unit {
   groundPos() {
     const T = this.game.terrain; if (!T) return;
     if (!this.flying) T.resolve(this.pos, this.radius * 0.9);
-    this.pos.y = T.heightAt(this.pos.x) + (this.flying ? GAME.flyHeight : 0);
+    this.pos.y = T.heightAt(this.pos.x, this.pos.z) + (this.flying ? GAME.flyHeight : 0);
   }
   /** Vision radius right now (nightF 0 = day, 1 = night). */
   visionRadius(nightF = 0) {
@@ -892,7 +912,7 @@ export class Unit {
     return r;
   }
   /** 0 = low ground (river), 1 = high ground */
-  get groundLevel() { return this.flying ? 2 : this.game.terrain ? this.game.terrain.level(this.pos.x) : 1; }
+  get groundLevel() { return this.flying ? 3 : this.game.terrain ? this.game.terrain.level(this.pos.x, this.pos.z) : 1; }
 
   faceTowards(dx, dz, dt, rate) {
     if (Math.abs(dx) + Math.abs(dz) < 1e-4) return;

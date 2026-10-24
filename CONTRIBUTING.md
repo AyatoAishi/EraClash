@@ -58,6 +58,7 @@ Date and time are written in PHT, and your GitHub name shows as "by …" in the 
 |---|---|
 | `js/config.js` | **All units** (troops and creeps share one schema), abilities, items, factions/rosters, global numbers (`GAME`) |
 | `js/upgrades.js` | Barracks upgrades. Troop upgrades follow the **unit**, base upgrades follow the **faction** |
+| `js/skilltree.js` | Skill trees: troop levels (kills) and evolutions (forms). One entry per unit id |
 | `js/neutrals.js` | Neutral camps: positions, what spawns, drop tables |
 | `js/unit.js` | One troop's brain: movement, attacks, passives, casting |
 | `js/game.js` | Match state: economy, research, AI, active abilities, projectiles, loot |

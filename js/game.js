@@ -7,6 +7,7 @@ import { ABILITIES, ITEMS } from './config.js';
 import { NEUTRAL_TEAM, CAMP_RULES, CAMPS, CREEP_GROUPS, dropChanceForTier, creepTierOf } from './neutrals.js';
 import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ } from './models.js';
 import { sfx } from './audio.js';
+import { SKILL_TREES, levelInfo, formDef } from './skilltree.js';
 import { Vision } from './vision.js';
 
 const FACTION_BY_TEAM = ['medieval', 'modern'];
@@ -54,6 +55,8 @@ export class Game {
       unitMods: {},      // unitId -> flat stat bonuses from stat upgrades
       costAdd: {},       // unitId -> extra hiring cost
       grants: {},        // unitId -> [abilityId] added by upgrades
+      troopKills: {},    // unitId -> kills by that troop type this match (skill tree level, js/skilltree.js)
+      forms: {},         // unitId -> picked skill-tree form (new hires come out as it)
       research: null,    // { id, t, total, price, level } — the one running now
       rqueue: [],        // queued research: [{ id, price, level }] (paid up front, like training)
       towers: 0,
@@ -117,7 +120,7 @@ export class Game {
   emit(evt, ...a) { (this.listeners[evt] || []).forEach((fn) => fn(...a)); }
 
   pop(team) { return this.units.filter((u) => u.team === team && !u.dead && !u.tower && !u.raised).length + this.teams[team].queue.length; }
-  unitCost(team, unitId) { return Math.round((UNITS[unitId].cost * this.statMult(team, unitId) + (this.teams[team]?.costAdd[unitId] || 0)) * 100) / 100; }
+  unitCost(team, unitId) { return Math.round((formDef(unitId, this.teams[team]?.forms[unitId]).cost * this.statMult(team, unitId) + (this.teams[team]?.costAdd[unitId] || 0)) * 100) / 100; }
   /** Stat boost multiplier for a troop type: 1 + 10% per level of every statBoost upgrade that targets it. */
   statMult(team, unitId) {
     const T = this.teams[team]; if (!T) return 1;
@@ -336,6 +339,32 @@ export class Game {
     this.emit('upgrade', team, familyId, cur);
   }
 
+  // ---------------- skill trees (js/skilltree.js) ----------------
+  troopLevel(team, unitId) { return levelInfo(this.teams[team]?.troopKills[unitId] || 0); }
+  addTroopKill(team, unitId) {
+    const T = this.teams[team]; if (!T) return;
+    const before = this.troopLevel(team, unitId).level;
+    T.troopKills[unitId] = (T.troopKills[unitId] || 0) + 1;
+    const now = this.troopLevel(team, unitId).level;
+    if (now > before) this.emit('troopLevel', team, unitId, now);
+  }
+  /** Why `formId` can't be picked right now (null = it can). */
+  formBlock(team, unitId, formId) {
+    const n = SKILL_TREES[unitId]?.[formId], T = this.teams[team];
+    if (!n || !T) return 'Unknown evolution';
+    if ((n.from ?? null) !== (T.forms[unitId] ?? null)) return T.forms[unitId] === formId ? 'Already picked' : 'Not on your path';
+    if (this.troopLevel(team, unitId).level < n.level) return `Needs ${UNITS[unitId].name} level ${n.level}`;
+    return null;
+  }
+  /** Free and instant: troops hired from now on come out in this form. Troops on the field keep theirs. */
+  pickForm(team, unitId, formId) {
+    const err = this.formBlock(team, unitId, formId);
+    if (err) return err;
+    this.teams[team].forms[unitId] = formId;
+    this.emit('form', team, unitId, formId);
+    return null;
+  }
+
   // ---------------- neutral camps ----------------
   campBoxEmpty(c) {
     return !this.units.some((u) => !u.dead && !u.tower && Math.hypot(u.pos.x - c.x, u.pos.z - c.z) < CAMP_RULES.boxRadius);
@@ -380,16 +409,17 @@ export class Game {
   spawnLoot(itemId, p) {
     const it = ITEMS[itemId]; if (!it) return;
     const mesh = buildLoot(it.icon);
-    mesh.position.set(p.x, 0.5, p.z);
+    const y0 = this.terrain?.heightAt(p.x, p.z) || 0;
+    mesh.position.set(p.x, 0.5 + y0, p.z);
     this.scene.add(mesh);
-    this.loot.push({ id: itemId, x: p.x, z: p.z, mesh, t: 0 });
+    this.loot.push({ id: itemId, x: p.x, z: p.z, y0, mesh, t: 0 });
     this.emit('lootDrop', itemId, p);
   }
   updateLoot(dt) {
     for (let i = this.loot.length - 1; i >= 0; i--) {
       const L = this.loot[i];
       L.t += dt;
-      L.mesh.position.y = 0.55 + Math.sin(L.t * 3) * 0.12;
+      L.mesh.position.y = 0.55 + (L.y0 || 0) + Math.sin(L.t * 3) * 0.12;
       L.mesh.userData.spin.forEach((m) => (m.rotation.y += dt * 1.6));
       // AI troops grab loot they walk over; the player picks up with right-click (pickup order)
       const taker = this.units.find((u) => !u.dead && !u.tower && !u.brainwashed && this.teams[u.team]?.isAI && u.items.includes(null) && Math.hypot(u.pos.x - L.x, u.pos.z - L.z) < 1.2);
@@ -533,7 +563,7 @@ export class Game {
   // ---------------- trails (Barding Rally) & line projectiles ----------------
   addTrail(team, x, z, life, bonus) {
     const m = new THREE.Mesh(boxGeo(0.9, 0.04, 0.9), new THREE.MeshBasicMaterial({ color: 0xf2c94c, transparent: true, opacity: 0.45, depthWrite: false }));
-    m.position.set(x, 0.05 + (this.terrain?.heightAt(x) || 0), z); m.rotation.y = Math.random() * 3;
+    m.position.set(x, 0.05 + (this.terrain?.heightAt(x, z) || 0), z); m.rotation.y = Math.random() * 3;
     this.scene.add(m);
     this.trails.push({ team, x, z, t: life, life, bonus, mesh: m });
   }
@@ -729,6 +759,7 @@ export class Game {
     if (killer && !killer.brainwashed && this.teams[killer.team] && killer.team !== u.team) {   // brainwashed killers earn nobody gold
       const T = this.teams[killer.team];
       T.stats.kills++;
+      this.addTroopKill(killer.team, killer.def.id);
       // kill bounty: % of what the victim cost (what was paid; camp creeps / free spawns = their listed cost)
       const bounty = Math.round((u.paid ?? u.def.cost) * GAME.bountyPct);
       T.gold += bounty; T.stats.bounty = (T.stats.bounty || 0) + bounty;
@@ -856,6 +887,10 @@ export class Game {
     // commit to a pick until it's affordable (otherwise expensive specialists never get saved up for)
     T.aiNext ||= (ranged && nM >= 2 && nR < nM / 2 ? ranged : melee).id;
     this.aiResearch(T, this.diff.thinkEvery);
+    for (const id of FACTIONS[T.faction].units) {   // evolutions are free: take one as soon as it unlocks
+      const opts = Object.keys(SKILL_TREES[id] || {}).filter((f) => !this.formBlock(T.team, id, f));
+      if (opts.length) this.pickForm(T.team, id, opts[Math.floor(Math.random() * opts.length)]);
+    }
     this.aiRepair(T);
     const uc = this.unitCost(T.team, T.aiNext);
     if (T.gold >= uc && T.queue.length < 2 && !this.aiSaving(T, uc) && !this.train(T.team, T.aiNext)) T.aiNext = null;
@@ -926,6 +961,42 @@ export class Game {
         spin: new THREE.Vector3(Math.random() * 8, Math.random() * 8, 0),
       });
     }
+  }
+
+  /** Chain Lightning: hit `first`, then jump to a random enemy within def.jump of the last one (no repeats). */
+  chainLightning(src, first, def) {
+    const hit = [first];
+    let cur = first;
+    for (;;) {
+      const dmg = cur.takeDamage(def.damage, src, def.damageType || 'magic');
+      src.damageDealt += dmg;
+      if (dmg > 0) this.emit('hitDmg', cur.pos, dmg, false, src.team);
+      if (hit.length >= def.targets) break;
+      const near = this.units.filter((o) => !hit.includes(o) && src.isFoe(o) && Math.hypot(o.pos.x - cur.pos.x, o.pos.z - cur.pos.z) - o.radius <= def.jump);
+      if (!near.length) break;
+      const nxt = near[Math.floor(Math.random() * near.length)];
+      this.bolt(cur.pos, nxt.pos);
+      hit.push(nxt); cur = nxt;
+    }
+    this.bolt(src.pos, first.pos, true);
+    this.burst(first.pos, 4, [0x9ad8ff, 0xffffff], 2, 0.3, 0.7);
+    if (this.audible(first.pos.x)) sfx('zap', 60);
+  }
+  /** A jagged, fading lightning line between two points. */
+  bolt(a, b, short = false) {
+    if (!this.seenByViewer(a) && !this.seenByViewer(b)) return;
+    const pts = [], n = 6, y0 = short ? 1.6 : 1.1;
+    for (let i = 0; i <= n; i++) {
+      const f = i / n, j = i === 0 || i === n ? 0 : 0.35;
+      pts.push(new THREE.Vector3(a.x + (b.x - a.x) * f + (Math.random() - 0.5) * j, y0 + (Math.random() - 0.5) * j, a.z + (b.z - a.z) * f + (Math.random() - 0.5) * j));
+    }
+    const g = new THREE.Group();
+    for (const [c, off] of [[0x6fe3ff, 0], [0xffffff, 0.04]]) {
+      const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map((p) => p.clone().setY(p.y + off))), new THREE.LineBasicMaterial({ color: c, transparent: true, depthWrite: false }));
+      g.add(l);
+    }
+    this.scene.add(g);
+    this.decals.push({ g, t: 0, life: 0.3, lines: true });
   }
 
   marker(point, color) {
@@ -1010,7 +1081,7 @@ export class Game {
       d.t += dt;
       const f = Math.max(0, 1 - Math.max(0, d.t - d.life * 0.5) / (d.life * 0.5));
       d.g.children.forEach((m) => (m.material.opacity = f));
-      if (d.t > d.life) { this.scene.remove(d.g); d.g.children.forEach((m) => m.material.dispose()); this.decals.splice(i, 1); }
+      if (d.t > d.life) { this.scene.remove(d.g); d.g.children.forEach((m) => { m.material.dispose(); if (d.lines) m.geometry.dispose(); }); this.decals.splice(i, 1); }
     }
     for (let i = this.markers.length - 1; i >= 0; i--) {
       const k = this.markers[i];

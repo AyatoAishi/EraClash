@@ -70,6 +70,15 @@ export const COMMANDS = {
       return u.addItem(id) >= 0 ? `${ITEMS[id].name} → ${u.def.name}` : 'inventory full';
     },
   },
+  xp: {
+    args: '<unit> <kills>', help: 'add kills to a troop type (skill tree levels), e.g. /xp viking 75',
+    run: ({ g, me }, [q, n]) => {
+      const id = findId(UNITS, q); if (!id) return `unknown unit "${q || ''}"`;
+      const add = Math.max(1, Math.min(10000, +n || 5));
+      for (let k = 0; k < add; k++) g.addTroopKill(me, id);
+      return `${UNITS[id].name}: ${g.teams[me].troopKills[id]} kills → level ${g.troopLevel(me, id).level}`;
+    },
+  },
   time: {
     args: '<day|night>', help: 'jump to day or night',
     run: ({ g }, [w]) => { const half = GAME.dayNight.half, cyc = Math.floor(g.time / (half * 2)) * half * 2; g.time = w === 'night' ? cyc + half + GAME.dayNight.fade + 1 : cyc + half * 2 + GAME.dayNight.fade + 1; g.nextCampSpawn = Math.ceil(g.time / 60) * 60; return `it is now ${w === 'night' ? 'night' : 'day'}`; },

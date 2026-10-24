@@ -46,4 +46,13 @@ export const CAMPS = [
   { id: 'medBottom', name: 'Forest camp (bottom)', side: 'medieval', x: -36, z: 25,  tier: 1 },
   { id: 'modTop',    name: 'Alley camp (top)',     side: 'modern',   x: 36,  z: -25, tier: 1 },
   { id: 'modBottom', name: 'Alley camp (bottom)',  side: 'modern',   x: 36,  z: 25,  tier: 1 },
+  // outer ring (added with the bigger map): two deep in each corner, two flanking the north hill / south woods
+  { id: 'medFarTop',    name: 'Deep woods (top)',      side: 'medieval', x: -48, z: -38, tier: 1 },
+  { id: 'medFarBottom', name: 'Deep woods (bottom)',   side: 'medieval', x: -48, z: 38,  tier: 1 },
+  { id: 'medHillTop',   name: 'Hillside glade (top)',  side: 'medieval', x: -28, z: -39, tier: 1 },
+  { id: 'medMidBottom', name: 'Woodland glade (bottom)', side: 'medieval', x: -27, z: 39, tier: 1 },
+  { id: 'modFarTop',    name: 'Rail yard (top)',       side: 'modern',   x: 48,  z: -38, tier: 1 },
+  { id: 'modFarBottom', name: 'Rail yard (bottom)',    side: 'modern',   x: 48,  z: 38,  tier: 1 },
+  { id: 'modHillTop',   name: 'Park lot (top)',        side: 'modern',   x: 28,  z: -39, tier: 1 },
+  { id: 'modMidBottom', name: 'Plaza alley (bottom)',  side: 'modern',   x: 27,  z: 39,  tier: 1 },
 ];

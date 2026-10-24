@@ -44,7 +44,7 @@ export class Controls {
   }
   clampTarget() {
     this.target.x = Math.max(-GAME.laneHalfLen - 4, Math.min(GAME.laneHalfLen + 4, this.target.x));
-    this.target.z = Math.max(-26, Math.min(26, this.target.z));
+    this.target.z = Math.max(-GAME.mapHalfWidth + 4, Math.min(GAME.mapHalfWidth - 4, this.target.z));
   }
   centerOn(x, z = 0) { this.target.set(x, 0, z); this.clampTarget(); this.apply(); }
 
@@ -520,6 +520,7 @@ export class Controls {
       else if (e.code === k.charge) this.charge();
       else if (e.code === k.shop) this.hooks.toggleShop?.();
       else if (e.code === k.barracks) this.hooks.toggleBarracks?.();
+      else if (e.code === k.skills) this.hooks.toggleSkills?.();
       else if (e.code === k.repair) this.hooks.toggleRepair?.();
       else if (e.code === k.autoLoot) this.hooks.toggleAutoLoot?.();
       else if (e.code === k.chat || (k.chat === 'Enter' && e.code === 'NumpadEnter')) { e.preventDefault(); this.hooks.openChat?.(); }

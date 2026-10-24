@@ -7,6 +7,31 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.17.0', date: '2026-10-24T18:30:00+08:00', title: 'Skill trees & a bigger map',
+    sections: [
+      { title: 'New — Skill Tree', items: [
+        'New <b>Skills</b> button left of the Barracks (<b>N</b>, rebindable). It lists every troop you can hire with its <b>level</b> and kill progress.',
+        'Every kill by a troop type (troops <b>and</b> camp creeps) adds to that type\'s level for this match: <b>5</b> kills to Lv 1, then <b>10, 15, 20…</b> more per level. Levels don\'t give stats; they unlock evolutions.',
+        'Evolving is <b>free and instant</b>. From then on every troop of that type you hire comes out evolved (new name, new eye and hair color, same price, same Barracks upgrades). Troops already on the field stay as they are.',
+        'The AI evolves its troops too.',
+        'Test command: <b>/xp</b> &lt;unit&gt; &lt;kills&gt;.',
+      ] },
+      { title: 'Viking tree', items: [
+        '<b>Lv 5 — Frenzy Viking</b>: +1 HP regen, new passive <b>Fury</b>: each hit puts a stack on the target for 5s (max 10, hitting again refreshes and adds one). <b>Every Viking</b> deals +2 damage per stack to that target. Breakable.',
+        '<b>Lv 5 — Lightning Viking</b>: +10 attack speed, new passive <b>Chain Lightning</b>: 20% chance on hit to zap the target for 10 magic, jumping to a random enemy within 2 range, up to 4 enemies.',
+        '<b>Lv 15 — Chaotic Viking</b> (after Frenzy): +2 more HP regen, Fury stacks without limit.',
+        '<b>Lv 15 — Storm Viking</b> (after Lightning): +20 more attack speed, +0.3 move speed, Chain Lightning 20 damage and 30% chance.',
+      ] },
+      { title: 'Map', items: [
+        'The map is wider: it now reaches z ±46 (was ±30).',
+        '<b>8 new Tier 1 camps</b> (4 per side): Deep woods, Hillside glade and Woodland glade on the Medieval side; Rail yard, Park lot and Plaza alley on the Modern side. 12 camps in total.',
+        'New <b>north hill</b>: high ground (above the normal high ground). Troops on it see down; troops below can\'t see up, and ranged attacks fired uphill can miss. The river now springs from a pond at its top.',
+        'New scenery: forest ponds on the Medieval side, a fountain plaza and a park pond on the Modern side, street planters and patches of green between the city blocks, plus many more trees and buildings in the outer areas.',
+        'Minimap is taller to fit the new map and shows the hill.',
+      ] },
+    ],
+  },
+  {
     version: '0.16.1', date: '2026-10-24T15:10:00+08:00', title: 'Cursor lock removed',
     sections: [
       { title: 'Removed', items: ['The <b>cursor lock</b> from 0.16.0 felt off, so it is gone: the normal cursor and edge-panning are back, and the two cursor options were removed from Options → Gameplay.'] },

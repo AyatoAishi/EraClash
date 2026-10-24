@@ -64,6 +64,8 @@ const SFX = {
   shop:    () => { tone(784, 0.06, 'square', 0.08); tone(1047, 0.09, 'square', 0.08, null, 0.05); },
   splat:   () => { noise(0.35, 0.4, 500); tone(90, 0.3, 'sawtooth', 0.18, 40); noise(0.2, 0.2, 2200, 'bandpass', 0.05); },
   whiff:   () => { noise(0.08, 0.08, 5000, 'highpass'); },
+  zap:     () => { noise(0.12, 0.16, 5200, 'highpass'); tone(1400, 0.08, 'sawtooth', 0.06, 300); },
+  evolve:  () => [392, 523, 659, 880].forEach((f, i) => tone(f, 0.16, 'square', 0.09, null, i * 0.07)),
   coin:    () => { tone(1320, 0.05, 'square', 0.05); tone(1760, 0.07, 'square', 0.05, null, 0.04); },
   snipe:   () => { noise(0.18, 0.4, 1200); tone(110, 0.22, 'square', 0.14, 40); noise(0.4, 0.06, 4000, 'highpass', 0.05); },
   death:   () => { tone(330, 0.35, 'sawtooth', 0.1, 60); noise(0.25, 0.12, 600); },

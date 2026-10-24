@@ -1,7 +1,9 @@
 // All DOM UI: menus, options, help, HUD, shop, selection panel + inventory, minimap, toasts.
 import * as THREE from 'three';
 import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS } from './config.js';
-import { UNIT_BUILDERS, buildCastle, buildHQ, CASTLE_TIERS, HQ_TIERS } from './models.js';
+import { UNIT_BUILDERS, buildCastle, buildHQ, CASTLE_TIERS, HQ_TIERS, applyLook } from './models.js';
+import { TERRAIN } from './terrain.js';
+import { SKILL_TREES, formDef, levelInfo, nextForms, formPath } from './skilltree.js';
 import { settings, saveSettings, onSettingsChange, ACTIONS, SCOPE_LABEL, scopeOf, keyLabel, resetKeys } from './settings.js';
 import { sfx, applyAudioSettings, initAudio } from './audio.js';
 import { ORDER_LABEL } from './unit.js';
@@ -23,8 +25,9 @@ export function makePortraits() {
   sc.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.4));
   const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(2, 4, 5); sc.add(dl);
   const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
-  for (const id of Object.keys(UNITS)) {
-    const rig = UNIT_BUILDERS[id]();
+  const looks = [...Object.keys(UNITS).map((id) => [id, null]), ...Object.entries(SKILL_TREES).flatMap(([id, t]) => Object.keys(t).map((f) => [id, f]))];
+  for (const [id, form] of looks) {
+    const rig = applyLook(UNIT_BUILDERS[id](), form ? formDef(id, form).look : null);
     rig.root.rotation.y = -0.45;
     if (rig.style === 'bow') rig.armL.rotation.x = -1.2;
     if (rig.style === 'rifle') { rig.armR.rotation.x = -1.3; rig.armL.rotation.x = -1.4; rig.armL.rotation.z = 0.35; }
@@ -38,7 +41,7 @@ export function makePortraits() {
     cam.aspect = 0.75; cam.position.set(1.7, 1.5, 5.6); cam.lookAt(0, 1.05, 0); cam.fov = 30; cam.updateProjectionMatrix();
     r.render(sc, cam);
     const full = r.domElement.toDataURL();
-    PORTRAITS[id] = { face, full };
+    PORTRAITS[form ? id + ':' + form : id] = { face, full };
     sc.remove(rig.root);
     rig.matList.forEach((m) => m.dispose());
   }
@@ -54,6 +57,9 @@ export function makePortraits() {
   }
   r.dispose(); r.forceContextLoss?.();
 }
+
+/** Portrait of a unit definition (skill-tree forms have their own, e.g. 'viking:frenzy'). */
+export const portraitOf = (def) => PORTRAITS[def.form ? def.id + ':' + def.form : def.id] || PORTRAITS[def.id];
 
 function fmtTime(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`; }
 const pIcon = (pid, extra = '') => `<span class="pico ${ABILITIES[pid].kind}" data-tip="ability:${pid}" ${extra}><svg><use href="#${ABILITIES[pid].icon}"/></svg></span>`;
@@ -141,6 +147,8 @@ export class UI {
     $('#shop-close').addEventListener('click', () => this.toggleShop(false));
     $('#btn-barracks').addEventListener('click', () => this.toggleBarracks());
     $('#barracks-close').addEventListener('click', () => this.toggleBarracks(false));
+    $('#btn-skills').addEventListener('click', () => this.toggleSkills());
+    $('#skills-close').addEventListener('click', () => this.toggleSkills(false));
     $('#btn-repair').addEventListener('click', () => this.toggleRepair());
     $('#btn-autoloot').addEventListener('click', () => this.toggleAutoLoot());
     // fast forward (vs AI only): 1x / 2x / 3x
@@ -164,7 +172,7 @@ export class UI {
     const mmToWorld = (e) => {
       const r = this.mm.getBoundingClientRect();
       const u = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), v = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
-      return { x: -64 + u * 128, z: -32 + v * 64 };
+      return { x: TERRAIN.minX + u * (TERRAIN.maxX - TERRAIN.minX), z: TERRAIN.minZ + v * (TERRAIN.maxZ - TERRAIN.minZ) };
     };
     let mmDown = false;
     this.mm.addEventListener('mousedown', (e) => {
@@ -551,21 +559,21 @@ export class UI {
     this.wireShopTools();
     box.innerHTML = '';
     for (const id of this.roster()) {
-      const u = UNITS[id];
+      const u = this.formDefOf(id);   // your picked skill-tree form (name, look, stats)
       const b = document.createElement('button');
       b.className = 'sitem frame';
       b.dataset.id = id;
       // what the search box matches: name, role, family, attack type, ability names
-      b.dataset.q = [u.name, u.role, FAMILIES[u.family]?.name, u.type, ...u.abilities.map((a) => ABILITIES[a]?.name || a)].join(' ').toLowerCase();
+      b.dataset.q = [u.name, u.baseName || '', u.role, FAMILIES[u.family]?.name, u.type, ...u.abilities.map((a) => ABILITIES[a]?.name || a)].join(' ').toLowerCase();
       b.innerHTML = `
-        <img src="${PORTRAITS[id].face}" alt="">
+        <img src="${portraitOf(u).face}" alt="">
         <div>
           <div class="nm">${typeIcon(u)}${u.name}${u.abilities.map((a) => pIcon(a, 'class="pico sm"')).join('')}</div>
           <div class="ln role">${famTag(u)} ${u.role}</div>
           <div class="ln st">HP <b>${u.hp}</b> · ARM <b>${u.armor}</b> · DMG <b>${u.damage}</b> · RNG <b>${u.type === 'ranged' ? u.range : 'melee'}</b></div>
           <div class="ln cs">HP <b>${u.hp}</b> · DMG <b>${u.damage}</b></div>
         </div>
-        <div class="price"><svg class="ico"><use href="#i-coin"/></svg><b>${u.cost}</b></div>`;
+        <div class="price"><svg class="ico"><use href="#i-coin"/></svg><b>${fmt(this.app.game ? this.app.game.unitCost(this.app.playerTeam, id) : u.cost)}</b></div>`;
       b.onclick = (e) => this.app.hire(id, e.shiftKey ? 5 : 1);
       box.appendChild(b);
     }
@@ -625,10 +633,104 @@ export class UI {
     ids.forEach((id, i) => {
       const b = document.createElement('button');
       b.className = 'rh frame';
-      b.innerHTML = `<kbd>${keyLabel(settings.keys['recent' + (i + 1)])}</kbd><img src="${PORTRAITS[id].face}" alt="">${UNITS[id].name}`;
+      const d = this.formDefOf(id);
+      b.innerHTML = `<kbd>${keyLabel(settings.keys['recent' + (i + 1)])}</kbd><img src="${portraitOf(d).face}" alt="">${d.name}`;
       b.onclick = (e) => this.app.hire(id, e.shiftKey ? 5 : 1);
       el.appendChild(b);
     });
+  }
+
+  // ======================= SKILL TREE (js/skilltree.js) =======================
+  /** The definition a troop type is hired as right now (its picked form, or the base troop). */
+  formDefOf(id) { const T = this.app.game?.teams[this.app.playerTeam]; return formDef(id, T?.forms[id]); }
+  skillsOpen() { return $('#skills').classList.contains('open'); }
+  toggleSkills(force) {
+    const el = $('#skills');
+    const open = force ?? !el.classList.contains('open');
+    if (open === el.classList.contains('open')) return;
+    if (open) { this.toggleShop(false); this.toggleBarracks(false); }
+    el.classList.toggle('open', open);
+    $('#btn-skills').classList.toggle('on', open);
+    sfx(open ? 'shop' : 'click');
+    if (open) this.renderSkills();
+  }
+  /** Any evolution you could pick right now (drives the dot on the HUD button). */
+  evolutionsReady() {
+    const g = this.app.game, pt = this.app.playerTeam;
+    if (!g || pt === null) return 0;
+    return this.roster().filter((id) => Object.keys(SKILL_TREES[id] || {}).some((f) => !g.formBlock(pt, id, f))).length;
+  }
+  renderSkills() {
+    const g = this.app.game, pt = this.app.playerTeam;
+    if (!g || pt === null) return;
+    $('#btn-skills').classList.toggle('ready', this.evolutionsReady() > 0);
+    if (!this.skillsOpen()) return;
+    const T = g.teams[pt], roster = this.roster();
+    if (!roster.includes(this.skillSel)) this.skillSel = roster.find((id) => SKILL_TREES[id]) || roster[0];
+    // left: every troop you can hire, its level and kill progress
+    $('#sk-troops').innerHTML = roster.map((id) => {
+      const d = formDef(id, T.forms[id]), L = levelInfo(T.troopKills[id] || 0);
+      const ready = Object.keys(SKILL_TREES[id] || {}).some((f) => !g.formBlock(pt, id, f));
+      return `<button class="sk-t frame${id === this.skillSel ? ' on' : ''}${SKILL_TREES[id] ? '' : ' none'}${ready ? ' ready' : ''}" data-id="${id}">
+        <img src="${portraitOf(d).face}" alt=""><span class="sk-lv">Lv ${L.level}</span>
+        <span class="sk-tn"><b>${d.name}</b><small>${L.max ? 'max level' : `${L.into} / ${L.need} kills`}${SKILL_TREES[id] ? '' : ' · no tree yet'}</small>
+        <i class="sk-xp"><i style="width:${L.max ? 100 : (L.into / L.need * 100)}%"></i></i></span>${ready ? '<em>!</em>' : ''}</button>`;
+    }).join('');
+    $$('#sk-troops .sk-t').forEach((b) => (b.onclick = () => { sfx('click'); this.skillSel = b.dataset.id; this.renderSkills(); }));
+    // right: the selected troop's tree, base on the left, branches to the right
+    const id = this.skillSel, tree = SKILL_TREES[id], cur = T.forms[id] || null, L = levelInfo(T.troopKills[id] || 0);
+    const box = $('#sk-tree');
+    if (!tree) { box.innerHTML = `<div class="sk-empty">${UNITS[id].name} has no skill tree yet. It still levels up from kills, so it's ready when one is added.</div>`; return; }
+    const path = formPath(id, cur);
+    const card = (formId) => {
+      const d = formDef(id, formId), n = formId ? tree[formId] : null;
+      const picked = formId === null ? true : path.includes(formId);
+      const err = formId ? g.formBlock(pt, id, formId) : null;
+      const state = picked ? (formId === cur ? 'current' : 'done') : !err ? 'open' : (n && (n.from ?? null) === cur) ? 'locked' : 'off';
+      const lines = formId ? this.formLines(id, formId) : [`<span class="sk-l">${d.role}</span>`];
+      const btn = state === 'open' ? `<button class="btn sk-go" data-form="${formId}">EVOLVE</button>`
+        : state === 'current' ? '<span class="sk-st cur">HIRING THIS</span>'
+        : state === 'done' ? '<span class="sk-st">PICKED</span>'
+        : state === 'locked' ? `<span class="sk-st lock">Needs Lv ${n.level} (${L.level})</span>`
+        : `<span class="sk-st lock">${this.offReason(id, formId, path)}</span>`;
+      return `<div class="sk-node ${state}"><div class="sk-card frame">
+        <div class="sk-h"><img src="${portraitOf(d).face}" alt=""><div><b>${d.name}</b><small>${n ? 'Level ' + n.level : 'Base troop'}</small></div></div>
+        <div class="sk-lines">${lines.join('')}</div>${n?.desc ? `<p>${n.desc}</p>` : ''}${btn}</div>${branch(formId)}</div>`;
+    };
+    const branch = (formId) => {
+      const kids = nextForms(id, formId);
+      return kids.length ? `<div class="sk-kids">${kids.map(card).join('')}</div>` : '';
+    };
+    box.innerHTML = `<div class="sk-root">${card(null)}</div>`;
+    $$('.sk-go', box).forEach((b) => (b.onclick = () => {
+      const err = g.pickForm(pt, id, b.dataset.form);
+      if (err) { this.toast(err, 'err'); sfx('error', 150); return; }
+      sfx('evolve');
+      this.toast(`Evolved: new ${UNITS[id].name}s come out as ${formDef(id, b.dataset.form).name}. The ones on the field stay as they are.`);
+    }));
+  }
+  /** Why a node isn't on your current path: you went the other way, or its parent isn't picked yet. */
+  offReason(id, formId, path) {
+    const mine = formPath(id, formId), n = SKILL_TREES[id][formId];
+    for (let k = 0; k < Math.min(mine.length, path.length); k++) if (mine[k] !== path[k]) return 'Other path';
+    return `Lv ${n.level} · after ${SKILL_TREES[id][n.from].name}`;
+  }
+  /** What a node changes, as short lines with icons. */
+  formLines(id, formId) {
+    const n = SKILL_TREES[id][formId], out = [];
+    const label = { hp: 'HP', hpRegen: 'HP regen', damage: 'damage', attackSpeed: 'attack speed', moveSpeed: 'move speed', armor: 'armor', ward: 'ward', range: 'range', evasion: 'evasion' };
+    for (const [k, v] of Object.entries(n.stats || {})) out.push(`<span class="sk-l stat">${v > 0 ? '+' : ''}${fmt(v)} ${label[k] || k}</span>`);
+    if (n.cost) out.push(`<span class="sk-l stat">${n.cost > 0 ? '+' : ''}${fmt(n.cost)} gold price</span>`);
+    for (const a of n.abilities || []) out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')} New passive: <b>${ABILITIES[a].name}</b></span>`);
+    for (const [a, m] of Object.entries(n.abilityMods || {})) {
+      const A = ABILITIES[a], parts = Object.entries(m).map(([f, v]) => {
+        const was = formDef(id, n.from).abilityMods?.[a]?.[f] ?? A[f];
+        const show = (x) => (f === 'chance' ? Math.round(x * 100) + '%' : f === 'maxStacks' && x === 0 ? 'unlimited' : fmt(x));
+        return `${f === 'maxStacks' ? 'stacks' : f} ${show(was)} → ${show(v)}`;
+      });
+      out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')}<span><b>${A.name}</b>: ${parts.join(', ')}</span></span>`);
+    }
+    return out;
   }
 
   // ======================= REPAIR =======================
@@ -673,7 +775,7 @@ export class UI {
     const el = $('#barracks');
     const open = force ?? !el.classList.contains('open');
     if (open === el.classList.contains('open')) return;
-    if (open) this.toggleShop(false);
+    if (open) { this.toggleShop(false); this.toggleSkills(false); }
     el.classList.toggle('open', open);
     $('#btn-barracks').classList.toggle('on', open);
     sfx(open ? 'shop' : 'click');
@@ -765,6 +867,7 @@ export class UI {
     const el = $('#shop');
     const open = force ?? !el.classList.contains('open');
     if (open && this.barracksOpen()) this.toggleBarracks(false);
+    if (open && this.skillsOpen()) this.toggleSkills(false);
     if (open === el.classList.contains('open')) return;
     el.classList.toggle('open', open);
     $('#btn-shop').classList.toggle('on', open);
@@ -774,7 +877,7 @@ export class UI {
 
   renderQueue() {
     const T = this.app.game.teams[this.app.playerTeam];
-    const key = T.queue.join(',');
+    const key = T.queue.join(',') + JSON.stringify(T.forms);
     const q = $('#queue');
     if (key !== this.lastQueueKey) {
       this.lastQueueKey = key;
@@ -784,8 +887,9 @@ export class UI {
         if (!id) { q.insertAdjacentHTML('beforeend', '<div class="qe"></div>'); continue; }
         const b = document.createElement('button');
         b.className = 'qi';
-        b.title = `${UNITS[id].name} — click to cancel (refund ${UNITS[id].cost}g)`;
-        b.innerHTML = `<img src="${PORTRAITS[id].face}" alt="">${i === 0 ? '<i></i>' : ''}`;
+        const qd = this.formDefOf(id);
+        b.title = `${qd.name} — click to cancel (refund ${fmt(T.queuePaid[i] ?? qd.cost)}g)`;
+        b.innerHTML = `<img src="${portraitOf(qd).face}" alt="">${i === 0 ? '<i></i>' : ''}`;
         b.onclick = () => { if (this.app.game.cancelQueue(this.app.playerTeam, i)) sfx('click'); };
         q.appendChild(b);
       }
@@ -806,6 +910,16 @@ export class UI {
     this.buildCommandCard();
     this.buildShop();
     this.buildBarracks();
+    this.skillSel = null;
+    this.toggleSkills(false);
+    g.on('form', (team) => { if (team === pt) { this.buildShop(); this.renderSkills(); } });
+    g.on('troopLevel', (team, id, L) => {
+      if (team !== pt) return;
+      // only speak up when a level actually unlocks something (the HUD button dot covers the rest)
+      const unlocked = Object.entries(SKILL_TREES[id] || {}).filter(([f, n]) => n.level === L && !g.formBlock(pt, id, f));
+      if (unlocked.length) { this.toast(`${this.formDefOf(id).name} reached level ${L}: evolution ready! Open the Skill Tree (${keyLabel(settings.keys.skills)})`); sfx('evolve'); }
+      this.renderSkills();
+    });
     this.toggleShop(false);
     this.toggleBarracks(false);
     this.lastSelKey = '#';
@@ -845,6 +959,8 @@ export class UI {
       const pe = $('.price b', el); if (pe) pe.textContent = Math.round(cost * 10) / 10;
     });
     this.renderBarracks();
+    { const T = this.app.game.teams[this.app.playerTeam], k = JSON.stringify(T.troopKills) + JSON.stringify(T.forms);   // kills/forms changed -> refresh the tree
+      if (k !== this._skKey) { this._skKey = k; this.renderSkills(); } }
     this.renderRepair();
     this.renderAutoLoot();
     const vsAI = g.teams.some((T2, t) => t !== this.app.playerTeam && T2.isAI);
@@ -923,7 +1039,7 @@ export class UI {
     const single = sel.length === 1;
     if (key !== this.lastSelKey || force) {
       this.lastSelKey = key;
-      $('#sp-portrait').src = PORTRAITS[p.def.id].face;
+      $('#sp-portrait').src = portraitOf(p.def).face;
       $('#sp-name').textContent = p.def.name + (p.brainwashed ? ' (brainwashed)' : p.team === 2 ? ' (neutral)' : isEnemy ? ' (enemy)' : '');
       const grid = $('#sp-grid');
       grid.classList.remove('basegrid');
@@ -932,7 +1048,7 @@ export class UI {
       sel.slice(0, 24).forEach((u, i) => {
         const c = document.createElement('button');
         c.className = 'cell' + (i === 0 ? ' primary' : '');
-        c.innerHTML = `<img src="${PORTRAITS[u.def.id].face}" alt=""><i><b></b></i>`;
+        c.innerHTML = `<img src="${portraitOf(u.def).face}" alt=""><i><b></b></i>`;
         c.onclick = (e) => {
           sfx('click');
           const ctl = this.app.controls;
@@ -1020,20 +1136,22 @@ export class UI {
   drawMinimap() {
     const g = this.app.game; if (!g) return;
     const c = this.mmCtx, W = this.mm.width, H = this.mm.height;
-    const X = (x) => Math.round((x + 64) / 128 * W), Z = (z) => Math.round((z + 32) / 64 * H);
+    const TR = TERRAIN, X = (x) => Math.round((x - TR.minX) / (TR.maxX - TR.minX) * W), Z = (z) => Math.round((z - TR.minZ) / (TR.maxZ - TR.minZ) * H);
     c.clearRect(0, 0, W, H);
     c.fillStyle = '#2f4a25'; c.fillRect(0, 0, W / 2, H);
     c.fillStyle = '#34373c'; c.fillRect(W / 2, 0, W / 2, H);
     c.fillStyle = 'rgba(255,255,255,0.08)'; c.fillRect(X(-52), Z(-14), X(52) - X(-52), Z(14) - Z(-14));
-    c.fillStyle = 'rgba(58,122,184,0.7)'; c.fillRect(X(-3.5), 0, X(3.5) - X(-3.5), H);          // river (low ground)
+    const HL = TR.hill;   // north hill (high ground)
+    c.fillStyle = 'rgba(150,200,100,0.55)'; c.beginPath(); c.ellipse(X(HL.x), Z(HL.z), (X(HL.rx * 1.5) - X(0)), (Z(HL.rz * 1.5) - Z(0)), 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = 'rgba(58,122,184,0.7)'; c.fillRect(X(-3.5), Z(this.app.game.terrain.riverStart), X(3.5) - X(-3.5), H);          // river (low ground)
     const pt0 = this.app.playerTeam, V = g.vision;
     if (V && pt0 !== null) {   // fog of war
       const vis = V.vis[pt0], vc = 2;
       c.fillStyle = 'rgba(0,0,0,0.45)';
       for (let iz = 0; iz < V.H; iz++) for (let ix = 0; ix < V.W; ix++) {
         if (vis[iz * V.W + ix]) continue;
-        const x = -90 + ix * vc, z = -36 + iz * vc;
-        if (x + vc < -64 || x > 64 || z + vc < -32 || z > 32) continue;
+        const x = TR.visMinX + ix * vc, z = TR.visMinZ + iz * vc;
+        if (x + vc < TR.minX || x > TR.maxX || z + vc < TR.minZ || z > TR.maxZ) continue;
         c.fillRect(X(x), Z(z), Math.ceil(X(x + vc) - X(x)), Math.ceil(Z(z + vc) - Z(z)));
       }
     }

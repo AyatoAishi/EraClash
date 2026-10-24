@@ -32,7 +32,7 @@ export class Vision {
     // cell level cache (0 = low ground)
     this.cellLevel = new Uint8Array(this.W * this.H);
     for (let iz = 0; iz < this.H; iz++) for (let ix = 0; ix < this.W; ix++) {
-      this.cellLevel[iz * this.W + ix] = T.level(TERRAIN.visMinX + (ix + 0.5) * TERRAIN.visCell);
+      this.cellLevel[iz * this.W + ix] = T.level(TERRAIN.visMinX + (ix + 0.5) * TERRAIN.visCell, TERRAIN.visMinZ + (iz + 0.5) * TERRAIN.visCell);
     }
     game.intel = [{ seen: false }, { seen: false }];     // intel[t] = what team t knows about team 1-t's base
     this.update(0, true);
@@ -71,7 +71,7 @@ export class Vision {
     for (const u of g.units) if (!u.dead && u.team === team) out.push({ x: u.pos.x, z: u.pos.z, r: u.visionRadius(f), level: u.groundLevel, air: u.flying });
     const b = g.bases[team];
     if (b && !b.dead) out.push({ x: b.x, z: 0, r: lerp(b.vision), level: 1 });
-    for (const s of g.structures || []) if (!s.dead && s.team === team) out.push({ x: s.pos.x, z: s.pos.z, r: s.visionRadius(f), level: this.terrain.level(s.pos.x) });
+    for (const s of g.structures || []) if (!s.dead && s.team === team) out.push({ x: s.pos.x, z: s.pos.z, r: s.visionRadius(f), level: this.terrain.level(s.pos.x, s.pos.z) });
     return out;
   }
 

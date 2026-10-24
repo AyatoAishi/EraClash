@@ -55,8 +55,7 @@ function humanoid(p) {
   // head
   rig.head = pivot(body, 0, 1.73, 0);
   B(rig.head, 0.5, 0.5, 0.5, p.skin, 0, 0, 0, mats);
-  B(rig.head, 0.08, 0.08, 0.02, 0x111111, -0.12, 0.04, 0.255, mats);
-  B(rig.head, 0.08, 0.08, 0.02, 0x111111, 0.12, 0.04, 0.255, mats);
+  rig.eyes = [B(rig.head, 0.08, 0.08, 0.02, 0x111111, -0.12, 0.04, 0.255, mats), B(rig.head, 0.08, 0.08, 0.02, 0x111111, 0.12, 0.04, 0.255, mats)];
   // arms (pivot at shoulder)
   rig.armL = pivot(body, -0.45, 1.42, 0);
   rig.armR = pivot(body, 0.45, 1.42, 0);
@@ -141,6 +140,20 @@ export function buildPolice() {
   B(sh, 0.06, 0.1, 0.55, 0x2a2a2a, 0, 0.42, 0, m);
   B(sh, 0.06, 0.08, 0.3, 0xffffff, 0, 0.15, 0, m); // POLICE stripe
   return finalize(r);
+}
+
+/**
+ * Skill-tree forms: recolor a built model. look = { eyes: 0xRRGGBB (glowing), hair: { fromColor: toColor } }.
+ * Hair colors are swapped on this model's own materials, so other troops of the same type are untouched.
+ */
+export function applyLook(r, look) {
+  if (!look) return r;
+  for (const [from, to] of Object.entries(look.hair || {})) r.mats.get(String(from))?.color.setHex(to);
+  if (look.eyes != null && r.eyes) {
+    const m = new THREE.MeshBasicMaterial({ color: look.eyes });   // unlit = glows, and the hit flash leaves it alone
+    for (const e of r.eyes) { e.material = m; e.scale.set(1.15, 1.15, 1); }
+  }
+  return r;
 }
 
 function finalize(r) {
@@ -1008,5 +1021,76 @@ export function buildCrate() {
   B(g, 0.9, 0.9, 0.9, 0x9a6b3a, 0, 0.45, 0, null);
   B(g, 0.95, 0.12, 0.95, 0x6e4a26, 0, 0.85, 0, null);
   B(g, 0.95, 0.12, 0.95, 0x6e4a26, 0, 0.06, 0, null);
+  return g;
+}
+
+// ---------- nature / park props (bigger map) ----------
+/** A voxel pond: water surface + stone rim + reeds and lily pads. rx/rz = half size. */
+export function buildPond(rx = 3, rz = 2.2, seed = 1) {
+  const g = new THREE.Group();
+  let k = seed;
+  const rr = () => { k = (k * 16807) % 2147483647; return (k - 1) / 2147483646; };
+  const water = new THREE.Mesh(boxGeo(1, 1, 1), new THREE.MeshLambertMaterial({ color: 0x3a7ab8, transparent: true, opacity: 0.85 }));
+  water.scale.set(rx * 2, 0.08, rz * 2); water.position.y = 0.06; water.receiveShadow = true; g.add(water);
+  // rounded corners: cut with darker shallows
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) B(g, 0.9, 0.1, 0.9, 0x4a6a3a, sx * (rx - 0.4), 0.07, sz * (rz - 0.4), null);
+  const n = Math.round((rx + rz) * 2.2);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, s = 0.35 + rr() * 0.3;
+    B(g, s * 1.3, s * 0.7, s, [0x7d7f84, 0x8e9095, 0x6e7075][i % 3], Math.cos(a) * (rx + 0.2), s * 0.3, Math.sin(a) * (rz + 0.2), null);
+  }
+  for (let i = 0; i < 4; i++) B(g, 0.45, 0.04, 0.45, 0x4c9a3c, (rr() - 0.5) * rx * 1.2, 0.12, (rr() - 0.5) * rz * 1.2, null);   // lily pads
+  B(g, 0.14, 0.06, 0.14, 0xf2a0c8, (rr() - 0.5) * rx, 0.15, (rr() - 0.5) * rz, null);
+  for (let i = 0; i < 6; i++) {   // reeds
+    const a = rr() * Math.PI * 2, h = 0.6 + rr() * 0.6, x = Math.cos(a) * (rx - 0.3), z = Math.sin(a) * (rz - 0.3);
+    B(g, 0.08, h, 0.08, 0x5a7a2a, x, h / 2, z, null); B(g, 0.12, 0.25, 0.12, 0x6b4a2a, x, h, z, null);
+  }
+  return g;
+}
+export function buildBush(scale = 1, flowers = false) {
+  const g = new THREE.Group();
+  B(g, 1.2, 0.8, 1.1, 0x3f7a2e, 0, 0.4, 0, null);
+  B(g, 0.8, 0.5, 0.8, 0x4c8c36, 0.15, 0.95, -0.1, null);
+  if (flowers) for (const [x, z, c] of [[0.4, 0.5, 0xf2c94c], [-0.45, 0.3, 0xf26a6a], [0.1, -0.5, 0xffffff]]) B(g, 0.16, 0.16, 0.16, c, x, 0.85, z, null);
+  g.scale.setScalar(scale);
+  return g;
+}
+export function buildFlowers(seed = 1) {
+  const g = new THREE.Group();
+  let k = seed;
+  const rr = () => { k = (k * 16807) % 2147483647; return (k - 1) / 2147483646; };
+  const cols = [0xf2c94c, 0xf26a6a, 0xffffff, 0xb08af0, 0x6fb8ff];
+  for (let i = 0; i < 7; i++) {
+    const x = (rr() - 0.5) * 2.2, z = (rr() - 0.5) * 2.2;
+    B(g, 0.06, 0.3, 0.06, 0x3f7a2e, x, 0.15, z, null);
+    B(g, 0.18, 0.14, 0.18, cols[i % cols.length], x, 0.34, z, null);
+  }
+  return g;
+}
+export function buildFountain() {
+  const g = new THREE.Group();
+  const stone = 0xb8b4ac, dark = 0x8e8a83;
+  B(g, 5.2, 0.6, 5.2, stone, 0, 0.3, 0, null);
+  const water = new THREE.Mesh(boxGeo(4.4, 0.1, 4.4), new THREE.MeshLambertMaterial({ color: 0x4a9ad8, transparent: true, opacity: 0.85 }));
+  water.position.y = 0.62; g.add(water);
+  B(g, 1.0, 1.6, 1.0, dark, 0, 1.2, 0, null);
+  B(g, 2.0, 0.3, 2.0, stone, 0, 2.0, 0, null);
+  B(g, 0.5, 0.8, 0.5, dark, 0, 2.5, 0, null);
+  const jet = B(g, 0.3, 0.6, 0.3, 0xbfe6ff, 0, 3.1, 0, null, { emissive: 0x3a6a8a });
+  g.userData.jet = jet;
+  return g;
+}
+export function buildBench() {
+  const g = new THREE.Group();
+  B(g, 1.8, 0.12, 0.55, 0x8a5a2b, 0, 0.5, 0, null);
+  B(g, 1.8, 0.45, 0.1, 0x8a5a2b, 0, 0.8, -0.25, null);
+  for (const x of [-0.75, 0.75]) B(g, 0.12, 0.5, 0.5, 0x3a3d42, x, 0.25, 0, null);
+  return g;
+}
+export function buildPlanter(flowers = true) {
+  const g = new THREE.Group();
+  B(g, 1.6, 0.6, 1.6, 0x9a9da2, 0, 0.3, 0, null);
+  B(g, 1.4, 0.1, 1.4, 0x5a3b22, 0, 0.62, 0, null);
+  const b = buildBush(0.85, flowers); b.position.y = 0.6; g.add(b);
   return g;
 }

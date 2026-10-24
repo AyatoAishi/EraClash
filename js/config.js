@@ -14,7 +14,7 @@ export const GAME = {
   queueMax: 5,
   laneHalfLen: 60,       // bases sit at +/- 58
   laneHalfWidth: 14,     // the lane itself
-  mapHalfWidth: 30,      // walkable z range incl. the jungle / back alleys (neutral camps)
+  mapHalfWidth: 46,      // walkable z range incl. the jungle / back alleys (neutral camps) and the north hill
   dayNight: { half: 300, fade: 20 },   // 5 min day, 5 min night, 20s dusk/dawn
   baseX: 58,
   baseHalfX: 6,          // base footprint (AABB)
@@ -346,6 +346,17 @@ export const ABILITIES = {
     desc: 'Allies within 4 range (including itself) gain +2 armor.' },
   cleave: { id: 'cleave', kind: 'passive', name: 'Cleave', icon: 'a-cleave', pct: 0.4, radius: 2.2, cone: 0.8,
     desc: 'Melee attacks also hit enemies in a cone behind the target for 40% of the damage.' },
+  // ---------- skill-tree passives (js/skilltree.js) ----------
+  fury: {
+    id: 'fury', kind: 'passive', name: 'Fury', icon: 'p-fury',
+    duration: 5, maxStacks: 10, perStack: 2,      // maxStacks 0 = no limit (Chaotic Viking)
+    desc: 'Each hit puts 1 Fury stack on the target for 5s (hitting again refreshes it and adds 1, max 10). Every Viking deals +2 damage per stack to that target.',
+  },
+  chainLightning: {
+    id: 'chainLightning', kind: 'passive', name: 'Chain Lightning', icon: 'p-chain',
+    chance: 0.2, damage: 10, damageType: 'magic', jump: 2, targets: 4,
+    desc: '20% chance on hit to zap the target with lightning for 10 magic damage. It jumps to a random enemy within 2 range of the last one, up to 4 enemies.',
+  },
   // ---------- granted by Barracks upgrades (not on any troop by default) ----------
   flurry: {
     id: 'flurry', kind: 'active', name: 'Flurry', icon: 'u-flurry', granted: true,

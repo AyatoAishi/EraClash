@@ -13,12 +13,14 @@ import { GAME } from './config.js';
 
 export const TERRAIN = {
   // walkable world bounds (units are clamped to these anyway)
-  minX: -64, maxX: 64, minZ: -32, maxZ: 32,
+  minX: -64, maxX: 64, minZ: -48, maxZ: 48,
   navCell: 1,                 // nav grid resolution (world units)
   navInflate: 0.45,           // obstacles grow by ~a troop radius in the nav grid
-  river: { half: 3.5, ramp: 2, depth: 0.7 },   // low ground: |x| < half (+ ramp up to half+ramp)
+  river: { half: 3.5, ramp: 2, depth: 0.7, fade: 3 },   // low ground: |x| < half (+ ramp up to half+ramp); starts at the hill's foot
+  // north hill (high ground, level 2): flat ellipse top (rx, rz) + `ramp` units of slope all around. The river springs from its foot.
+  hill: { x: 0, z: -40, rx: 12, rz: 7, ramp: 3.5, height: 2.2 },
   // fog/vision grid covers the whole visible ground (matches the 2x2 voxel tiles)
-  visCell: 2, visMinX: -90, visMaxX: 90, visMinZ: -36, visMaxZ: 36,
+  visCell: 2, visMinX: -90, visMaxX: 90, visMinZ: -52, visMaxZ: 52,
 };
 
 export function createTerrain() {
@@ -34,13 +36,31 @@ export function createTerrain() {
   const bkey = (ix, iz) => ix * 1000 + iz;
 
   // ---------------- height & level ----------------
-  /** 0 = low ground (river), 1 = high ground (everything else) */
-  const level = (x) => (Math.abs(x) < R.half + R.ramp * 0.5 ? 0 : 1);
-  const heightAt = (x) => {
+  // Levels: 0 = low ground (river), 1 = normal ground, 2 = high ground (north hill). Higher sees lower, not the reverse;
+  // ranged attacks uphill can miss (GAME.highGround).
+  const H = TERRAIN.hill, hillK = Math.min(H.rx, H.rz) / H.ramp;
+  /** 0..1: how far up the hill (1 = on the flat top). */
+  const hillF = (x, z) => {
+    const d = Math.hypot((x - H.x) / H.rx, (z - H.z) / H.rz);
+    return d <= 1 ? 1 : Math.max(0, 1 - (d - 1) * hillK);
+  };
+  /** 0..1: how much river there is at this z (it starts just south of the hill's foot). */
+  const riverStart = H.z + H.rz + H.ramp;
+  const riverF = (z) => Math.max(0, Math.min(1, (z - riverStart) / R.fade));
+  const level = (x, z = 0) => {
+    if (hillF(x, z) > 0.5) return 2;
+    return Math.abs(x) < R.half + R.ramp * 0.5 && riverF(z) > 0.5 ? 0 : 1;
+  };
+  const riverH = (x) => {
     const ax = Math.abs(x);
     if (ax <= R.half) return -R.depth;
     if (ax >= R.half + R.ramp) return 0;
     return -R.depth * (1 - (ax - R.half) / R.ramp);
+  };
+  const heightAt = (x, z = 0) => {
+    const h = hillF(x, z);
+    if (h > 0) return H.height * h;
+    return riverH(x) * riverF(z);
   };
 
   // ---------------- obstacles ----------------
@@ -102,7 +122,10 @@ export function createTerrain() {
   // ---------------- nav grid ----------------
   const cellOf = (x, z) => [Math.floor((x - TERRAIN.minX) / nc), Math.floor((z - TERRAIN.minZ) / nc)];
   const inGrid = (ix, iz) => ix >= 0 && iz >= 0 && ix < NW && iz < NH;
-  const blockedCell = (ix, iz) => !inGrid(ix, iz) || navCount[iz * NW + ix] > 0;
+  // troops can't walk behind the bases (Unit.command clamps x there), so paths must not route through it either
+  const xLim = GAME.baseX - GAME.baseHalfX - 0.5;
+  const ixMin = Math.ceil((-xLim - TERRAIN.minX) / nc), ixMax = Math.floor((xLim - TERRAIN.minX) / nc) - 1;
+  const blockedCell = (ix, iz) => !inGrid(ix, iz) || ix < ixMin || ix > ixMax || navCount[iz * NW + ix] > 0;
   const blockedAt = (x, z) => { const [ix, iz] = cellOf(x, z); return blockedCell(ix, iz); };
   /** Straight segment walkable? (sampled every half cell) */
   function clearLine(ax, az, bx, bz) {
@@ -210,7 +233,7 @@ export function createTerrain() {
   return {
     NW, NH, VW, VH, navCount, visCount, obstacles,
     get version() { return version; },
-    level, heightAt, addObstacle, removeObstacle,
+    level, heightAt, hillF, riverStart, addObstacle, removeObstacle,
     blockedAt, clearLine, nearestFree, findPath, resolve, visIndex,
     visBlocked: (i) => visCount[i] > 0,
   };
