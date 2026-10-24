@@ -232,14 +232,6 @@ export const UPGRADES = {
   },
 
   // ===================== BUILDINGS (Build menu towers; artillery upgrades live in js/buildtree.js) =====================
-  fireArrows: {
-    id: 'fireArrows', faction: 'medieval', category: 'troop', unit: 'archerTower', icon: 'u-firearrows',
-    name: 'Fire Arrows', max: 3,
-    price: [120, 200, 320], time: [12, 16, 20],
-    effects: [{ type: 'unitStats', unit: 'archerTower', perLevel: { damage: 5 } }],
-    desc: 'Archer Towers shoot pitch-soaked arrows: <b>+5 damage</b> per level.',
-    levelText: (l) => `Archer Tower damage ${20 + 5 * l}`,
-  },
   thermalScope: {
     id: 'thermalScope', faction: 'modern', category: 'troop', unit: 'sniperTower', icon: 'u-scope',
     name: 'Thermal Scope', max: 3,

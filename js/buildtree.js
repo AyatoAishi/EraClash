@@ -55,6 +55,31 @@ export const BUILD_TREES = {
         desc: '8 thermobaric rockets: each leaves burning ground (10/s for 4s).' },
     },
   },
+  archerTower: {
+    2: { name: 'Stone Watchtower', cost: 120, time: 4, stats: { hp: 650, damage: 25, range: 16, armor: 4 },
+      desc: 'Stone shaft and battlements: +150 HP, 25 damage, range 16, +1 armor.' },
+    a: {
+      name: 'Sharpshooter', desc: 'Heavy, piercing shots: tough targets and flyers.',
+      3: { name: 'Longbow Tower', cost: 250, time: 6, stats: { damage: 38, attackSpeed: 45, range: 19 },
+        desc: 'A taller tower and a longbow: 38 damage, range 19.' },
+      4: { name: 'Ballista Tower', cost: 450, time: 9, stats: { damage: 36, attackSpeed: 30, range: 20 },
+        structure: { fire: 'line', lineWidth: 0.25, bolt: true, turnRate: 4 },
+        desc: 'A ballista: bolts pierce everything in a line (36 each), range 20.' },
+      5: { name: 'Skypiercer', cost: 800, time: 12, stats: { hp: 900, damage: 80, attackSpeed: 26, range: 22 },
+        structure: { pierceSlow: { pct: 50, t: 1.5 }, flyingBonus: 0.5 },
+        desc: 'Giant iron ballista: 80 piercing, slows 50%, +50% vs flying.' },
+    },
+    b: {
+      name: 'Volley', desc: 'More archers, more targets: shreds groups.',
+      3: { name: 'Twin Archers', cost: 250, time: 6, stats: { damage: 22, attackSpeed: 70 }, structure: { multishot: 2 },
+        desc: 'Two archers: every shot hits 2 targets.' },
+      4: { name: 'Fire Archers', cost: 450, time: 9, stats: { damage: 20, attackSpeed: 70 }, structure: { multishot: 3, burnHit: { dps: 5, t: 3 } },
+        desc: '3 targets per shot; hits burn 5/s for 3s (ignores armor).' },
+      5: { name: 'Arrow Storm Spire', cost: 800, time: 12, stats: { hp: 850, damage: 22, attackSpeed: 75, range: 17 },
+        structure: { rain: { every: 8, count: 14, radius: 3, damage: 22, splash: 1 } },
+        desc: 'Four archers; every 8s 14 arrows rain on the target area.' },
+    },
+  },
 };
 
 /** The step a building would take next: { level, path, node } list (one entry, or two at the Lv 2 → 3 fork). */

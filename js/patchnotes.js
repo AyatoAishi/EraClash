@@ -7,6 +7,20 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.22.0', date: '2026-10-24T20:46:00+08:00', title: 'Archer Tower upgrade tree & tougher bases',
+    sections: [
+      { title: 'Bases', items: [
+        'Base HP by level raised: <b>2500 / 3200 / 4000 / 5000 / 6500</b> (was 1500 / 2000 / 2500 / 3500 / 5000). Early rushes ended matches before buildings mattered; in AI tests matches now last about 8 minutes (was about 7) and the AI builds and upgrades far more.',
+      ] },
+      { title: 'Archer Tower upgrades', items: [
+        'Select an Archer Tower to upgrade it. Lv 2 <b>Stone Watchtower</b> (120g): 650 HP, 25 damage, range 16.',
+        'Path A, Sharpshooter (blue roofs): <b>Longbow Tower</b> (250g: 38 damage, range 19) → <b>Ballista Tower</b> (450g: bolts <b>pierce everything in a line</b>, 36 each) → <b>Skypiercer</b> (800g: 80 piercing, <b>slows 50%</b>, +50% damage to flying).',
+        'Path B, Volley (red roofs): <b>Twin Archers</b> (250g: every shot hits <b>2 targets</b>) → <b>Fire Archers</b> (450g: 3 targets, hits <b>burn</b> 5/s for 3s, ignores armor) → <b>Arrow Storm Spire</b> (800g: 4 archers, every 8s <b>14 arrows rain</b> on the target area).',
+        'Every level has its own model. The <b>Fire Arrows</b> Barracks upgrade is gone: fire arrows now come with path B.',
+      ] },
+    ],
+  },
+  {
     version: '0.21.0', date: '2026-10-24T20:14:00+08:00', title: 'Building upgrade trees: Cannon & Howitzer',
     sections: [
       { title: 'New: upgrade your buildings', items: [

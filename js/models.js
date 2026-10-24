@@ -775,22 +775,91 @@ function addCrew(r, crewRig, y, z = 0, s = 0.85) {
 }
 /** Level the crew's held weapons after posing the arms (troops do this every frame in Unit.levelHeld). */
 function levelCrew(rig) { for (const l of rig.level || []) l.obj.rotation.x = -l.arm.rotation.x + l.offset; }
-export function buildArcherTower() {
+// Archer Tower: 8 looks — Lv1 timber tower, Lv2 Stone Watchtower, A3 Longbow Tower, A4 Ballista Tower, A5 Skypiercer,
+// B3 Twin Archers, B4 Fire Archers, B5 Arrow Storm Spire.
+export function buildArcherTower(level = 1, path = null) {
   const r = structureRig(), m = r.mats;
-  B(r.body, 2.4, 0.9, 2.4, 0x8d8f93, 0, 0.45, 0, m);                                  // stone footing
-  for (const [x, z] of [[-0.95, -0.95], [-0.95, 0.95], [0.95, -0.95], [0.95, 0.95]]) B(r.body, 0.32, 3.4, 0.32, 0x6b4a2b, x, 2.6, z, m);
-  for (const y of [1.6, 3]) for (const s of [-1, 1]) { B(r.body, 2.2, 0.14, 0.14, 0x5e4026, 0, y, s * 0.95, m); B(r.body, 0.14, 0.14, 2.2, 0x5e4026, s * 0.95, y, 0, m); }
-  B(r.body, 2.7, 0.25, 2.7, 0x7a5532, 0, 4.4, 0, m);                                    // platform
-  for (const s of [-1, 1]) { B(r.body, 2.7, 0.55, 0.14, 0x6b4a2b, 0, 4.8, s * 1.28, m); B(r.body, 0.14, 0.55, 2.7, 0x6b4a2b, s * 1.28, 4.8, 0, m); }
-  for (const [x, z] of [[-1.2, -1.2], [-1.2, 1.2], [1.2, -1.2], [1.2, 1.2]]) B(r.body, 0.18, 1.6, 0.18, 0x5e4026, x, 5.3, z, m);
-  B(r.body, 3, 0.25, 3, 0x6b2a24, 0, 6.2, 0, m); B(r.body, 2, 0.35, 2, 0x7d3129, 0, 6.5, 0, m); B(r.body, 0.9, 0.35, 0.9, 0x8e3a30, 0, 6.85, 0, m);
-  r.yaw = pivot(r.body, 0, 4.52, 0);
-  addCrew(r, buildArcher(), 0, 0, 0.85);
-  r.crew.armL.rotation.x = -1.4; r.crew.armR.rotation.x = -1.3; levelCrew(r.crew);
-  r.muzzle = B(r.yaw, 0.1, 0.1, 0.1, 0xffffff, 0, 1.4, 0.6, m); r.muzzle.castShadow = false;
-  r.muzzleY = 4.52 + 1.4;
-  r.scaffold = scaffold(r.body, 1.4, 4.6, m);
-  r.barY = 7.4;
+  const L = level, A = L >= 3 && path === 'a', Bp = L >= 3 && path === 'b';
+  const STONE = 0x8d8f93, DSTONE = 0x74767b, WOOD = 0x6b4a2b, DWOOD = 0x5e4026, ROOF = [0x6b2a24, 0x7d3129, 0x8e3a30];
+  // platform height and half-width per design
+  const top = A ? (L >= 5 ? 6.2 : L >= 4 ? 5.2 : 5.8) : Bp ? (L >= 5 ? 6.6 : 4.8) : L >= 2 ? 4.6 : 4.4;
+  const hw = Bp ? (L >= 5 ? 1.5 : 1.55) : A && L >= 5 ? 1.5 : 1.35;
+  B(r.body, hw * 2 - 0.3, 0.9, hw * 2 - 0.3, STONE, 0, 0.45, 0, m);                                   // footing
+  if (L === 1) {   // timber legs + cross braces
+    for (const [x, z] of [[-0.95, -0.95], [-0.95, 0.95], [0.95, -0.95], [0.95, 0.95]]) B(r.body, 0.32, top - 1, 0.32, WOOD, x, (top - 1) / 2 + 0.9, z, m);
+    for (const y of [1.6, 3]) for (const s of [-1, 1]) { B(r.body, 2.2, 0.14, 0.14, DWOOD, 0, y, s * 0.95, m); B(r.body, 0.14, 0.14, 2.2, DWOOD, s * 0.95, y, 0, m); }
+  } else {         // stone shaft (Lv2+): taller designs get a tapering keep
+    const sw = A && L >= 5 ? 2.6 : Bp && L >= 5 ? 2.2 : 2.1;
+    B(r.body, sw, top - 0.9, sw, A && L >= 5 ? DSTONE : STONE, 0, (top - 0.9) / 2 + 0.9, 0, m);
+    for (let y = 1.4; y < top - 0.4; y += 0.9) for (const s of [-1, 1]) { B(r.body, sw + 0.02, 0.1, 0.5, DSTONE, 0, y, s * 0.4, m); }   // brick lines
+    B(r.body, 0.5, 0.9, 0.1, 0x1a1a22, 0, top * 0.55, sw / 2 + 0.02, m);                                  // arrow slit
+    if (Bp && L >= 5) for (const s of [-1, 1]) B(r.body, 0.25, top - 1.2, 0.25, 0xa3221c, s * (sw / 2 + 0.1), (top - 1.2) / 2 + 1, sw / 2 + 0.1, m);   // crimson pilasters
+  }
+  B(r.body, hw * 2, 0.25, hw * 2, L >= 2 ? DSTONE : 0x7a5532, 0, top, 0, m);                          // platform
+  // parapet: wooden rail (Lv1), stone merlons (Lv2+)
+  if (L === 1) for (const s of [-1, 1]) { B(r.body, hw * 2, 0.55, 0.14, WOOD, 0, top + 0.4, s * (hw - 0.07), m); B(r.body, 0.14, 0.55, hw * 2, WOOD, s * (hw - 0.07), top + 0.4, 0, m); }
+  else for (let k = -1; k <= 1; k += 2) for (const t of [-0.66, 0.66]) {
+    B(r.body, 0.5, 0.6, 0.3, STONE, t * hw, top + 0.42, k * (hw - 0.15), m);
+    B(r.body, 0.3, 0.6, 0.5, STONE, k * (hw - 0.15), top + 0.42, t * hw, m);
+  }
+  // roof (not on ballista designs: the bolt needs the sky)
+  const roofY = top + (Bp && L >= 5 ? 2.4 : 1.8);
+  if (!(A && L >= 4)) {
+    for (const [x, z] of [[-hw + 0.15, -hw + 0.15], [-hw + 0.15, hw - 0.15], [hw - 0.15, -hw + 0.15], [hw - 0.15, hw - 0.15]]) B(r.body, 0.18, roofY - top, 0.18, DWOOD, x, (roofY + top) / 2, z, m);
+    const rc = Bp && L >= 4 ? [0x8a1a1a, 0xa3221c, 0xc0302a] : A ? [0x2a3a5a, 0x34486e, 0x3e5682] : ROOF;   // path A: blue slate
+    B(r.body, hw * 2 + 0.3, 0.25, hw * 2 + 0.3, rc[0], 0, roofY, 0, m);
+    B(r.body, hw * 1.4, 0.35, hw * 1.4, rc[1], 0, roofY + 0.3, 0, m);
+    B(r.body, hw * 0.6, 0.35, hw * 0.6, rc[2], 0, roofY + 0.65, 0, m);
+    if ((Bp && L >= 5) || A) { B(r.body, hw * 0.3, 1.2, hw * 0.3, rc[2], 0, roofY + 1.4, 0, m); B(r.body, 0.12, 0.8, 0.12, 0xe0b040, 0, roofY + 2.4, 0, m, { emissive: 0x3a2800 }); }   // spire
+  }
+  if (L >= 2) {   // banner on the shaft
+    const bc = Bp ? 0xa3221c : A ? 0x2a4a8a : 0xa3221c;
+    B(r.body, 0.08, 1.4, 0.8, bc, (A && L >= 5 ? 1.32 : 1.07), top - 1.2, 0, m);
+    B(r.body, 0.1, 0.4, 0.3, 0xe0b040, (A && L >= 5 ? 1.34 : 1.09), top - 1, 0, m);
+  }
+  if (Bp && L >= 4) for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {   // Fire Archers: a big brazier on every corner
+    B(r.body, 0.45, 0.6, 0.45, 0x3a3a3a, sx * (hw - 0.05), top + 0.42, sz * (hw - 0.05), m);
+    B(r.body, 0.6, 0.12, 0.6, 0x4a4a4a, sx * (hw - 0.05), top + 0.75, sz * (hw - 0.05), m);
+    const f = B(r.body, 0.5, 0.45, 0.5, 0xffb040, sx * (hw - 0.05), top + 1, sz * (hw - 0.05), m, { emissive: 0xff6a00 }); f.castShadow = false;
+  }
+  r.yaw = pivot(r.body, 0, top + 0.12, 0);
+  // crew: archers (or a ballista)
+  const archers = (n) => {
+    const spots = n === 1 ? [[0, 0]] : n === 2 ? [[-0.5, 0]] : n === 3 ? [[-0.65, -0.2], [0.65, -0.2]] : [[-0.7, -0.35], [0.7, -0.35], [0, -0.7]];
+    addCrew(r, buildArcher(), 0, n === 1 ? 0 : 0.25, 0.85);
+    if (n > 1) r.crew.root.position.x = n === 2 ? 0.5 : 0;
+    r.crew.armL.rotation.x = -1.4; r.crew.armR.rotation.x = -1.3; levelCrew(r.crew);
+    for (const [x, z] of n > 1 ? spots : []) {
+      const c = buildArcher(); c.root.scale.setScalar(0.85); c.root.position.set(x, 0, z); r.yaw.add(c.root);
+      c.armL.rotation.x = -1.4; c.armR.rotation.x = -1.3; levelCrew(c);
+      c.matList.forEach((mt, i) => r.mats.set('crew' + x + z + i, mt));
+    }
+    if (A && L === 3) { r.crew.root.scale.setScalar(0.95); B(r.yaw, 0.08, 2.2, 0.08, 0x5e4026, 0.42, 1.3, 0.35, m); }   // longbow: a tall bow stave
+  };
+  if (A && L >= 4) {   // ballista: frame, bow arms, a bolt; the barrel pivot elevates it
+    const big = L >= 5;
+    B(r.yaw, big ? 1.4 : 1, 0.5, big ? 1.4 : 1, big ? 0x3a3d42 : DWOOD, 0, 0.25, 0, m);                  // turntable
+    r.barrel = pivot(r.yaw, 0, big ? 1 : 0.8, 0); r.recoil = pivot(r.barrel, 0, 0, 0);
+    const len = big ? 3 : 2.2, metal = big ? 0x4a4e54 : WOOD;
+    B(r.recoil, big ? 0.5 : 0.35, big ? 0.35 : 0.25, len, metal, 0, 0, len / 2 - 0.6, m);                // stock
+    for (const s of [-1, 1]) {
+      const arm = B(r.recoil, big ? 1.6 : 1.1, big ? 0.2 : 0.14, 0.18, big ? 0x2a2d32 : DWOOD, s * (big ? 0.85 : 0.6), 0.05, len - 1, m); arm.rotation.y = -s * 0.35;   // bow arms
+    }
+    B(r.recoil, 0.05, 0.05, big ? 1.4 : 1, 0xd8d8d0, 0, 0.12, len - 1.5, m);                            // string
+    B(r.recoil, 0.12, 0.12, len + 0.3, 0x8a6a42, 0, 0.22, len / 2 - 0.4, m);                            // bolt shaft
+    B(r.recoil, 0.22, 0.22, 0.35, big ? 0xc9a050 : 0x9aa3ab, 0, 0.22, len - 0.15, m);                 // bolt head
+    if (big) for (const s of [-1, 1]) B(r.recoil, 0.12, 0.6, 0.6, 0xc9a050, s * 0.3, -0.1, -0.3, m);   // gold winch plates
+    r.muzzle = B(r.recoil, 0.2, 0.2, 0.2, 0xffffff, 0, 0.22, len, m);
+    r.rest = -0.08;
+    r.muzzleY = top + 0.12 + (big ? 1 : 0.8);
+  } else {
+    archers(Bp ? (L >= 5 ? 4 : L >= 4 ? 3 : 2) : 1);
+    r.muzzle = B(r.yaw, 0.1, 0.1, 0.1, 0xffffff, 0, 1.4, 0.6, m);
+    r.muzzleY = top + 0.12 + 1.4;
+  }
+  r.muzzle.castShadow = false;
+  r.scaffold = scaffold(r.body, hw + 0.05, top + 0.2, m);
+  r.barY = roofY + (Bp && L >= 5 ? 3 : 1.2);
   return finishStructure(r);
 }
 export function buildSniperTower() {

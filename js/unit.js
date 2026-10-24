@@ -175,6 +175,20 @@ export class Unit {
   abilDef(id) { const m = this.def.abilityMods?.[id]; return m ? { ...ABILITIES[id], ...m } : ABILITIES[id]; }
   upLevel(id) { return this.game.upLevel && this.statTeam !== NEUTRAL_TEAM ? this.game.upLevel(this.statTeam, id) : 0; }
   /** Movement slow (strongest wins). Invulnerable/tower troops ignore crowd control. */
+  /** Burning (Fire Archers): true damage every 0.5s for `t` seconds. Strongest burn wins, re-burning refreshes. */
+  addBurn(dps, t, src) {
+    if (this.dead || this.tower || this.structure || this.invulnerable) return;
+    if (!(this.burnT > 0) || dps >= this.burnDps) { this.burnDps = dps; this.burnSrc = src; }
+    this.burnT = Math.max(this.burnT || 0, t);
+  }
+  tickBurn(dt) {
+    this.burnT -= dt; this.burnTick = (this.burnTick || 0) - dt;
+    if (this.burnTick > 0) return;
+    this.burnTick = 0.5;
+    const d = this.takeDamage(this.burnDps * 0.5, this.burnSrc, 'true');
+    if (this.burnSrc && !this.burnSrc.dead) this.burnSrc.damageDealt += d;
+    this.game.burst(this.pos, 2, [0xff6a1a, 0xffb040], 1.2, 0.35, 0.5);
+  }
   addSlow(pct, t) {
     if (this.invulnerable || this.tower || this.structure || this.dead) return;
     this.slows.push({ pct, t });
@@ -502,6 +516,8 @@ export class Unit {
     if (dealt > 0) this.game.emit('hitDmg', tg.pos, dealt, crit, this.team);
     const sup = this.structure?.suppress;   // Machine Gun Nest: every hit slows
     if (sup && !tg.dead) tg.addSlow(sup.pct, sup.t);
+    const bh = this.structure?.burnHit;     // Fire Archers: hits set the target on fire
+    if (bh && !tg.dead) tg.addBurn(bh.dps, bh.t, this);
     if (shot?.magic && !tg.dead) { const m = tg.takeDamage(shot.magic, this, 'magic'); this.damageDealt += m; if (m > 0) this.game.emit('hitDmg', tg.pos, m, false, this.team); }
     if (shot?.breakT && !tg.dead) tg.applyBreak(shot.breakT);
     if (this.pas.lifesteal && dealt > 0 && !this.dead) this.hp = Math.min(this.maxHp, this.hp + dealt * this.pas.lifesteal / 100);
@@ -679,6 +695,7 @@ export class Unit {
   // ------------------------------------------------------------
   update(dt, camQuat) {
     if (this.dead) return this.updateDeath(dt);
+    if (this.burnT > 0) { this.tickBurn(dt); if (this.dead) return false; }
     const g = this.game, s = this.stats;
     if (this.tower) return this.updateTower(dt, camQuat);
     if (this.structure) return this.updateStructure(dt, camQuat);
@@ -987,9 +1004,16 @@ export class Unit {
         const frac = Math.min(1, Math.max(0, this.edgeDist(tg) / Math.max(1, this.effRange)));
         if (r.barrel) r.barrel.rotation.x += (r.rest - frac * (S.shell === 'howitzer' ? 0.5 : S.fire === 'direct' ? 0.05 : 0.3) - r.barrel.rotation.x) * Math.min(1, dt * 4);
         this.aimT = 0.4;
+        if (S.rain) {   // Arrow Storm Spire: an arrow rain on the target area every few seconds, on its own timer
+          this.rainCd = (this.rainCd ?? S.rain.every * 0.5) - dt;
+          if (this.rainCd <= 0) { this.rainCd = S.rain.every; g.fireRain(this, tg); }
+        }
         if (Math.abs(da) < (S.fire === 'direct' ? 0.15 : 0.08) && this.atkCd <= 0 && !this.disarmed) {
           this.atkCd = Math.max(this.atkCd, -0.1) + attackInterval(this.effAttackSpeed);
-          if (S.fire === 'direct') this.releaseAttack(tg);          // arrow / bullet like a ranged troop (can miss, hits flying)
+          if (S.fire === 'direct') {                                // arrow / bullet like a ranged troop (can miss, hits flying)
+            this.releaseAttack(tg);
+            if (S.multishot > 1) g.fireExtraShots(this, tg, S.multishot - 1);   // Twin / Fire Archers: more targets per shot
+          }
           else if (S.fire === 'volley') g.fireVolley(this, tg);   // Hwacha / Grapeshot / MLRS: a fan of projectiles
           else if (S.fire === 'line') g.fireLine(this, tg);       // Railgun: instant piercing slug
           else g.fireShell(this, tg);                              // artillery shell

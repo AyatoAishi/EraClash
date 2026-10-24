@@ -676,8 +676,8 @@ export class Game {
   /** Fire a shell from building `src` at `target`'s current spot (no leading: moving out of the way works). */
   fireShell(src, target, o = {}) {
     const S = src.structure, howitzer = S.shell === 'howitzer';
-    const kind = o.rocket ? (S.pellet ? 'pellet' : S.rocketKind || 'rocket') : howitzer ? 'shell' : 'ball';
-    const mesh = kind === 'rocket' ? buildRocket() : kind === 'shell' || kind === 'missile' ? buildShell() : buildCannonball();
+    const kind = o.kind || (o.rocket ? (S.pellet ? 'pellet' : S.rocketKind || 'rocket') : howitzer ? 'shell' : 'ball');
+    const mesh = kind === 'arrow' ? buildArrow() : kind === 'rocket' ? buildRocket() : kind === 'shell' || kind === 'missile' ? buildShell() : buildCannonball();
     if (kind === 'pellet') mesh.scale.setScalar(0.55);
     if (kind === 'missile') mesh.scale.set(1.3, 1.3, 1.6);
     const start = new THREE.Vector3();
@@ -798,6 +798,21 @@ export class Game {
       if (F.t <= 0) { this.scene.remove(F.mesh); F.mesh.geometry.dispose(); F.mesh.material.dispose(); this.fires.splice(i, 1); }
     }
   }
+  /** Twin / Fire Archers: extra arrows at other targets in range (nearest first), on top of the main shot. */
+  fireExtraShots(src, main, n) {
+    const pool = this.units.filter((o) => o !== main && src.canShell(o)).sort((a, b) => src.edgeDist(a) - src.edgeDist(b));
+    for (const o of pool.slice(0, n)) this.fireProjectile(src, o, true);
+  }
+  /** Arrow Storm Spire: `rain.count` arrows dropped around the target over ~1s, each with a small splash. */
+  fireRain(src, target) {
+    const R = src.structure.rain;
+    for (let k = 0; k < R.count; k++) {
+      const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * R.radius;
+      this.fireShell(src, { pos: { x: target.pos.x + Math.cos(a) * d, z: target.pos.z + Math.sin(a) * d } },
+        { rocket: true, kind: 'arrow', dmg: R.damage, splash: R.splash, delay: k * 0.05, flight: 0.9 + Math.random() * 0.3, arc: 0.6 });
+    }
+    if (this.audible(src.pos.x)) sfx('bow', 40);
+  }
   /** Railgun: an instant slug along the line to the target, out to full range. Hits everything on it (flying too). */
   fireLine(src, target) {
     const S = src.structure, start = new THREE.Vector3();
@@ -810,10 +825,19 @@ export class Game {
       const rx = o.pos.x - src.pos.x, rz = o.pos.z - src.pos.z, along = rx * ux + rz * uz;
       if (along < 0 || along > reach + o.radius) continue;
       if (Math.abs(rx * uz - rz * ux) > (S.lineWidth || 0.8) + o.radius) continue;
-      const dealt = o.takeDamage(dmg, src, 'physical', { ranged: true });
+      const dealt = o.takeDamage(dmg * (o.flying && S.flyingBonus ? 1 + S.flyingBonus : 1), src, 'physical', { ranged: true });
       src.damageDealt += dealt;
+      if (S.pierceSlow && !o.dead) o.addSlow(S.pierceSlow.pct, S.pierceSlow.t);   // Skypiercer pins its targets
       if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
-      this.burst(o.pos, 5, [0xa0f0ff, 0xffffff], 2.5, 0.4, 0.8);
+      this.burst(o.pos, 5, S.bolt ? [0xd8c8a0, 0xffffff] : [0xa0f0ff, 0xffffff], 2.5, 0.4, 0.8);
+    }
+    if (S.bolt) {   // ballista: a big bolt flies the line instead of a glowing beam
+      const end = new THREE.Vector3(src.pos.x + ux * reach, start.y - 0.6, src.pos.z + uz * reach);
+      const mesh = buildArrow(); mesh.scale.setScalar(2.6); mesh.position.copy(start); mesh.lookAt(end);
+      this.scene.add(mesh);
+      this.beams.push({ mesh, t: 0.25, total: 0.25, from: start.clone(), to: end, bolt: true });
+      if (this.audible(src.pos.x)) sfx('bow', 60);
+      return;
     }
     // the slug's trail: a thin glowing beam that fades
     const beam = new THREE.Mesh(boxGeo(0.25, 0.25, 1), new THREE.MeshBasicMaterial({ color: 0x80f0ff, transparent: true, opacity: 0.9, depthWrite: false }));
@@ -827,6 +851,11 @@ export class Game {
   updateBeams(dt) {
     for (let i = this.beams.length - 1; i >= 0; i--) {
       const b = this.beams[i]; b.t -= dt;
+      if (b.bolt) {   // flying ballista bolt
+        b.mesh.position.lerpVectors(b.from, b.to, 1 - Math.max(0, b.t) / b.total);
+        if (b.t <= 0) { this.scene.remove(b.mesh); this.beams.splice(i, 1); }
+        continue;
+      }
       b.mesh.material.opacity = Math.max(0, b.t / 0.35) * 0.9; b.mesh.scale.x = b.mesh.scale.y = 1 + (0.35 - b.t) * 3;
       if (b.t <= 0) { this.scene.remove(b.mesh); b.mesh.material.dispose(); this.beams.splice(i, 1); }
     }
@@ -889,7 +918,8 @@ export class Game {
     this.scene.add(mesh);
     const end = this.projectileAim(target, src);
     const dist0 = Math.max(0.5, start.distanceTo(end));
-    const dmg = src.rollDamage(), crit = src.lastCrit, shot = src.lastShot;
+    let dmg = src.rollDamage(); const crit = src.lastCrit, shot = src.lastShot;
+    if (src.structure?.flyingBonus && target.flying) dmg *= 1 + src.structure.flyingBonus;   // Skypiercer
     if (crit) mesh.scale.multiplyScalar(1.6);
     this.projectiles.push({ mesh, src, target, start, end, dist0, u: 0, speed: pdef.speed, arc: pdef.arc, kind: pdef.kind, team: src.team, dmg, crit, shot });
     if (this.audible(src.pos.x)) sfx(pdef.kind === 'arrow' ? 'bow' : pdef.kind === 'sniper' ? 'snipe' : 'gun', 35);

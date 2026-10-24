@@ -36,14 +36,14 @@ export const GAME = {
 };
 
 // Base levels — castle and HQ use the same numbers. Matches start at GAME.baseLevel and level up through the
-// Fortify / Expand HQ upgrades (upgrades.js). Level 3 = the classic base (2500 HP).
+// Fortify / Expand HQ upgrades (upgrades.js). HP raised in v0.22.0 (Lv 1 = 2500) so early matches last long enough for buildings.
 // slots = wall troop spots (models.js castleSlots / hqSlots) = how many Battlement / Overwatch levels the base can hold.
 export const BASE_LEVELS = [
-  { level: 1, hp: 1500, armor: 0, vision: [30, 16], slots: 1 },
-  { level: 2, hp: 2000, armor: 0, vision: [32, 18], slots: 2 },
-  { level: 3, hp: 2500, armor: 0, vision: [35, 20], slots: 4 },
-  { level: 4, hp: 3500, armor: 2, vision: [38, 22], slots: 6 },
-  { level: 5, hp: 5000, armor: 4, vision: [40, 24], slots: 8 },
+  { level: 1, hp: 2500, armor: 0, vision: [30, 16], slots: 1 },
+  { level: 2, hp: 3200, armor: 0, vision: [32, 18], slots: 2 },
+  { level: 3, hp: 4000, armor: 0, vision: [35, 20], slots: 4 },
+  { level: 4, hp: 5000, armor: 2, vision: [38, 22], slots: 6 },
+  { level: 5, hp: 6500, armor: 4, vision: [40, 24], slots: 8 },
 ];
 export const baseLevelStats = (L) => BASE_LEVELS[Math.max(1, Math.min(BASE_LEVELS.length, L)) - 1];
 
