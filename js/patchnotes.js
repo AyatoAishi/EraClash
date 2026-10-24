@@ -7,6 +7,39 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.24.0', date: '2026-10-24T22:30:00+08:00', title: 'Five new skill trees, form outfits, item keys & HP bar fix',
+    sections: [
+      { title: 'Fixes', items: [
+        '<b>Base HP bar out of sync</b> (e.g. 11 / 1500 with the bar still 60% full): the top bars had a stepped CSS animation that restarted every frame while HP kept changing (sieging, Repair), so the bar froze. The animation is gone; the bar is exact every frame.',
+        'At 1366-wide screens the item grid in the selection panel was cut off (the command card got wider for BUILD). The command card buttons are smaller below 1500 px so both fit.',
+      ] },
+      { title: 'New skill trees', items: [
+        '<b>Imp</b>: Ice Imp (+5 dmg, +2 ward, Ice Splatter stuns 2s) → Cryonic Imp (+10 dmg, +3 ward, stun and +50% Splatter damage) · Sacred Imp (+1 move speed, +2 armor, Sacred Splatter -10 armor 5s) → Cursed Imp (+2 move speed, +3 armor, -12 armor that also hits <b>buildings and the enemy base</b>) · Fire Imp (+30 HP, Fire Splatter <b>leaps</b> up to 12 at speed 18 and burns 4% max HP/s magic for 3s) → Brimstone Imp (+60 HP, burn 5% for 4s, +1 radius, +30% damage). All variants still use Organic Matter, and Death Splatter explodes as the variant.',
+        '<b>Lancer</b>: Crusader (+5 dmg, +50 HP, +0.4 move speed) → Legion Commander (+10 / +70 / +0.5, <b>Counterstrike</b>: 30% to hit back when attacked) or Death Knight (+8 / +50 / +0.4, +10 attack speed, <b>Curse of the Death Knight</b>: 20% slow 4s, allies heal 10 per hit on the cursed unit).',
+        '<b>Elf</b>: High Elf (+8 dmg; after Arrow Piercer, +50 attack speed for 3 attacks within 4s — only if you own the Arrow Piercer upgrade) → Drow (+10 dmg, <b>Zealot</b>: attacks ignore base armor) or Eladrin (+9 dmg, +5 attack speed, <b>Galewinds</b>: +3 move speed for 1s on hit).',
+        '<b>Police Officer</b>: Enforcer (+40 HP, <b>Enforce</b>: fear enemies within 3 for 2s, 60s) → Hitman (+40 HP, +5 dmg, loses Enforce, <b>Execute</b>: unit target, 100% attack damage + 10% missing HP, 0.25s cast, range 6, 20s) or Agent (+30 HP, +5 dmg, keeps Enforce, <b>Disrupt</b>: every 3rd attack stuns 0.8s) · Vanguard (+2 regen, <b>Outnumbered</b>: +15% damage when allies ≥ enemies within 8, else +5 armor and ward) → Peacekeeper (+8 regen, +2 armor, <b>Mediator</b>: enemies within 6 deal 50% less damage for 5s, 50s, doesn\'t stack).',
+        '<b>Gunner</b>: Machine Gunner (+20 attack speed, Fervor gives +10% attack speed per stack, 20 stacks) → Mercenary (+100 attack speed, +60% miss, -5 dmg, Fervor uncapped) or Rambo (+20 attack speed, +1 range, <b>Double Tap</b>: next shot fires twice, 6s) · Operator (+5 dmg, +2 armor, <b>Boomstick</b>: +10% damage at 5 range up to +100% at 1) → Shotgunner (+20 dmg, -5 attack speed, +4 armor, +4 ward, <b>Scattershot</b>: line blast 10 + 100% attack damage magic, width 2.4, 8 range, 11s) · Rifleman (+3 dmg, <b>Rapid Fire</b>: 8 attacks with +40 attack speed, each -1 armor 4s stacking, 15s recharge) → Advanced Rifleman (10 attacks, +60, -1.2) · Dual Wielder (-1 range, +20 attack speed, <b>Flick</b>: 30% when attacked to shoot a random enemy, 60% slow 1s) → Desperado (-1 range, +30 attack speed, Flick on attacking too).',
+        'As before, a deeper form\'s stats are the <b>totals</b> vs the base troop, not added to the previous form.',
+      ] },
+      { title: 'Skill tree', items: [
+        'Leveling is cheaper: <b>3 kills</b> for Lv 1, then +2 per level (3, 5, 7, 9…). Lv 5 = 35 kills (was 45), Lv 15 = 255 (was 360).',
+        'Zoom: mouse wheel or the − / + / FIT buttons; drag to pan. Each tree opens fitted to the view.',
+        'Cards are short now: stat chips and ability chips. <b>Hover an ability icon for its exact text</b> with that form\'s real numbers (Scout Ranger\'s Eagle Eye shows 30% true strike, +30% damage and 5 magic instead of the base 20% / +5).',
+        'Evolutions change the outfit, not just eyes and hair: e.g. Lightning Viking\'s axe glows and sparks, Storm Viking gets a winged helm, Fire Imp burns, Death Knight goes black with a green visor, Desperado gets a hat and poncho. Every form has its own look and portrait.',
+      ] },
+      { title: 'Items', items: [
+        'Item keys: <b>1–6</b> use the item in that slot of the selected troop (rebindable in Options). Control groups: Ctrl+N saves, <b>Alt+N</b> recalls (plain N still recalls when nothing is selected).',
+        'Right-click an item in the inventory: <b>Use</b> / <b>Discard</b> (drops it at the troop\'s feet).',
+        'Drops on the ground <b>vanish after 30 seconds</b> (they blink for the last 5).',
+      ] },
+      { title: 'Balance', items: [
+        'Banshee <b>Immaterial</b>: evasion 50% → 30%.',
+        '<b>Outlaw</b>: damage 20 → 30. <b>Cleave</b> hits a wider area behind the target (3 deep, ~140° instead of 2.2 / ~90°).',
+        'Attack speed is capped at 600 (10 attacks/s) so uncapped stacking can\'t break the game. Honest watch list: Mercenary (uncapped Fervor) and Cursed Imp packs on bases are the most likely to be too strong; Hitman\'s Execute is strong against big HP pools.',
+      ] },
+    ],
+  },
+  {
     version: '0.23.0', date: '2026-10-24T20:59:00+08:00', title: 'Sniper Tower upgrade tree',
     sections: [
       { title: 'Sniper Tower upgrades (the Archer Tower\'s counterpart)', items: [

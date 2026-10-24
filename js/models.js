@@ -143,18 +143,146 @@ export function buildPolice() {
 }
 
 /**
- * Skill-tree forms: recolor a built model. look = { eyes: 0xRRGGBB (glowing), hair: { fromColor: toColor } }.
- * Hair colors are swapped on this model's own materials, so other troops of the same type are untouched.
+ * Skill-tree forms: restyle a built model.
+ *   look = { eyes: 0xRRGGBB (glowing), hair|colors: { fromColor: toColor }, gear: ['gearId', ...] }
+ * Colors are swapped on this model's own materials (other troops of the same type are untouched).
+ * Gear = extra voxel pieces and particle effects from FORM_GEAR (modular: add an entry, list it in a look).
  */
 export function applyLook(r, look) {
   if (!look) return r;
-  for (const [from, to] of Object.entries(look.hair || {})) r.mats.get(String(from))?.color.setHex(to);
+  for (const map of [look.hair, look.colors]) for (const [from, to] of Object.entries(map || {})) r.mats.get(String(from))?.color.setHex(to);
   if (look.eyes != null && r.eyes) {
     const m = new THREE.MeshBasicMaterial({ color: look.eyes });   // unlit = glows, and the hit flash leaves it alone
     for (const e of r.eyes) { e.material = m; e.scale.set(1.15, 1.15, 1); }
   }
+  for (const id of look.gear || []) FORM_GEAR[id]?.(r, gearKit(r));
   return r;
 }
+
+/** Helpers for gear builders: solid boxes (flash on hit like the rest of the model), glowing boxes, particles. */
+function gearKit(r) {
+  r.extraMats ||= [];
+  const glowMats = new Map();
+  const solid = (parent, w, h, d, color, x, y, z) => {
+    const had = r.mats.has(String(color));
+    const mesh = B(parent, w, h, d, color, x, y, z, r.mats);
+    if (!had) { const m = r.mats.get(String(color)); m.emissive = new THREE.Color(0); r.matList.push(m); }
+    return mesh;
+  };
+  const glow = (parent, w, h, d, color, x, y, z, opacity = 1) => {
+    const k = color + ':' + opacity;
+    if (!glowMats.has(k)) { const m = new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity }); glowMats.set(k, m); r.extraMats.push(m); }
+    const mesh = new THREE.Mesh(boxGeo(w, h, d), glowMats.get(k)); mesh.position.set(x, y, z); mesh.castShadow = false; parent.add(mesh); return mesh;
+  };
+  /** n particles of `kind` ('rise' | 'orbit' | 'spark') around (x,y,z) of `parent`, radius rad, colors cols. */
+  const fx = (parent, kind, n, cols, x, y, z, rad = 0.5, size = 0.07, h = 1) => {
+    r.fx ||= [];
+    for (let i = 0; i < n; i++) {
+      const m = glow(parent, size, size, size, cols[i % cols.length], x, y, z, 0.9);
+      r.fx.push({ m, kind, x, y, z, rad, h, ph: Math.random(), sp: 0.6 + Math.random() * 0.8, a: Math.random() * Math.PI * 2 });
+    }
+  };
+  return { solid, glow, fx, pivot };
+}
+/** Animate gear particles (called from Unit.animate). */
+export function animateFx(r, dt) {
+  for (const f of r.fx || []) {
+    f.ph += dt * f.sp;
+    const t = f.ph % 1, m = f.m;
+    if (f.kind === 'rise') { m.position.set(f.x + Math.cos(f.a) * f.rad * (1 - t * 0.5), f.y + t * f.h, f.z + Math.sin(f.a) * f.rad * (1 - t * 0.5)); m.scale.setScalar(1 - t * 0.7); if (t < dt * f.sp * 1.5) f.a = Math.random() * Math.PI * 2; }
+    else if (f.kind === 'orbit') { const a = f.a + f.ph * 3; m.position.set(f.x + Math.cos(a) * f.rad, f.y + Math.sin(f.ph * 2.3) * f.h * 0.5, f.z + Math.sin(a) * f.rad); }
+    else { m.visible = Math.random() < 0.55; m.position.set(f.x + (Math.random() - 0.5) * f.rad * 2, f.y + (Math.random() - 0.5) * f.h, f.z + (Math.random() - 0.5) * f.rad * 2); }
+  }
+}
+
+/** Gear pieces for skill-tree forms. Each gets the rig and the kit; positions follow the humanoid skeleton. */
+export const FORM_GEAR = {
+  // ---- Viking ----
+  warpaint: (r, { glow }) => { glow(r.head, 0.5, 0.05, 0.02, 0xc0141a, 0, 0.0, 0.262); glow(r.head, 0.05, 0.22, 0.02, 0xc0141a, 0, 0.06, 0.263); },
+  bloodAxe: (r, { glow }) => { glow(r.weapon, 0.075, 0.44, 0.06, 0xff2a1a, 0, 0.12, 0.84); },
+  chaosAxe: (r, { solid, glow }) => {   // second blade (double-bit) + spike
+    solid(r.weapon, 0.06, 0.38, 0.22, 0x3a1010, 0, 0.12, 0.7); solid(r.weapon, 0.06, 0.4, 0.2, 0x2a0a0a, 0, -0.18, 0.7);
+    glow(r.weapon, 0.07, 0.42, 0.05, 0xff3b2f, 0, -0.18, 0.6); solid(r.weapon, 0.05, 0.05, 0.22, 0x8a8a8a, 0, 0, 0.9);
+  },
+  spikedHelm: (r, { solid }) => { for (const [x, z] of [[0, 0], [-0.15, 0.1], [0.15, 0.1], [0, -0.15]]) { solid(r.head, 0.07, 0.18, 0.07, 0x5a5a5a, x, 0.48, z); solid(r.head, 0.04, 0.08, 0.04, 0xd8d8d8, x, 0.6, z); } },
+  embers: (r, { fx }) => fx(r.body, 'rise', 7, [0xff6a1a, 0xffb040, 0xff2a1a], 0, 0.5, 0, 0.55, 0.07, 1.8),
+  stormAxe: (r, { glow, fx }) => { glow(r.weapon, 0.075, 0.46, 0.06, 0x9af0ff, 0, 0.12, 0.84); glow(r.weapon, 0.065, 0.1, 0.24, 0x4aa3ff, 0, 0.34, 0.7); fx(r.weapon, 'spark', 4, [0xffffff, 0x9af0ff, 0x4aa3ff], 0, 0.12, 0.74, 0.18, 0.06, 0.5); },
+  wingHelm: (r, { solid }) => { for (const s of [-1, 1]) { solid(r.head, 0.06, 0.24, 0.16, 0xf0f0f0, s * 0.32, 0.36, -0.04); solid(r.head, 0.05, 0.18, 0.12, 0xd8e8ff, s * 0.38, 0.52, -0.1); } },
+  sparks: (r, { fx }) => fx(r.body, 'spark', 5, [0x9af0ff, 0xffffff], 0, 1.4, 0, 0.6, 0.06, 1.6),
+  // ---- Ranger ----
+  feather: (r, { solid }) => { solid(r.head, 0.04, 0.4, 0.08, 0xf2f2f2, 0.24, 0.48, -0.14); solid(r.head, 0.045, 0.12, 0.09, 0xc0392b, 0.24, 0.66, -0.14); },
+  spyglass: (r, { solid }) => { solid(r.torso, 0.08, 0.08, 0.32, 0xc9a050, -0.3, -0.3, 0.1); solid(r.torso, 0.1, 0.1, 0.05, 0x3b2a17, -0.3, -0.3, 0.28); },
+  faceMask: (r, { solid }) => { solid(r.head, 0.52, 0.2, 0.04, 0x16161c, 0, -0.12, 0.258); },
+  backDaggers: (r, { solid, pivot: pv }) => { for (const s of [-1, 1]) { const p = pv(r.torso, s * 0.12, 0.05, -0.26); p.rotation.z = s * 0.6; solid(p, 0.06, 0.5, 0.04, 0xc9d1d8, 0, 0.12, 0); solid(p, 0.1, 0.06, 0.06, 0x2a1d14, 0, -0.14, 0); } },
+  patchCloak: (r, { solid }) => { for (const [x, y, c] of [[-0.15, 0.1, 0x8a5a2b], [0.18, -0.15, 0xb04a1a], [0.05, -0.28, 0x6b4423]]) solid(r.torso, 0.18, 0.16, 0.03, c, x, y, -0.27); },
+  beltDaggers: (r, { solid }) => { for (const s of [-1, 1]) { solid(r.torso, 0.06, 0.32, 0.05, 0xc9d1d8, s * 0.36, -0.4, 0.05); solid(r.torso, 0.1, 0.08, 0.07, 0x5a2a7a, s * 0.36, -0.24, 0.05); } },
+  wolfPelt: (r, { solid, glow }) => {
+    solid(r.torso, 0.84, 0.16, 0.5, 0x8a8a8a, 0, 0.36, 0); solid(r.torso, 0.6, 0.4, 0.06, 0x7a7a7a, 0, 0.12, -0.24);
+    solid(r.head, 0.5, 0.16, 0.5, 0x8a8a8a, 0, 0.36, -0.04); solid(r.head, 0.24, 0.14, 0.2, 0x6a6a6a, 0, 0.36, 0.28);   // wolf head + snout
+    for (const s of [-1, 1]) { solid(r.head, 0.08, 0.12, 0.06, 0x6a6a6a, s * 0.16, 0.5, 0.0); glow(r.head, 0.05, 0.04, 0.02, 0xff9a2a, s * 0.08, 0.42, 0.262); }
+  },
+  // ---- Imp ----
+  iceShards: (r, { glow }) => { for (const [x, y, z, h] of [[-0.3, 0.35, -0.1, 0.3], [0.3, 0.35, -0.1, 0.24], [0, 0.3, -0.3, 0.34], [-0.15, 0.1, -0.3, 0.2]]) glow(r.torso, 0.1, h, 0.1, 0x9af0ff, x, y + h / 2, z, 0.85); },
+  iceCrown: (r, { glow }) => { for (const [x, z, h] of [[0, 0.18, 0.34], [-0.18, 0.1, 0.26], [0.18, 0.1, 0.26], [-0.2, -0.12, 0.2], [0.2, -0.12, 0.2]]) glow(r.head, 0.08, h, 0.08, 0xd8f4ff, x, 0.3 + h / 2, z, 0.9); },
+  frost: (r, { fx }) => fx(r.body, 'orbit', 6, [0xd8f4ff, 0x9af0ff, 0xffffff], 0, 1.1, 0, 0.6, 0.06, 0.8),
+  halo: (r, { glow }) => { for (const [x, z, w, d] of [[0, 0.2, 0.44, 0.06], [0, -0.2, 0.44, 0.06], [0.2, 0, 0.06, 0.34], [-0.2, 0, 0.06, 0.34]]) glow(r.head, w, 0.05, d, 0xfff3a0, x, 0.72, z); },
+  brokenHalo: (r, { glow, pivot: pv }) => { const h = pv(r.head, 0, 0.72, 0); h.rotation.z = 0.35; for (const [x, z, w, d] of [[0, 0.2, 0.3, 0.06], [0.2, 0, 0.06, 0.34], [-0.2, -0.1, 0.06, 0.16]]) glow(h, w, 0.05, d, 0xc070ff, x, 0, z); },
+  curseWisps: (r, { fx }) => fx(r.body, 'rise', 6, [0x9a3ad8, 0xc070ff, 0x3a1a4a], 0, 0.4, 0, 0.45, 0.07, 1.4),
+  flameCrest: (r, { glow }) => { for (const [x, z, h, c] of [[0, 0.05, 0.4, 0xffd23a], [-0.12, -0.05, 0.3, 0xff8a3a], [0.12, -0.05, 0.3, 0xff8a3a], [0, -0.16, 0.26, 0xff5a1a]]) glow(r.head, 0.12, h, 0.12, c, x, 0.3 + h / 2, z); },
+  flames: (r, { fx }) => fx(r.body, 'rise', 7, [0xffd23a, 0xff8a3a, 0xff3a1a], 0, 0.3, 0, 0.4, 0.08, 1.5),
+  magmaCracks: (r, { glow }) => {
+    for (const [x, y, w, h] of [[-0.1, 0.1, 0.05, 0.4], [0.12, -0.05, 0.3, 0.05], [0.18, 0.15, 0.05, 0.25]]) glow(r.torso, w, h, 0.02, 0xff6a1a, x, y, 0.262);
+    for (const arm of [r.armL, r.armR]) glow(arm, 0.04, 0.3, 0.02, 0xff6a1a, 0, -0.3, 0.13);
+  },
+  // ---- Lancer ----
+  crusaderCross: (r, { solid }) => { solid(r.torso, 0.1, 0.36, 0.03, 0xc0392b, 0, 0.05, 0.28); solid(r.torso, 0.32, 0.1, 0.03, 0xc0392b, 0, 0.12, 0.28); solid(r.head, 0.1, 0.1, 0.04, 0xc0392b, 0, 0.3, 0.3); },
+  goldCrest: (r, { solid }) => { solid(r.head, 0.5, 0.08, 0.5, 0xf2c94c, 0, 0.3, 0); for (const x of [-0.18, 0, 0.18]) solid(r.head, 0.08, 0.16, 0.08, 0xf2c94c, x, 0.4, 0.22); },
+  bigCape: (r, { solid }) => { solid(r.torso, 0.74, 1.0, 0.06, 0xa02020, 0, -0.25, -0.27); solid(r.torso, 0.78, 0.1, 0.1, 0xf2c94c, 0, 0.28, -0.25); },
+  deathVisor: (r, { glow }) => { glow(r.head, 0.46, 0.07, 0.04, 0x5cff7a, 0, 0.06, 0.305); },
+  skullLance: (r, { solid, glow }) => { solid(r.weapon, 0.26, 0.24, 0.24, 0xd8d8c8, 0, 0, 1.75); for (const x of [-0.06, 0.06]) glow(r.weapon, 0.06, 0.06, 0.02, 0x5cff7a, x, 0.03, 1.875); },
+  soulWisps: (r, { fx }) => fx(r.body, 'orbit', 5, [0x5cff7a, 0x2a8a3a, 0xd8ffd8], 0, 2.0, 0, 0.9, 0.08, 1),
+  // ---- Elf ----
+  goldCrown: (r, { solid, glow }) => { solid(r.head, 0.56, 0.08, 0.56, 0xf2c94c, 0, 0.32, -0.02); for (const [x, h] of [[-0.18, 0.12], [0, 0.22], [0.18, 0.12]]) solid(r.head, 0.07, h, 0.07, 0xf2c94c, x, 0.36 + h / 2, 0.24); glow(r.head, 0.07, 0.07, 0.03, 0x9af0ff, 0, 0.42, 0.28); },
+  drowBlades: (r, { solid, pivot: pv }) => { for (const s of [-1, 1]) { const p = pv(r.torso, s * 0.14, 0.1, -0.3); p.rotation.z = s * 0.5; solid(p, 0.06, 0.62, 0.04, 0xb090d8, 0, 0.18, 0); solid(p, 0.14, 0.05, 0.06, 0x3a2a4a, 0, -0.14, 0); } },
+  windSwirl: (r, { fx }) => fx(r.body, 'orbit', 8, [0x9af0e0, 0xffffff, 0x5cffd0], 0, 0.9, 0, 0.75, 0.06, 1.4),
+  // ---- Police ----
+  riotVisor: (r, { solid, glow }) => { glow(r.head, 0.52, 0.3, 0.04, 0x9ad0ff, 0, 0.02, 0.3, 0.45); solid(r.head, 0.6, 0.06, 0.6, 0x111111, 0, 0.18, 0); },
+  fedora: (r, { solid }) => { solid(r.head, 0.74, 0.05, 0.74, 0x111111, 0, 0.34, 0); solid(r.head, 0.5, 0.22, 0.5, 0x16161a, 0, 0.47, 0); solid(r.head, 0.52, 0.06, 0.52, 0xa01a1a, 0, 0.39, 0); },
+  earpiece: (r, { solid }) => { solid(r.head, 0.04, 0.06, 0.04, 0xf0f0f0, 0.27, 0.0, 0.05); solid(r.head, 0.03, 0.3, 0.03, 0xf0f0f0, 0.27, -0.2, 0.0); },
+  shoulderPlates: (r, { solid }) => {   // riot armor: shoulder plates, chest plate, helmet
+    for (const arm of [r.armL, r.armR]) { solid(arm, 0.34, 0.18, 0.36, 0x2a2a2a, 0, 0.02, 0); solid(arm, 0.3, 0.06, 0.32, 0x4a6fb0, 0, 0.13, 0); }
+    solid(r.torso, 0.6, 0.4, 0.06, 0x2a2a2a, 0, 0.1, 0.23); solid(r.torso, 0.14, 0.14, 0.04, 0xf2c94c, 0, 0.15, 0.265);
+    solid(r.head, 0.62, 0.3, 0.62, 0x2a2a2a, 0, 0.28, -0.02);
+  },
+  megaphone: (r, { solid }) => { solid(r.torso, 0.14, 0.14, 0.2, 0xf2f2f2, 0.38, -0.25, 0.1); solid(r.torso, 0.22, 0.22, 0.08, 0xf2c94c, 0.38, -0.25, 0.22); },
+  // ---- Gunner ----
+  lmg: (r, { solid }) => {   // heavy barrel with shroud, big ammo box + belt, bipod
+    const g = r.level[0].obj;
+    solid(g, 0.14, 0.14, 0.6, 0x2a3138, 0, 0.03, 1.05); solid(g, 0.08, 0.08, 0.45, 0x0d0f12, 0, 0.03, 1.5);
+    solid(g, 0.26, 0.3, 0.3, 0x4a5a30, 0.12, -0.24, 0.42); for (let k = 0; k < 4; k++) solid(g, 0.06, 0.06, 0.06, 0xf2c94c, 0.12, -0.08 - k * 0.07, 0.6 + k * 0.04);
+    solid(g, 0.03, 0.3, 0.03, 0x15181c, -0.05, -0.17, 1.4); solid(g, 0.03, 0.3, 0.03, 0x15181c, 0.05, -0.17, 1.4);
+    solid(r.head, 0.6, 0.08, 0.6, 0x8a7a5a, 0, 0.3, 0);   // helmet cover
+    if (r.muzzle) r.muzzle.position.z = 1.8;
+  },
+  bandolier: (r, { solid, pivot: pv }) => { const b = pv(r.torso, 0, 0.05, 0.26); b.rotation.z = 0.75; solid(b, 0.12, 0.95, 0.04, 0x5a4a2a, 0, 0, 0); for (let k = -3; k <= 3; k++) solid(b, 0.08, 0.06, 0.06, 0xf2c94c, 0, k * 0.12, 0.02); },
+  headband: (r, { solid }) => { solid(r.head, 0.56, 0.08, 0.56, 0xc0141a, 0, 0.14, 0); solid(r.head, 0.06, 0.24, 0.06, 0xc0141a, 0.12, 0.02, -0.3); solid(r.head, 0.06, 0.2, 0.06, 0xc0141a, 0.2, 0.0, -0.3); },
+  shotgun: (r, { solid }) => { const g = r.level[0].obj; solid(g, 0.13, 0.13, 0.5, 0x2a2a2a, 0, 0.03, 0.95); solid(g, 0.12, 0.1, 0.3, 0x8a5a2b, 0, -0.08, 0.7); solid(g, 0.1, 0.16, 0.3, 0x8a5a2b, 0, -0.02, -0.22); if (r.muzzle) r.muzzle.position.z = 1.3; },
+  heavyPlate: (r, { solid }) => { solid(r.torso, 0.8, 0.62, 0.54, 0x2a2a20, 0, 0.06, 0); for (const arm of [r.armL, r.armR]) solid(arm, 0.32, 0.2, 0.34, 0x2a2a20, 0, 0.0, 0); },
+  longScope: (r, { solid, glow }) => {   // marksman rifle: long scope, longer barrel, boonie hat
+    const g = r.level[0].obj; solid(g, 0.11, 0.11, 0.56, 0x111111, 0, 0.19, 0.32); glow(g, 0.12, 0.12, 0.03, 0xf2c94c, 0, 0.19, 0.61); solid(g, 0.06, 0.06, 0.4, 0x0d0f12, 0, 0.03, 1.25);
+    solid(r.head, 0.78, 0.05, 0.78, 0x4a5a30, 0, 0.3, 0); solid(r.head, 0.52, 0.16, 0.52, 0x5a6a3a, 0, 0.4, 0);
+    if (r.muzzle) r.muzzle.position.z = 1.5;
+  },
+  laser: (r, { glow }) => { const g = r.level[0].obj; glow(g, 0.05, 0.05, 0.08, 0xff2020, 0.07, -0.02, 0.9); glow(g, 0.015, 0.015, 3, 0xff2020, 0.07, -0.02, 2.4, 0.35); },
+  pistols: (r, { solid }) => {   // the rifle becomes a revolver, plus a second one in the off hand
+    const g = r.level[0].obj;
+    for (const c of g.children) if (c !== r.muzzle) c.visible = false;
+    for (const h of [g, pivot(r.armL, 0.0, -0.62, 0.05)]) { solid(h, 0.09, 0.12, 0.42, 0x2a2a2e, 0, 0.02, 0.24); solid(h, 0.08, 0.2, 0.09, 0x8a5a2b, 0, -0.1, 0.04); solid(h, 0.11, 0.11, 0.12, 0x5a5a60, 0, 0.02, 0.12); }
+    if (r.muzzle) { r.muzzle.position.z = 0.5; r.muzzle.scale.setScalar(0.6); }
+  },
+  cowboyHat: (r, { solid }) => { solid(r.head, 0.8, 0.05, 0.8, 0x6b4423, 0, 0.36, 0); solid(r.head, 0.48, 0.22, 0.48, 0x7b5130, 0, 0.48, 0); solid(r.head, 0.5, 0.05, 0.5, 0x2a1a10, 0, 0.4, 0); },
+  poncho: (r, { solid }) => { solid(r.torso, 0.86, 0.5, 0.56, 0xb04a1a, 0, 0.1, 0); for (const y of [0.0, 0.2]) solid(r.torso, 0.88, 0.05, 0.58, 0xf2c94c, 0, y, 0); },
+};
 
 function finalize(r) {
   r.matList = [...r.mats.values()];

@@ -200,7 +200,7 @@ body.ingame #hud { display: block; }
 .basebar em { font-style: normal; font-family: var(--body); font-size: .95rem; padding: 0 .3rem; margin: 0 .25rem; background: var(--hp); color: #000; }
 .basebar em.ai { background: var(--bad); color: #fff; }
 .bbar { height: 1.15rem; background: #07090d; position: relative; box-shadow: 0 0 0 calc(var(--p) * .5) #000; }
-.bbar i { position: absolute; inset: 0 auto 0 0; background: var(--hp); box-shadow: inset 0 var(--p) 0 rgba(255,255,255,.3), inset 0 calc(var(--p) * -1) 0 rgba(0,0,0,.25); transition: width .2s steps(4); }
+.bbar i { position: absolute; inset: 0 auto 0 0; background: var(--hp); box-shadow: inset 0 var(--p) 0 rgba(255,255,255,.3), inset 0 calc(var(--p) * -1) 0 rgba(0,0,0,.25); }
 .basebar.modern .bbar i { left: auto; right: 0; }
 .basebar:not(.you) .bbar i { background: var(--bad); }
 .bbar span { position: absolute; inset: 0; z-index: 1; text-align: center; font-size: 1.05rem; line-height: 1.15rem; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
@@ -685,11 +685,16 @@ body.placing #view canvas { cursor: copy; }
 @keyframes skblink { 50% { opacity: .25; } }
 #cmdcard { width: clamp(35rem, calc(100vw - 256px - 38rem), 40rem) !important; }
 #queue { min-width: 7.5rem !important; }
-@media (max-width: 1500px) {
-  #cmdcard { width: clamp(31rem, calc(100vw - 256px - 36rem), 42rem) !important; }
-  #btn-skills, #btn-barracks, #btn-build, #btn-shop, #btn-repair { width: 4.2rem !important; }
-  .cc-top { gap: .4rem !important; }
-  #queue { min-width: 6rem !important; }
+@media (max-width: 1800px) {
+  /* 5 square buttons + the queue must fit without squeezing the selection panel (its item grid clipped at 1366 / 1600) */
+  #cmdcard { width: clamp(26rem, calc(100vw - 256px - 40rem), 40rem) !important; }
+  #btn-skills, #btn-barracks, #btn-build, #btn-shop, #btn-repair { width: 3.75rem !important; height: 4.4rem !important; }
+  #btn-skills span, #btn-barracks span, #btn-build span, #btn-shop span { font-size: .42rem; }
+  #btn-skills .ico.big, #btn-barracks .ico.big, #btn-build .ico.big, #btn-shop .ico.big, #btn-repair .ico.big { width: 1.9rem; height: 1.9rem; }
+  #btn-repair small { font-size: .7rem; }
+  .cc-top { gap: .3rem !important; }
+  #queue { min-width: 4.4rem !important; gap: .15rem; }
+  #queue .qhead { font-size: .45rem; }
 }
 #hud #skills { pointer-events: auto; }
 #skills { position: absolute; left: 50%; top: 6.6rem; transform: translateX(-50%); width: min(64rem, 96vw); max-height: calc(100vh - 6.6rem - 13rem); z-index: 30; padding: .9rem; display: none; flex-direction: column; background: rgba(20, 24, 34, .97); }
@@ -707,7 +712,14 @@ body.placing #view canvas { cursor: copy; }
 .sk-t em { position: absolute; top: .25rem; right: .4rem; font-style: normal; font-family: var(--arcade); color: var(--gold); animation: skblink 1s steps(2) infinite; }
 .sk-xp { display: block; height: calc(var(--p) * 1.5); background: #07090d; margin-top: .2rem; }
 .sk-xp i { display: block; height: 100%; background: #8ef0a0; }
-#sk-tree { overflow: auto; padding: .3rem; background: #0d1018; box-shadow: inset 0 0 0 calc(var(--p) * .5) #000; }
+#sk-tree { position: relative; min-height: 0; overflow: hidden; background: #0d1018; box-shadow: inset 0 0 0 calc(var(--p) * .5) #000; display: flex; }
+#sk-pan { flex: 1; overflow: auto; padding: .3rem .3rem 2.6rem; cursor: grab; }
+#sk-pan.drag { cursor: grabbing; user-select: none; }
+#sk-zoom { position: absolute; right: .5rem; bottom: .5rem; display: flex; align-items: center; gap: .2rem; padding: .2rem; background: rgba(20, 24, 34, .95); }
+#sk-zoom button { border: 0; cursor: pointer; min-width: 1.9rem; padding: .15rem .35rem; font-family: var(--arcade); font-size: .55rem; color: var(--text); background: var(--panel2, #232a3b); }
+#sk-zoom button:hover { background: #2c3550; }
+#sk-zoom span { font-family: var(--arcade); font-size: .5rem; color: var(--muted); min-width: 2.6rem; text-align: center; }
+#sk-tree.empty #sk-zoom { display: none; }
 .sk-empty { color: var(--muted); padding: 1.5rem; text-align: center; font-size: 1.1rem; }
 .sk-root, .sk-node { display: flex; align-items: center; }
 .sk-kids { display: flex; flex-direction: column; gap: .6rem; padding-left: 1.6rem; position: relative; }
@@ -746,3 +758,38 @@ body.placing #view canvas { cursor: copy; }
 .diff-slide input { flex: 1; }
 #diff-name { font-family: var(--arcade); font-size: .7rem; color: var(--gold); min-width: 9rem; }
 #diff-name.hard { color: #ff9a5a; } #diff-name.hell { color: #ff4a4a; text-shadow: 0 0 6px #a00; }
+
+/* ---- items: keybind labels + right-click menu ---- */
+.slot .ik { position: absolute; left: .1rem; top: 0; font-size: .75rem; line-height: 1; padding: 0 .15rem; background: rgba(0,0,0,.75); color: var(--muted); box-shadow: none; pointer-events: none; }
+.slot.empty .ik { opacity: .45; }
+.slot.mine { cursor: context-menu; } .slot.act { cursor: pointer; }
+#item-menu { position: fixed; z-index: 90; display: flex; flex-direction: column; min-width: 8rem; padding: .3rem; gap: .2rem; background: rgba(20, 24, 34, .98); pointer-events: auto; }
+#item-menu .im-h { font-family: var(--head); font-size: .85rem; color: var(--gold); padding: .1rem .3rem .2rem; }
+#item-menu button { text-align: left; border: 0; cursor: pointer; padding: .25rem .45rem; font: inherit; font-size: 1.05rem; color: var(--text); background: var(--panel2, #232a3b); }
+#item-menu button:hover { background: #2c3550; }
+#item-menu button.bad { color: #ff9a9a; }
+
+/* skill tree: compact cards */
+.sk-card { width: 12rem !important; }
+.sk-chips { display: flex; flex-wrap: wrap; gap: .2rem; }
+.sk-stat { font-family: var(--arcade); font-size: .45rem; line-height: 1; padding: .25rem .3rem; background: #0f2a18; color: #8ef0a0; }
+.sk-stat.neg { background: #2a1010; color: #ff9a9a; }
+.sk-ab { display: inline-flex; align-items: center; gap: .2rem; font-size: .95rem; padding: .05rem .3rem .05rem .1rem; background: #07090d; }
+.sk-ab em { font-style: normal; font-family: var(--arcade); font-size: .4rem; padding: .1rem .2rem; background: #8ef0a0; color: #07090d; }
+.sk-ab.up em { background: var(--gold); }
+.sk-ab.lost { opacity: .7; } .sk-ab.lost s { color: #ff9a9a; }
+.sk-card p { font-style: italic; }
+.sk-card p.sk-need { font-style: normal; color: var(--gold); font-size: .85rem; }
+
+/* v0.23: the command card sizes itself to its button row (5 buttons + queue), so no width guess can clip REPAIR again;
+   the selection panel (flex-shrink) takes whatever is left */
+#cmdcard { width: max-content !important; max-width: calc(100vw - 2rem); }
+#selpanel { flex-grow: 1 !important; max-width: 46rem; }
+@media (max-width: 1400px) { .sp-info { min-width: 7rem !important; } }
+@media (max-width: 1300px) {
+  #minimap { width: 13rem !important; height: 9.75rem !important; }
+  #sp-portrait { width: 4.4rem !important; height: 4.4rem !important; }
+  .sp-port { width: 4.4rem !important; }
+  .sp-info { min-width: 6rem !important; }
+  #sp-main { gap: .35rem !important; }
+}

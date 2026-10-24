@@ -23,7 +23,8 @@ Opening index.html directly via file:// will NOT work (ES modules need a server)
 | 1 / 2 / 3 (shop open) | buy troop 1 / 2 / 3 · Shift = 5 |
 | Q W E R | ability slots 1–4 of the selected troop |
 | F | select whole army |
-| Ctrl+1-9 / 1-9 | control groups (double-tap = jump) |
+| Ctrl+1-9 / Alt+1-9 | control groups (double-tap = jump) |
+| 1-6 | use the selected troop's item in that slot (right-click an item: Use / Discard) |
 | Space | camera to base |
 | Edge / arrows / middle-drag / wheel | camera |
 | Esc | pause |

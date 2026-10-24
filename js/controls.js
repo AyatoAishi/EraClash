@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GAME, UNITS } from './config.js';
 import { UNIT_BUILDERS } from './models.js';
-import { settings } from './settings.js';
+import { settings, ITEM_SLOTS } from './settings.js';
 import { sfx } from './audio.js';
 
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -337,13 +337,15 @@ export class Controls {
     const readyIn = (u) => { const k = slotOf(u); return u.def.id === type && k >= 0 && u.abil[k].st.cd <= 0 && (u.abil[k].def.manaCost || 0) <= u.mana && !u.casting; };
     const ready = units.filter(readyIn);
     if (!ready.length) { this.hooks.toast?.((a.def.manaCost || 0) > units[0].mana ? `Not enough mana for ${a.def.name}` : `${a.def.name} not ready`); return false; }
-    if (a.def.cast === 'line') {
+    if (a.def.cast === 'line' || a.def.cast === 'unit') {
       // Quick cast (Options > Gameplay): fire at the cursor right away. Normal cast: show the aim lines and wait for a click.
       if (settings.gameplay.quickCast) {
         const p = this.mouse.inside ? this.groundAt(this.mouse.x, this.mouse.y) : null;
         if (!p) return false;
+        const aim = this.aimFor(a.def, this.mouse.x, this.mouse.y, p);
+        if (!aim) { this.hooks.toast?.(`${a.def.name}: point at an enemy troop`, 'err'); return false; }
         let n = 0;
-        for (const u of ready) if (u.castAbility(slotOf(u), { x: p.x, z: p.z })) n++;
+        for (const u of ready) if (u.castAbility(slotOf(u), aim)) n++;
         if (n) sfx('attack');
         return n > 0;
       }
@@ -353,12 +355,20 @@ export class Controls {
     for (const u of ready) if (u.castAbility(slotOf(u))) n++;
     return n > 0;
   }
-  /** Ground-targeted cast: every ready troop of that type fires toward the clicked point. */
+  /** Aim for a cast at the cursor: ground point for 'line' casts, the enemy troop under it for 'unit' casts (null = none). */
+  aimFor(def, sx, sy, p) {
+    if (def.cast !== 'unit') return p ? { x: p.x, z: p.z } : null;
+    const u = this.unitAt(sx, sy);
+    return u && u.team !== this.team && !u.tower && !u.dead ? { unit: u, x: u.pos.x, z: u.pos.z } : null;
+  }
+  /** Targeted cast: every ready troop of that type fires toward the clicked point (or at the clicked enemy). */
   targetClickAt(sx, sy) {
     const T = this.targeting; this.cancelTargeting();
     const p = this.groundAt(sx, sy); if (!T || !p) return;
+    const aim = this.aimFor(T.def, sx, sy, p);
+    if (!aim) { this.hooks.toast?.(`${T.def.name}: click an enemy troop`, 'err'); sfx('error', 150); return; }
     let n = 0;
-    for (const u of this.own()) { const k = u.abil.findIndex((x) => x.def.id === T.abil); if (u.def.id === T.type && k >= 0 && u.castAbility(k, { x: p.x, z: p.z })) n++; }
+    for (const u of this.own()) { const k = u.abil.findIndex((x) => x.def.id === T.abil); if (u.def.id === T.type && k >= 0 && u.castAbility(k, aim)) n++; }
     if (n) sfx('attack');
   }
   // ---------------- Build menu placement ----------------
@@ -445,8 +455,10 @@ export class Controls {
       const u = casters[k];
       if (!u || !p) { m.visible = false; return; }
       let dx = p.x - u.pos.x, dz = p.z - u.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
-      const L = T.def.range;
-      m.visible = true; m.scale.set(T.def.width, 1, L);
+      // line casts: full length; Fire Splatter leap / unit casts: up to the cursor, capped at their range
+      const max = T.def.range ?? T.def.leap?.range ?? T.def.castRange ?? 6;
+      const L = T.def.range ? max : Math.min(max, d), W = T.def.width ?? (T.def.leap ? 0.8 : 0.35);
+      m.visible = true; m.scale.set(W, 1, L);
       m.position.set(u.pos.x + dx * L / 2, 0.12 + Math.max(0, u.pos.y || 0), u.pos.z + dz * L / 2);
       m.rotation.y = Math.atan2(dx, dz);
     });
@@ -580,12 +592,18 @@ export class Controls {
         const slot = ['recent1', 'recent2', 'recent3'].findIndex((a) => k[a] === e.code);
         if (slot >= 0) { e.preventDefault(); this.hooks.recent?.(slot, e.shiftKey); return; }
       }
-      // 2) ability slots (Q W E R by default)
+      // 2) item slots (1-6 by default) on the selected troop. Alt + digit skips this and recalls the control group.
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && this.own().length) {
+        const it = ITEM_SLOTS.findIndex((a) => k[a] === e.code);
+        if (it >= 0) { e.preventDefault(); this.hooks.useItem?.(it); return; }
+      }
+      // 3) ability slots (Q W E R by default)
       const slot = ['abil1', 'abil2', 'abil3', 'abil4', 'abil5'].findIndex((a) => k[a] === e.code);
       if (slot >= 0 && this.own().length) { e.preventDefault(); this.castActive(slot); return; }
-      // 3) control groups
+      // 4) control groups (Ctrl + N saves, N / Alt + N recalls)
       if (e.code.startsWith('Digit') && e.code !== 'Digit0') {
         const n = e.code.slice(5);
+        if (e.altKey) e.preventDefault();
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
           this.groups[n] = this.own();

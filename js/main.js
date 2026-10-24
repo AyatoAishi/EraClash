@@ -80,6 +80,7 @@ app.controls = new Controls(() => renderer.domElement, camera, {
   openChat: () => app.chat?.open(),
   shopOpen: () => app.ui.shopOpen(),
   recent: (slot, many) => { const id = app.recentHires[slot]; if (id) app.hire(id, many ? 5 : 1); },
+  useItem: (slot) => app.state === 'playing' && app.ui.useItemSlot(slot),
   // Space: alternates base <-> the middle of your selected troops (always base when nothing is selected)
   onCenter: () => {
     const c = app.controls, sel = c.own().filter((u) => !u.dead);

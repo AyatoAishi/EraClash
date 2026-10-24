@@ -8,6 +8,8 @@ const KEY = 'eraclash.settings.v1';
     general   : always active in battle
     ability   : QWER slots of the selected troop
     shop      : quick-hire keys for your 3 most recently hired troops, ONLY active while the shop is open
+    item      : use the item in inventory slot 1-6 of the selected troop. With nothing selected a digit
+                recalls its control group instead; Alt + digit always recalls the group.
 */
 export const ACTIONS = [
   { id: 'attackMove', scope: 'general', label: 'Attack (then left-click target/ground)' },
@@ -33,9 +35,11 @@ export const ACTIONS = [
   { id: 'abil5',      scope: 'ability', label: 'Ability slot 5' },
   // quick-hire: the N most recently hired troop types (no per-troop keys — the roster can grow forever)
   ...Array.from({ length: 3 }, (_, i) => ({ id: 'recent' + (i + 1), scope: 'shop', label: `Hire recent troop #${i + 1}` })),
+  ...Array.from({ length: 6 }, (_, i) => ({ id: 'item' + (i + 1), scope: 'item', label: `Use item slot ${i + 1}` })),
 ];
+export const ITEM_SLOTS = ACTIONS.filter((a) => a.scope === 'item').map((a) => a.id);
 export const RECENT_SLOTS = ACTIONS.filter((a) => a.scope === 'shop').map((a) => a.id);
-export const SCOPE_LABEL = { general: 'General', ability: 'Abilities (selected troop)', shop: 'Shop: recent troops (only while the shop is open)' };
+export const SCOPE_LABEL = { general: 'General', ability: 'Abilities (selected troop)', shop: 'Shop: recent troops (only while the shop is open)', item: 'Items (selected troop) · Alt + digit = control group' };
 export const scopeOf = (actionId) => ACTIONS.find((a) => a.id === actionId)?.scope;
 
 export const DEFAULTS = {
@@ -64,6 +68,7 @@ export const DEFAULTS = {
     recent1: 'Digit1',
     recent2: 'Digit2',
     recent3: 'Digit3',
+    item1: 'Digit1', item2: 'Digit2', item3: 'Digit3', item4: 'Digit4', item5: 'Digit5', item6: 'Digit6',
   },
   audio: { master: 0.8, music: 0.4, sfx: 0.8, mute: false },
   graphics: { quality: 'medium', pixelated: false, showFps: false, hpBars: 'always', uiScale: 1, damageNumbers: 'crits', critHighlight: true, combatText: true },

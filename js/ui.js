@@ -1,10 +1,10 @@
 // All DOM UI: menus, options, help, HUD, shop, selection panel + inventory, minimap, toasts.
 import * as THREE from 'three';
-import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS } from './config.js';
-import { UNIT_BUILDERS, buildCastle, buildHQ, CASTLE_TIERS, HQ_TIERS, applyLook } from './models.js';
+import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS, abilityText } from './config.js';
+import { UNIT_BUILDERS, buildCastle, buildHQ, CASTLE_TIERS, HQ_TIERS, applyLook, animateFx } from './models.js';
 import { TERRAIN } from './terrain.js';
 import { SKILL_TREES, formDef, levelInfo, nextForms, formPath } from './skilltree.js';
-import { settings, saveSettings, onSettingsChange, ACTIONS, SCOPE_LABEL, scopeOf, keyLabel, resetKeys } from './settings.js';
+import { settings, saveSettings, onSettingsChange, ACTIONS, SCOPE_LABEL, scopeOf, keyLabel, resetKeys, ITEM_SLOTS } from './settings.js';
 import { sfx, applyAudioSettings, initAudio } from './audio.js';
 import { ORDER_LABEL } from './unit.js';
 import { PATCH_NOTES, CURRENT_VERSION, formatPatchDate } from './patchnotes.js';
@@ -33,6 +33,7 @@ export function makePortraits() {
     if (rig.style === 'bow') rig.armL.rotation.x = -1.2;
     if (rig.style === 'rifle') { rig.armR.rotation.x = -1.3; rig.armL.rotation.x = -1.4; rig.armL.rotation.z = 0.35; }
     for (const l of rig.level || []) l.obj.rotation.x = -l.arm.rotation.x;
+    if (rig.fx) for (const f of rig.fx) { f.ph = Math.random(); } if (rig.fx) animateFx(rig, 0.01);   // spread form particles
     sc.add(rig.root);
     // buildings (towers / artillery) are bigger than troops: frame the whole model instead of a face
     const big = UNITS[id]?.structure ? new THREE.Box3().setFromObject(rig.root) : null;
@@ -51,7 +52,7 @@ export function makePortraits() {
     const full = r.domElement.toDataURL();
     PORTRAITS[form ? id + ':' + form : id] = { face, full };
     sc.remove(rig.root);
-    rig.matList.forEach((m) => m.dispose());
+    rig.matList.forEach((m) => m.dispose()); (rig.extraMats || []).forEach((m) => m.dispose());
   }
   // base portraits
   for (const [key, build] of [['base0', buildCastle], ['base1', buildHQ]]) {
@@ -70,7 +71,11 @@ export function makePortraits() {
 export const portraitOf = (def) => PORTRAITS[def.form ? def.id + ':' + def.form : def.id] || PORTRAITS[def.id];
 
 function fmtTime(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`; }
-const pIcon = (pid, extra = '') => `<span class="pico ${ABILITIES[pid].kind}" data-tip="ability:${pid}" ${extra}><svg><use href="#${ABILITIES[pid].icon}"/></svg></span>`;
+/** Ability icon. Pass a (form) unit definition `d` so the tooltip shows that form's exact numbers. */
+const pIcon = (pid, extra = '', d = null) => {
+  const A = d?.abilityMods?.[pid] ? { ...ABILITIES[pid], ...d.abilityMods[pid] } : ABILITIES[pid];
+  return `<span class="pico ${A.kind}" data-tip="ability:${pid}${d?.form ? `:${d.id}:${d.form}` : ''}" ${extra}><svg><use href="#${A.icon}"/></svg></span>`;
+};
 /** Defense chips: Armor / Ward with their % reduction, plus the unit's damage type. */
 const pct = (d) => { const r = reductionPct(d); if (Math.abs(r) < 0.05) return '0%'; return (r >= 0 ? '-' : '+') + Math.abs(r).toFixed(1) + '%'; };
 const defRow = (armor, ward, dmgType, bonus = {}) => {
@@ -159,6 +164,14 @@ export class UI {
     $('#barracks-close').addEventListener('click', () => this.toggleBarracks(false));
     $('#btn-skills').addEventListener('click', () => this.toggleSkills());
     $('#skills-close').addEventListener('click', () => this.toggleSkills(false));
+    $$('#sk-zoom button').forEach((b) => (b.onclick = () => { sfx('click'); this.skillZoom(b.dataset.z); }));
+    // wheel zooms the tree; drag pans it
+    const pan = $('#sk-pan');
+    pan.addEventListener('wheel', (e) => { e.preventDefault(); this.skillZoom(e.deltaY < 0 ? '+' : '-'); }, { passive: false });
+    let drag = null;
+    pan.addEventListener('pointerdown', (e) => { if (e.button !== 0 || e.target.closest('button')) return; drag = { x: e.clientX, y: e.clientY, sl: pan.scrollLeft, st: pan.scrollTop }; pan.classList.add('drag'); });
+    addEventListener('pointermove', (e) => { if (drag) { pan.scrollLeft = drag.sl - (e.clientX - drag.x); pan.scrollTop = drag.st - (e.clientY - drag.y); } });
+    addEventListener('pointerup', () => { drag = null; pan.classList.remove('drag'); });
     $('#btn-repair').addEventListener('click', () => this.toggleRepair());
     $('#btn-autoloot').addEventListener('click', () => this.toggleAutoLoot());
     // fast forward (vs AI only): 1x / 2x / 3x
@@ -205,13 +218,16 @@ export class UI {
     const [kind, id] = el.dataset.tip.split(':');
     let html = '';
     if (kind === 'ability') {
-      const A = ABILITIES[id];
+      // exact numbers: the hovered troop's own definition, or the skill-tree form named in the tip (ability:id:unit:form)
+      const [, , tu, tf] = el.dataset.tip.split(':');
       const u = el._unit, entry = u && u.ability(id);
+      const A = entry?.def || (u?.abilDef ? u.abilDef(id) : null) || (tu && tf ? { ...ABILITIES[id], ...(formDef(tu, tf).abilityMods?.[id] || {}) } : ABILITIES[id]);
       const status = entry && !u.dead ? this.abilityStatus(u, entry) : null;
+      const dmg = typeof A.damage === 'number' ? fmt(A.damage * (A.dmgMult || 1)) : null;
       const meta = A.kind === 'active'
-        ? `<div class="tip-m">${A.cooldown ? `Cooldown ${A.cooldown}s` : 'No cooldown'}${A.radius ? ` · Radius ${A.radius}` : ''}${A.damage ? ` · ${A.damage} ${DAMAGE_TYPES[A.damageType].name.toLowerCase()} dmg` : ''}${A.affectsFlying !== undefined ? ` · Affects flying: ${A.affectsFlying ? 'yes' : 'no'}` : ''}${A.manaCost ? ` · ${A.manaCost} mana` : ''}${el.dataset.key ? ` · Key <kbd>${el.dataset.key}</kbd>` : ''}</div>` : '';
+        ? `<div class="tip-m">${A.cooldown ? `Cooldown ${A.cooldown}s` : 'No cooldown'}${A.radius ? ` · Radius ${A.radius}` : ''}${A.castRange ? ` · Cast range ${A.castRange}` : ''}${A.leap ? ` · Leap range ${A.leap.range}` : ''}${dmg ? ` · ${dmg} ${DAMAGE_TYPES[A.damageType].name.toLowerCase()} dmg` : ''}${A.affectsFlying !== undefined ? ` · Affects flying: ${A.affectsFlying ? 'yes' : 'no'}` : ''}${A.manaCost ? ` · ${A.manaCost} mana` : ''}${el.dataset.key ? ` · Key <kbd>${el.dataset.key}</kbd>` : ''}</div>` : '';
       html = `<div class="tip-h"><svg class="ico"><use href="#${A.icon}"/></svg><b>${A.name}</b><small class="${A.kind}">${A.kind.toUpperCase()}</small></div>
-        <p>${A.desc}</p>${meta}${status ? `<div class="tip-s ${status.on ? 'on' : ''}">${status.text}</div>` : ''}`;
+        <p>${abilityText(A)}</p>${meta}${status ? `<div class="tip-s ${status.on ? 'on' : ''}">${status.text}</div>` : ''}`;
     } else if (kind === 'autoloot') {
       const on = this.app.game?.teams[this.app.playerTeam]?.autoLoot;
       html = `<div class="tip-h"><svg class="ico"><use href="#i-autoloot"/></svg><b>Auto-loot</b><small>TOGGLE</small></div>
@@ -280,6 +296,10 @@ export class UI {
       }
       case 'deathSplatter': return { on: true, text: 'Armed — explodes on death' };
       case 'swiftStep': return s.active ? { on: true, text: `Moving · ${P.evasion}% evasion` } : { on: false, text: 'Standing still · no bonus evasion' };
+      case 'outnumbered': return { on: true, text: `${s.allies ?? 0} allies vs ${s.enemies ?? 0} enemies · ${s.bonusArmor ? `+${P.armor} armor, +${P.ward} ward` : `+${fmt(s.bonusDamage || 0)} damage`}` };
+      case 'rapidFire': return s.charges > 0 ? { on: true, text: `${s.charges}/${P.attacks} charged attacks left` } : { on: false, text: `Recharging · ${Math.max(0, s.rcd || 0).toFixed(1)}s` };
+      case 'doubleTap': return s.cd > 0 ? { on: false, text: `Recharging · ${s.cd.toFixed(1)}s` } : { on: true, text: 'Ready · next shot fires twice' };
+      case 'disrupt': return { on: (s.stacks || 0) === P.every - 1, text: `Attack ${s.stacks || 0}/${P.every}` };
     }
     if (P.kind === 'active') return s.cd > 0 ? { on: false, text: `On cooldown · ${s.cd.toFixed(1)}s` } : { on: true, text: 'Ready' };
     return null;
@@ -353,6 +373,7 @@ export class UI {
         ['general', SCOPE_LABEL.general, null],
         ['ability', SCOPE_LABEL.ability, null],
         ['shop', SCOPE_LABEL.shop, null],
+        ['item', SCOPE_LABEL.item, null],
       ];
       for (const [scope, title] of groups) {
         list.insertAdjacentHTML('beforeend', `<div class="kb-head">${title}</div>`);
@@ -367,7 +388,7 @@ export class UI {
       const fixed = [
         ['Select unit / box select', 'LMB / drag'], ['Add to selection', 'Shift+LMB'],
         ['Select all of type', 'Dbl-click'], ['Move / attack target', 'RMB'],
-        ['Control groups', 'Ctrl+1-9'], ['Zoom', 'Wheel'], ['Drag camera', 'MMB'], ['Close shop / pause', 'Esc'],
+        ['Control groups: save / recall', 'Ctrl+1-9 / Alt+1-9'], ['Item: use / discard', 'LMB / RMB slot'], ['Zoom', 'Wheel'], ['Drag camera', 'MMB'], ['Close shop / pause', 'Esc'],
       ];
       for (const [l, k] of fixed) {
         const row = document.createElement('div');
@@ -494,7 +515,7 @@ export class UI {
             <div><span>HP regen</span><b>${u.hpRegen}/s</b></div>
           </div>
           <div class="resrow">${defRow(u.armor, u.ward, u.damageType)}</div>
-          ${(() => { let na = -1; return u.abilities.map((id) => { const A = ABILITIES[id]; if (A.kind === 'active') na++; return `<div class="tpass">${pIcon(id)}<div><b>${A.name} <small class="${A.kind}">${A.kind}${A.kind === 'active' && SLOT_KEYS[na] ? ' · ' + keyLabel(settings.keys[SLOT_KEYS[na]]) : ''}${A.unbreakable ? ' · unbreakable' : ''}</small></b><span>${A.desc}</span></div></div>`; }).join(''); })()}
+          ${(() => { let na = -1; return u.abilities.map((id) => { const A = ABILITIES[id]; if (A.kind === 'active') na++; return `<div class="tpass">${pIcon(id)}<div><b>${A.name} <small class="${A.kind}">${A.kind}${A.kind === 'active' && SLOT_KEYS[na] ? ' · ' + keyLabel(settings.keys[SLOT_KEYS[na]]) : ''}${A.unbreakable ? ' · unbreakable' : ''}</small></b><span>${abilityText(A)}</span></div></div>`; }).join(''); })()}
           <div class="tnote">${vs}</div>
         </div>`;
       troops.appendChild(c);
@@ -514,7 +535,7 @@ export class UI {
       const u = UNITS[id];
       return `<div class="tcard neutral"><img src="${PORTRAITS[id].full}" alt=""><div class="tbody"><div class="tfac">Neutral · ${fmt(u.cost * GAME.bountyPct)}g bounty</div><h3>${u.name} <small>${u.role}</small></h3><p>${u.lore}</p>
         <div class="stats"><div><span>HP</span><b>${u.hp}</b></div><div><span>Regen</span><b>${fmt(u.hpRegen)}/s</b></div><div><span>Damage</span><b>${u.damage}</b></div><div><span>Atk spd</span><b>${u.attackSpeed}/min</b></div><div><span>Armor</span><b>${u.armor}</b></div><div><span>Ward</span><b>${u.ward}</b></div><div><span>Move</span><b>${fmt(u.moveSpeed)}</b></div><div><span>Range</span><b>${u.type === 'ranged' ? u.range : 'Melee'}</b></div></div>
-        ${u.abilities.map((a) => `<div class="tpass">${pIcon(a)}<div><b>${ABILITIES[a].name} <small class="${ABILITIES[a].kind}">${ABILITIES[a].kind}</small></b><span>${ABILITIES[a].desc}</span></div></div>`).join('')}</div></div>`;
+        ${u.abilities.map((a) => `<div class="tpass">${pIcon(a)}<div><b>${ABILITIES[a].name} <small class="${ABILITIES[a].kind}">${ABILITIES[a].kind}</small></b><span>${abilityText(ABILITIES[a])}</span></div></div>`).join('')}</div></div>`;
     }).join('');
     box.innerHTML = `<div class="hgrid">
       <div><b>Camps</b> spawn at every full minute (from 1:00) if their spawn ring is empty. They chase up to ${CAMP_RULES.leash} range, then walk home and heal.</div>
@@ -535,7 +556,7 @@ export class UI {
         <div><kbd>${keyLabel(k.shop)}</kbd> open the Shop. Click a troop to hire it (search + list/card view at the top); your 3 most recent hires get quick keys <kbd>${keyLabel(k.recent1)}</kbd> <kbd>${keyLabel(k.recent2)}</kbd> <kbd>${keyLabel(k.recent3)}</kbd> while it's open, <kbd>Shift</kbd> hires 5, <kbd>Esc</kbd> closes it. <kbd>${keyLabel(k.selectAll)}</kbd> selects all your troops.</div>
         <div><kbd>${keyLabel(k.abil1)}</kbd> <kbd>${keyLabel(k.abil2)}</kbd> <kbd>${keyLabel(k.abil3)}</kbd> <kbd>${keyLabel(k.abil4)}</kbd> use the selected troop's 1st–4th <b>active</b> ability (5th: <kbd>${keyLabel(k.abil5)}</kbd>) (every selected troop of that type casts). You can also click the ability icon.</div>
         <div><kbd>RMB</kbd> on a dropped item = closest selected troop picks it up. <kbd>${keyLabel(k.autoLoot)}</kbd> toggles <b>Auto-loot</b> (creep drops go straight to the killer's inventory).</div>
-        <div><kbd>Ctrl+1-9</kbd> save group, <kbd>1-9</kbd> recall, double-tap to jump camera.</div>
+        <div><kbd>Ctrl+1-9</kbd> save group, <kbd>Alt+1-9</kbd> recall (plain <kbd>1-9</kbd> too when nothing is selected), double-tap to jump camera. <kbd>1-6</kbd> use the selected troop's items; right-click an item to discard it.</div>
         <div>Push the mouse against a screen edge or use the arrow keys to scroll. <kbd>${keyLabel(k.centerBase)}</kbd> jumps home; press again to jump to your selected troops (it alternates). Minimap: <kbd>LMB</kbd> jump/drag camera, <kbd>RMB</kbd> move troops.</div>
       </div>`;
   }
@@ -694,7 +715,8 @@ export class UI {
     $$('#sk-troops .sk-t').forEach((b) => (b.onclick = () => { sfx('click'); this.skillSel = b.dataset.id; this.renderSkills(); }));
     // right: the selected troop's tree, base on the left, branches to the right
     const id = this.skillSel, tree = SKILL_TREES[id], cur = T.forms[id] || null, L = levelInfo(T.troopKills[id] || 0);
-    const box = $('#sk-tree');
+    const box = $('#sk-pan');
+    $('#sk-tree').classList.toggle('empty', !tree);
     if (!tree) { box.innerHTML = `<div class="sk-empty">${UNITS[id].name} has no skill tree yet. It still levels up from kills, so it's ready when one is added.</div>`; return; }
     const path = formPath(id, cur);
     const card = (formId) => {
@@ -702,7 +724,7 @@ export class UI {
       const picked = formId === null ? true : path.includes(formId);
       const err = formId ? g.formBlock(pt, id, formId) : null;
       const state = picked ? (formId === cur ? 'current' : 'done') : !err ? 'open' : (n && (n.from ?? null) === cur) ? 'locked' : 'off';
-      const lines = formId ? this.formLines(id, formId) : [`<span class="sk-l">${d.role}</span>`];
+      const lines = formId ? this.formLines(id, formId) : [`<span class="sk-l">${d.role}</span>`, `<span class="sk-chips">${(d.abilities || []).filter((a) => ABILITIES[a]).map((a) => `<span class="sk-ab">${pIcon(a, 'class="pico sm"', d)}${ABILITIES[a].name}</span>`).join('')}</span>`];
       const btn = state === 'open' ? `<button class="btn sk-go" data-form="${formId}">EVOLVE</button>`
         : state === 'current' ? '<span class="sk-st cur">HIRING THIS</span>'
         : state === 'done' ? '<span class="sk-st">PICKED</span>'
@@ -710,13 +732,15 @@ export class UI {
         : `<span class="sk-st lock">${this.offReason(id, formId, path)}</span>`;
       return `<div class="sk-node ${state}"><div class="sk-card frame">
         <div class="sk-h"><img src="${portraitOf(d).face}" alt=""><div><b>${d.name}</b><small>${n ? 'Level ' + n.level : 'Base troop'}</small></div></div>
-        <div class="sk-lines">${lines.join('')}</div>${n?.desc ? `<p>${n.desc}</p>` : ''}${btn}</div>${branch(formId)}</div>`;
+        <div class="sk-lines">${lines.join('')}</div>${n?.desc ? `<p>${n.desc}</p>` : ''}${n?.needs?.grant && !T.grants?.[id]?.includes(n.needs.grant) ? `<p class="sk-need">${n.needs.text}</p>` : ''}${btn}</div>${branch(formId)}</div>`;
     };
     const branch = (formId) => {
       const kids = nextForms(id, formId);
       return kids.length ? `<div class="sk-kids">${kids.map(card).join('')}</div>` : '';
     };
+    const fresh = this._skZoomFor !== id;
     box.innerHTML = `<div class="sk-root">${card(null)}</div>`;
+    if (fresh) { this._skZoomFor = id; this.skillZoom('open'); } else this.skillZoom(this.skZoom || 1);
     $$('.sk-go', box).forEach((b) => (b.onclick = () => {
       const err = g.pickForm(pt, id, b.dataset.form);
       if (err) { this.toast(err, 'err'); sfx('error', 150); return; }
@@ -730,28 +754,39 @@ export class UI {
     for (let k = 0; k < Math.min(mine.length, path.length); k++) if (mine[k] !== path[k]) return 'Other path';
     return `Lv ${n.level} · after ${SKILL_TREES[id][n.from].name}`;
   }
-  /** What a node changes, as short lines with icons. */
+  /** What a node changes, compact: stat chips + ability chips (hover an icon for its exact text). */
   formLines(id, formId) {
-    const n = SKILL_TREES[id][formId], out = [];
-    const label = { hp: 'HP', hpRegen: 'HP regen', damage: 'damage', attackSpeed: 'attack speed', moveSpeed: 'move speed', armor: 'armor', ward: 'ward', range: 'range', evasion: 'evasion' };
-    // stats are totals vs the base troop (not added to the parent's), so say so on deeper nodes
-    const tot = n.from ? ' <small>(total)</small>' : '';
-    Object.assign(label, { mana: 'max mana', manaRegen: 'mana regen' });
-    for (const [k, v] of Object.entries(n.stats || {})) out.push(`<span class="sk-l stat">${v > 0 ? '+' : ''}${fmt(v)} ${label[k] || k}${tot}</span>`);
-    if (n.cost) out.push(`<span class="sk-l stat">${n.cost > 0 ? '+' : ''}${fmt(n.cost)} gold price${tot}</span>`);
-    for (const a of n.abilities || []) out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')} New ${ABILITIES[a].kind === 'active' ? 'ability' : 'passive'}: <b>${ABILITIES[a].name}</b></span>`);
-    const NAME = { maxStacks: 'stacks', chance: 'chance', damage: 'damage', bonusPct: 'bonus damage', bonusMagic: 'bonus magic', bonusDamage: 'flat bonus', trueStrike: 'true strike' };
-    for (const [a, m] of Object.entries(n.abilityMods || {})) {
-      const A = ABILITIES[a], parent = formDef(id, n.from).abilityMods?.[a] || {};
-      const parts = Object.entries(m).filter(([f, v]) => f !== 'desc' && f !== 'bonusDamage' && (parent[f] ?? A[f]) !== v).map(([f, v]) => {
-        const was = parent[f] ?? A[f];
-        const show = (x) => (typeof x === 'boolean' ? (x ? 'yes' : 'no') : f === 'chance' || f === 'bonusPct' ? Math.round(x * 100) + '%' : f === 'maxStacks' && x === 0 ? 'unlimited' : fmt(x));
-        return `${NAME[f] || f} ${show(was)} → ${show(v)}`;
-      });
-      if (parts.length) out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')}<span><b>${A.name}</b>: ${parts.join(', ')}</span></span>`);
-      else if (!n.from || !parent) out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')}<span><b>${A.name}</b> improved</span></span>`);
+    const n = SKILL_TREES[id][formId], d = formDef(id, formId), parent = formDef(id, n.from), out = [];
+    const label = { hp: 'HP', hpRegen: 'REGEN', damage: 'DMG', attackSpeed: 'AS', moveSpeed: 'MS', armor: 'ARMOR', ward: 'WARD', range: 'RANGE', evasion: 'EVA', missChance: 'MISS', mana: 'MANA', manaRegen: 'MANA REGEN' };
+    // stats are totals vs the base troop (not added to the parent's)
+    const chips = Object.entries(n.stats || {}).map(([k, v]) => `<span class="sk-stat${v < 0 ? ' neg' : ''}">${v > 0 ? '+' : ''}${fmt(v)}${k === 'missChance' ? '%' : ''} ${label[k] || k}</span>`);
+    if (n.cost) chips.push(`<span class="sk-stat${n.cost > 0 ? ' neg' : ''}">${n.cost > 0 ? '+' : ''}${fmt(n.cost)}g</span>`);
+    if (chips.length) out.push(`<span class="sk-chips" title="${n.from ? 'Totals vs the base troop (not added to the previous form)' : 'Vs the base troop'}">${chips.join('')}</span>`);
+    const ab = [];
+    for (const a of n.removes || []) ab.push(`<span class="sk-ab lost">${pIcon(a, 'class="pico sm"')}<s>${ABILITIES[a].name}</s></span>`);
+    for (const a of n.abilities || []) ab.push(`<span class="sk-ab new">${pIcon(a, 'class="pico sm"', d)}${ABILITIES[a].name}<em>NEW</em></span>`);
+    for (const a of Object.keys(n.abilityMods || {})) {
+      const now = { ...ABILITIES[a], ...(d.abilityMods?.[a] || {}) }, was = { ...ABILITIES[a], ...(parent.abilityMods?.[a] || {}) };
+      if (abilityText(now) === abilityText(was) && now.name === was.name) continue;
+      ab.push(`<span class="sk-ab up">${pIcon(a, 'class="pico sm"', d)}${now.name}<em>${now.name !== was.name ? 'NEW' : 'UP'}</em></span>`);
     }
+    if (ab.length) out.push(`<span class="sk-chips">${ab.join('')}</span>`);
     return out;
+  }
+  /** Skill tree zoom: a number (scale), '+', '-' or 'fit' (whole tree in view, never above 100%). */
+  skillZoom(z) {
+    const pan = $('#sk-pan'), root = $('.sk-root', pan);
+    if (!root) return;
+    let k = this.skZoom || 1;
+    if (z === '+') k *= 1.2; else if (z === '-') k /= 1.2;
+    else if (z === 'fit' || z === 'open') {   // fit the whole tree; on open, never below 70% so the text stays readable (wheel / − zooms out further)
+      root.style.zoom = 1; const w = root.scrollWidth, h = root.scrollHeight; k = Math.min(1, (pan.clientWidth - 12) / w, (pan.clientHeight - 12) / h);
+      if (z === 'open') k = Math.max(0.7, k);
+    }
+    else k = +z || 1;
+    this.skZoom = k = Math.max(0.35, Math.min(1.6, k));
+    root.style.zoom = k;
+    $('#sk-zoom-v').textContent = Math.round(k * 100) + '%';
   }
 
   // ======================= REPAIR =======================
@@ -1054,8 +1089,11 @@ export class UI {
     $('#pop').textContent = `${g.pop(this.app.playerTeam)}/${GAME.popCap}`;
     for (const b of g.bases) {
       const el = $(`#base-${b.team}`);
-      $('i', el).style.width = (b.hp / b.maxHp * 100) + '%';
-      $('span', el).textContent = `${Math.ceil(b.hp)} / ${b.maxHp}`;
+      // no CSS transition here: HP changes every frame while sieging/repairing, and a restarting stepped transition froze the bar
+      const w = Math.max(0, Math.min(100, b.hp / b.maxHp * 100)).toFixed(2) + '%', txt = `${Math.ceil(b.hp)} / ${Math.round(b.maxHp)}`;
+      const bi = $('i', el), bs = $('span', el);
+      if (bi.style.width !== w) bi.style.width = w;
+      if (bs.textContent !== txt) bs.textContent = txt;
     }
     const cheapest = Math.min(...this.roster().map((id) => UNITS[id].cost));
     $$('#shop-items .sitem').forEach((el) => {
@@ -1227,27 +1265,64 @@ export class UI {
     });
   }
 
-  /** 6-slot inventory (3x2, Dota-style). Placeholder until items exist; already reads unit.items. */
+  /** 6-slot inventory (3x2, Dota-style). Left-click / item key (1-6) = use the active. Right-click = menu (Use / Discard). */
   renderInventory(u) {
     const inv = $('#sp-inv');
     inv.classList.toggle('on', !!u);
-    if (!u) { inv.innerHTML = ''; this._invKey = ''; return; }
+    this.invUnit = u || null;
+    if (!u) { inv.innerHTML = ''; this._invKey = ''; this.closeItemMenu(); return; }
     const mine = u.team === this.app.playerTeam;
-    // only rebuild when items / cooldowns change (cheap, and clicks don't get eaten by a rebuild)
-    const key = u.id + ':' + u.items.join(',') + ':' + u.itemCd.map((c) => Math.ceil(Math.max(0, c))).join(',');
+    // only rebuild when items / cooldowns / keybinds change (cheap, and clicks don't get eaten by a rebuild)
+    const keys = ITEM_SLOTS.map((a) => settings.keys[a]).join(',');
+    const key = u.id + ':' + u.items.join(',') + ':' + u.itemCd.map((c) => Math.ceil(Math.max(0, c))).join(',') + ':' + keys;
     if (key === this._invKey) return;
     this._invKey = key;
     inv.innerHTML = `<div class="lbl">ITEMS</div><div class="slots">${u.items.map((id, i) => {
-      const it = id && ITEMS[id];
-      if (!it) return `<div class="slot empty" data-tip="slot:${i}"></div>`;
+      const it = id && ITEMS[id], kb = mine ? `<kbd class="ik">${keyLabel(settings.keys[ITEM_SLOTS[i]])}</kbd>` : '';
+      if (!it) return `<div class="slot empty" data-tip="slot:${i}">${kb}</div>`;
       const act = it.active && mine, cd = u.itemCd[i] > 0 ? Math.ceil(u.itemCd[i]) : 0;
-      return `<div class="slot${act ? ' act' : ''}" data-tip="item:${id}" data-slot="${i}"><svg class="it"><use href="#${it.sprite}"/></svg>${cd ? `<span class="icd">${cd}</span>` : ''}</div>`;
+      return `<div class="slot${act ? ' act' : ''}${mine ? ' mine' : ''}" data-tip="item:${id}" data-slot="${i}"><svg class="it"><use href="#${it.sprite}"/></svg>${kb}${cd ? `<span class="icd">${cd}</span>` : ''}</div>`;
     }).join('')}</div>`;
-    $$('.slot.act', inv).forEach((el) => (el.onclick = () => {
-      const err = u.useItem(+el.dataset.slot);
-      if (err) { this.toast(err, 'err'); sfx('error', 150); } else sfx('order');
-      this._invKey = ''; this.renderInventory(u);
-    }));
+    $$('.slot.act', inv).forEach((el) => (el.onclick = () => this.useItemSlot(+el.dataset.slot, u)));
+    $$('.slot.mine', inv).forEach((el) => (el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); this.openItemMenu(u, +el.dataset.slot, el); }));
+  }
+
+  /** Item key / click: use slot `slot` of `u` (default: the troop in the panel, else the first selected troop with an active there). */
+  useItemSlot(slot, u = null) {
+    const g = this.app.game, sel = this.app.controls.own().filter((o) => !o.dead);
+    u ||= (this.invUnit && sel.includes(this.invUnit) ? this.invUnit : null)
+      || sel.find((o) => ITEMS[o.items[slot]]?.active && !(o.itemCd[slot] > 0))
+      || sel.find((o) => o.items[slot]);
+    if (!u || u.team !== this.app.playerTeam || !g) return false;
+    const err = u.useItem(slot);
+    if (err) { this.toast(err, 'err'); sfx('error', 150); } else sfx('order');
+    this._invKey = ''; if (this.invUnit === u) this.renderInventory(u);
+    return !err;
+  }
+
+  /** Right-click menu on an item slot: Use (if it has an active) / Discard (drops it on the ground). */
+  openItemMenu(u, slot, anchor) {
+    this.closeItemMenu();
+    const it = ITEMS[u.items[slot]]; if (!it) return;
+    const m = document.createElement('div');
+    m.id = 'item-menu'; m.className = 'frame';
+    m.innerHTML = `<div class="im-h">${it.name}</div>${it.active ? '<button data-a="use">Use</button>' : ''}<button data-a="drop" class="bad">Discard</button>`;
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.left = Math.min(innerWidth - m.offsetWidth - 8, r.left) + 'px';
+    m.style.top = Math.max(8, r.top - m.offsetHeight - 6) + 'px';
+    m.onclick = (e) => {
+      const a = e.target.dataset?.a; if (!a) return;
+      if (a === 'use') this.useItemSlot(slot, u);
+      else if (a === 'drop' && u.items[slot]) { this.app.game.discardItem(u, slot); sfx('order'); this._invKey = ''; this.renderInventory(u); }
+      this.closeItemMenu();
+    };
+    m.oncontextmenu = (e) => e.preventDefault();
+    setTimeout(() => { this._imClose = (e) => { if (!m.contains(e.target)) this.closeItemMenu(); }; addEventListener('pointerdown', this._imClose, true); }, 0);
+  }
+  closeItemMenu() {
+    document.getElementById('item-menu')?.remove();
+    if (this._imClose) { removeEventListener('pointerdown', this._imClose, true); this._imClose = null; }
   }
 
   drawMinimap() {

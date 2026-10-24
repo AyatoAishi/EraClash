@@ -114,7 +114,7 @@ export class Game {
       u.obj.visible = u.team === v || this.canSee(v, u);
     }
     for (const p of this.projectiles) p.mesh.visible = p.team === v || this.seenByViewer(p.mesh.position);
-    for (const L of this.loot) L.mesh.visible = this.seenByViewer(L);
+    for (const L of this.loot) L.mesh.visible = this.seenByViewer(L) && !L.blinkOff;
   }
 
   /** Day/night: 5 min day then 5 min night, alternating, with a short fade. */
@@ -443,6 +443,11 @@ export class Game {
     for (let i = this.loot.length - 1; i >= 0; i--) {
       const L = this.loot[i];
       L.t += dt;
+      // unclaimed drops vanish after GAME.lootLife seconds (blinking for the last 5)
+      const left = GAME.lootLife - L.t;
+      if (left <= 0) { this.scene.remove(L.mesh); this.loot.splice(i, 1); continue; }
+      L.blinkOff = left < 5 && Math.floor(L.t * (left < 2 ? 8 : 4)) % 2 === 1;
+      if (L.blinkOff) L.mesh.visible = false;
       L.mesh.position.y = 0.55 + (L.y0 || 0) + Math.sin(L.t * 3) * 0.12;
       L.mesh.userData.spin.forEach((m) => (m.rotation.y += dt * 1.6));
       // AI troops grab loot they walk over; the player picks up with right-click (pickup order)
@@ -459,6 +464,14 @@ export class Game {
     this.loot.splice(this.loot.indexOf(L), 1);
     this.burst({ x: L.x, z: L.z }, 8, [0xffffff, 0xfff3b0], 2, 0.5);
     this.emit('pickup', u, L.id);
+    return true;
+  }
+  /** Throw away the item in `slot`: it drops at the troop's feet (anyone can pick it up; it vanishes after GAME.lootLife). */
+  discardItem(u, slot) {
+    const id = u.items[slot]; if (!id) return false;
+    u.removeItem(slot);
+    const a = Math.random() * Math.PI * 2;
+    this.spawnLoot(id, { x: u.pos.x + Math.cos(a) * 0.9, z: u.pos.z + Math.sin(a) * 0.9 });
     return true;
   }
   lootNear(p, r = 1.3) {
@@ -910,7 +923,7 @@ export class Game {
 
   // ---------------- combat callbacks ----------------
   // ---------------- projectiles ----------------
-  fireProjectile(src, target, extra = false) {
+  fireProjectile(src, target, extra = false, mods = null) {
     const pdef = src.def.projectile;
     const mesh = pdef.kind === 'arrow' ? buildArrow() : pdef.kind === 'wisp' ? buildWisp() : buildBullet();
     if (pdef.kind === 'sniper') mesh.scale.set(1.4, 1.4, 2.6);
@@ -920,8 +933,10 @@ export class Game {
     this.scene.add(mesh);
     const end = this.projectileAim(target, src);
     const dist0 = Math.max(0.5, start.distanceTo(end));
-    let dmg = src.rollDamage(); const crit = src.lastCrit, shot = src.lastShot;
+    let dmg = src.rollDamage(extra); const crit = src.lastCrit, shot = src.lastShot;
+    if (mods) Object.assign(shot, mods);                                               // Flick slow / extra-shot flag
     if (src.structure?.flyingBonus && target.flying) dmg *= 1 + src.structure.flyingBonus;   // Skypiercer
+    if (src.boomMult) dmg *= src.boomMult(target);                                      // Boomstick: closer = harder
     if (crit) mesh.scale.multiplyScalar(1.6);
     this.projectiles.push({ mesh, src, target, start, end, dist0, u: 0, speed: pdef.speed, arc: pdef.arc, kind: pdef.kind, team: src.team, dmg, crit, shot });
     if (this.audible(src.pos.x)) sfx(pdef.kind === 'arrow' ? 'bow' : pdef.kind === 'sniper' ? 'snipe' : 'gun', 35);
@@ -984,9 +999,9 @@ export class Game {
         let dealt = o.takeDamage(S.phys * S.mult, src, 'physical');
         dealt += o.takeDamage(S.magic * S.mult, src, 'magic');
         if (src) src.damageDealt += dealt;
-        o.addSlow(S.slow, S.slowTime);
+        if (S.slow) o.addSlow(S.slow, S.slowTime);
         S.mult *= 1 - S.falloff;                       // each enemy hit weakens the arrow by 10% of its current value
-        this.burst(o.pos, 5, [0x9ad8ff, 0xffffff], 2, 0.4);
+        this.burst(o.pos, 5, S.fx || [0x9ad8ff, 0xffffff], 2, 0.4);
       }
       if (S.left <= 0) { this.scene.remove(S.mesh); this.skillshots.splice(i, 1); }
     }
@@ -1033,6 +1048,51 @@ export class Game {
       this.skillshots.push({ src: u, team: u.team, x: u.pos.x, z: u.pos.z, dx, dz, speed: A.speed, left: A.range, width: A.width,
         phys: u.effDamage, magic: A.bonusMagic[L - 1], mult: 1, falloff: A.falloff, slow: A.slow, slowTime: A.slowTime, air: A.affectsFlying !== false, hit: new Set(), mesh });
       if (this.audible(u.pos.x)) sfx('bow', 40);
+      if (A.postBuff) u.apBuff = { as: A.postBuff.as, left: A.postBuff.attacks, until: this.time + A.postBuff.t };   // High Elf
+      return true;
+    }
+    if (A.id === 'scattershot') {
+      aim ||= u.target && !u.target.dead ? { x: u.target.pos.x, z: u.target.pos.z } : null;
+      if (!aim) return false;
+      let dx = aim.x - u.pos.x, dz = aim.z - u.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+      const mesh = new THREE.Group();
+      for (let k = 0; k < 7; k++) { const b = new THREE.Mesh(boxGeo(0.16, 0.16, 0.16), sharedMat(0xffd040, { emissive: 0xff8a20 })); b.position.set((k - 3) * A.width / 7, (k % 2) * 0.12, (k % 3) * 0.15); mesh.add(b); }
+      mesh.position.set(u.pos.x, 1.3 + (u.pos.y || 0), u.pos.z); mesh.rotation.y = Math.atan2(dx, dz);
+      this.scene.add(mesh);
+      this.skillshots.push({ src: u, team: u.team, x: u.pos.x, z: u.pos.z, dx, dz, speed: A.speed, left: A.range, width: A.width,
+        phys: 0, magic: A.flat + A.adPct * u.effDamage, mult: 1, falloff: 0, slow: 0, slowTime: 0, air: A.affectsFlying !== false, hit: new Set(), mesh, fx: [0xffd040, 0xff8a20] });
+      u.muzzleT = 0.1; u.swing = 1;
+      this.burst({ x: u.pos.x + dx, z: u.pos.z + dz }, 10, [0xffd040, 0xffffff, 0x8a8a8a], 4, 0.4, 0.8);
+      if (this.audible(u.pos.x)) sfx('gun', 30);
+      return true;
+    }
+    if (A.id === 'enforce') {   // fear everything close
+      const hits = this.enemiesInRadius(u, A.radius, A).filter((o) => !o.structure);
+      for (const t of hits) t.addFear(A.fear, u.pos);
+      this.ring(u.pos, A.radius, 0x4aa3ff);
+      this.burst(u.pos, 14, [0x4aa3ff, 0xffffff, 0xff3b3b], 4, 0.6, 1);
+      if (this.audible(u.pos.x)) sfx('baseHit', 120);
+      this.emit('ability', u, A, hits.length);
+      return true;
+    }
+    if (A.id === 'mediator') {   // enemies nearby deal less damage (doesn't stack: strongest / longest wins)
+      const hits = this.enemiesInRadius(u, A.radius, A).filter((o) => !o.structure);
+      for (const t of hits) { t.weakenUntil = Math.max(t.weakenUntil || 0, this.time + A.duration); t.weakenPct = Math.max(t.weakenUntil > this.time && t.weakenPct ? t.weakenPct : 0, A.weaken); }
+      this.ring(u.pos, A.radius, 0xf2f2f2);
+      this.burst(u.pos, 12, [0xffffff, 0x9ad0ff], 3, 0.6, 1);
+      if (this.audible(u.pos.x)) sfx('order', 60);
+      this.emit('ability', u, A, hits.length);
+      return true;
+    }
+    if (A.id === 'execute') {   // unit-targeted finisher
+      const t = aim?.unit;
+      if (!t || t.dead || t.tower || u.edgeDist(t) > A.castRange + 1) return false;
+      const dmg = u.effDamage + A.missingPct * Math.max(0, t.maxHp - t.hp);
+      const dealt = t.takeDamage(dmg, u, 'physical');
+      u.damageDealt += dealt; u.swing = 1; u.faceTowards(t.pos.x - u.pos.x, t.pos.z - u.pos.z, 1, 1);
+      this.emit('hitDmg', t.pos, dealt, true, u.team);
+      this.burst(t.pos, 12, [0xa01a1a, 0xffffff, 0x1a1a1a], 3, 0.5, 1);
+      if (this.audible(u.pos.x)) sfx('snipe', 40);
       return true;
     }
     if (A.id === 'flurry' || A.id === 'suppressiveFire') {
@@ -1055,6 +1115,19 @@ export class Game {
       if (this.audible(u.pos.x)) sfx('whiff', 40);
       return true;
     }
+    if (A.id === 'splatter' && A.leap) {   // Fire Splatter: leap to the aimed point, explode on landing
+      aim ||= u.target && !u.target.dead ? { x: u.target.pos.x, z: u.target.pos.z } : null;
+      if (!aim) return false;
+      let dx = aim.x - u.pos.x, dz = aim.z - u.pos.z; let d = Math.hypot(dx, dz);
+      if (d > A.leap.range) { dx *= A.leap.range / d; dz *= A.leap.range / d; d = A.leap.range; }
+      const lim = GAME.baseX - GAME.baseHalfX - u.radius;
+      const ex = Math.max(-lim, Math.min(lim, u.pos.x + dx)), ez = Math.max(-GAME.mapHalfWidth, Math.min(GAME.mapHalfWidth, u.pos.z + dz));
+      u.leap = { sx: u.pos.x, sz: u.pos.z, ex, ez, t: 0, dur: Math.max(0.15, d / A.leap.speed), dist: d, A };
+      u.pendingHit = null; u.swing = 0;
+      this.burst(u.pos, 8, [0xff6a1a, 0xffd23a], 3, 0.4, 0.8);
+      if (this.audible(u.pos.x)) sfx('whiff', 40);
+      return true;
+    }
     if (A.id === 'splatter') {
       this.splatterBlast(u, A);
       // self-destruct: no bounty for the enemy, model vanishes instantly
@@ -1068,17 +1141,37 @@ export class Game {
     return false;
   }
 
-  /** Splatter damage + slow (scales with Organic Matter). Used by the active and by Death Splatter. */
+  /** Fire Splatter landed: explode there and die (same as a normal Splatter from that spot). */
+  landLeap(u, A) {
+    if (u.dead) return;
+    this.splatterBlast(u, A);
+    u._exploded = true; u.hp = 0; u.die(null);
+    u.obj.visible = false; u.hideModel = true; u.deathT = 2.6;
+  }
+  /**
+   * Splatter damage + slow (scales with Organic Matter). Used by the active and by Death Splatter.
+   * Imp-tree variants (ability mods): dmgMult, stun, shred { armor, t, buildings }, burn { pct, t }.
+   */
   splatterBlast(u, A) {
     const om = UPGRADES.organicMatter, lvl = this.upLevel(u.team, 'organicMatter');
-    const dmg = A.damage + (lvl ? om.values.damage[lvl - 1] : 0);
+    const dmg = (A.damage + (lvl ? om.values.damage[lvl - 1] : 0)) * (A.dmgMult || 1);
     const hits = this.enemiesInRadius(u, A.radius, A);
     for (const t of hits) {
       const dealt = t.takeDamage(dmg, u, A.damageType);   // abilities can't be evaded
       u.damageDealt += dealt;
+      if (t.dead) continue;
       if (lvl) t.addSlow(om.values.slow[lvl - 1], om.values.slowTime);
+      if (A.stun) t.addStun(A.stun);
+      if (A.shred && (!t.structure || A.shred.buildings)) t.addArmorDebuff('splatter', A.shred.armor, A.shred.t);
+      if (A.burn) t.addBurn(A.burn.pct * t.maxHp, A.burn.t, u, 'magic');
     }
-    for (const b of this.bases) if (b.team !== u.team && this.distToBase(u, b.team) <= A.radius) this.damageBase(b.team, dmg, u, { x: u.pos.x, z: u.pos.z });
+    for (const b of this.bases) if (b.team !== u.team && this.distToBase(u, b.team) <= A.radius) {
+      this.damageBase(b.team, dmg, u, { x: u.pos.x, z: u.pos.z });
+      if (A.shred?.buildings) b.armorDebuff = { v: Math.max(A.shred.armor, b.armorDebuff?.until > this.time ? b.armorDebuff.v : 0), until: this.time + A.shred.t };
+    }
+    if (A.stun) this.burst(u.pos, 26, [0x9af0ff, 0xffffff, 0x4a8ad8], 5, 0.9, 1.2);
+    if (A.shred) this.burst(u.pos, 22, A.shred.buildings ? [0x9a3ad8, 0x2a0a3a, 0xc070ff] : [0xfff3a0, 0xffffff, 0xf2c94c], 5, 0.9, 1.1);
+    if (A.burn) this.burst(u.pos, 26, [0xff6a1a, 0xffd23a, 0x3a1a0a], 5, 1, 1.3);
     this.splatFX(u.pos, A.radius);
     if (this.audible(u.pos.x)) sfx('splat', 30);
     this.emit('ability', u, A, hits.length);
@@ -1122,7 +1215,7 @@ export class Game {
         else if (!t.dead) {
           const dodge = p.shot?.trueStrike ? null : t.dodgeCheck(p.src);   // true strike: can't miss or be evaded
           if (dodge) { this.onDodge(p.src, t, dodge); this.scene.remove(p.mesh); this.projectiles.splice(i, 1); continue; }
-          const dealt = t.takeDamage(p.dmg, p.src, p.src.def.damageType || 'physical', { attack: true, ranged: true });
+          const dealt = t.takeDamage(p.dmg, p.src, p.src.def.damageType || 'physical', { attack: true, ranged: true, extra: !!p.shot?.extra });
           p.src.damageDealt += dealt;
           p.src.onAttackLanded(t, dealt, p.dmg, p.crit, p.shot);
           this.onHit(p.src, t);
@@ -1170,7 +1263,7 @@ export class Game {
     }
     if (!u._exploded && u.ability('deathSplatter')) {   // Organic Matter max level
       u._exploded = true;
-      this.splatterBlast(u, ABILITIES.splatter);
+      this.splatterBlast(u, u.abilDef('splatter'));   // form variant (Ice / Sacred / Fire...) explodes in place
       u.obj.visible = false; u.hideModel = true; u.deathT = 2.6;
     }
     if (u.def.id === 'police' && this.upLevel(u.team, 'riotTraining') >= UPGRADES.riotTraining.max) {
@@ -1196,7 +1289,8 @@ export class Game {
     const b = this.bases[team];
     if (b.dead || this.over || b.invulnerable) return;
     if (this.cheat?.god && team === this.playerTeam) return;
-    const dmg = raw * defenseMult(b.armor) * this.dmgMult(src?.team, team);
+    const debuff = b.armorDebuff && b.armorDebuff.until > this.time ? b.armorDebuff.v : 0;   // Cursed Splatter
+    const dmg = raw * defenseMult(b.armor - debuff) * this.dmgMult(src?.team, team);
     b.hp = Math.max(0, b.hp - dmg);
     b.shake = 0.18;
     if (src) { src.damageDealt += dmg; this.teams[src.team].stats.baseDamage += dmg; }
@@ -1549,6 +1643,14 @@ export class Game {
     }
   }
 
+  /** Expanding shockwave ring on the ground (Enforce / Mediator). */
+  ring(p, r, color) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 48, 1), new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    m.rotation.x = -Math.PI / 2; m.position.set(p.x, 0.1 + (this.terrain?.heightAt(p.x, p.z) || 0), p.z);
+    m.visible = this.seenByViewer({ x: p.x, z: p.z, pos: p });
+    this.scene.add(m);
+    this.markers.push({ m, t: 0, wave: r });
+  }
   marker(point, color) {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.7, 4, 1), new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false }));
     m.rotation.x = -Math.PI / 2; m.rotation.z = Math.PI / 4;
@@ -1641,7 +1743,8 @@ export class Game {
     for (let i = this.markers.length - 1; i >= 0; i--) {
       const k = this.markers[i];
       k.t += dt;
-      k.m.scale.setScalar(1.4 - k.t * 1.5);
+      if (k.wave) k.m.scale.setScalar(Math.max(0.1, k.wave * Math.min(1, k.t / 0.35)));
+      else k.m.scale.setScalar(1.4 - k.t * 1.5);
       k.m.material.opacity = 1 - k.t / 0.6;
       if (k.t > 0.6) { this.scene.remove(k.m); k.m.geometry.dispose(); k.m.material.dispose(); this.markers.splice(i, 1); }
     }

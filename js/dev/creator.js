@@ -74,7 +74,7 @@ export class Creator {
     this.data.abilities = [...(u.abilities || []), ...granted].filter((a, k, arr) => ABILITIES[a] && arr.indexOf(a) === k).map((a) => {
       const A = ABILITIES[a];
       return { name: A.name, kind: A.kind, breakable: A.unbreakable ? 'no' : 'yes', affectsFlying: A.affectsFlying === undefined ? '-' : A.affectsFlying ? 'yes' : 'no',
-        unlock: (u.abilities || []).includes(a) ? 'built in' : 'Barracks upgrade', does: A.desc, cooldown: A.cooldown ?? '', manaCost: A.manaCost ?? '',
+        unlock: (u.abilities || []).includes(a) ? 'built in' : 'Barracks upgrade', does: (A.text ? String(A.text(A, (x) => Math.round(x * 100) + '%')).replace(/<[^>]+>/g, '') : A.desc), cooldown: A.cooldown ?? '', manaCost: A.manaCost ?? '',
         cast: A.kind === 'active' ? (A.cast === 'line' ? 'target ground (aimed)' : 'instant') : '-', castTime: A.castTime ?? '' };
     });
     if (!this.data.abilities.length) this.data.abilities = [{}];

@@ -29,6 +29,8 @@ export const GAME = {
   defaultVision: [30, 16],
   dmgVariance: 1,        // each hit rolls damage +/- this much
   invSlots: 6,           // item slots per troop
+  lootLife: 30,          // seconds an item drop stays on the ground before it vanishes (blinks for the last 5)
+  maxAttackSpeed: 600,   // attacks per minute hard cap (10/s)
   maxActives: 5,         // active abilities per unit (hotkeys Q W E R T); passives are unlimited
   flyHeight: 3,          // flying units hover this far above the ground
   flyingMiss: 0.5,       // ranged attacks against flying units miss this often (melee can't hit them at all)
@@ -368,7 +370,7 @@ Object.assign(UNITS, {
   outlaw: {
     id: 'outlaw', name: 'Outlaw', theme: 'modern', family: 'melee', role: 'Biker outlaw', type: 'melee',
     cost: 187.5, trainTime: 2.5,
-    hp: 120, hpRegen: 1.5, damage: 20, damageType: 'physical', attackSpeed: 70,
+    hp: 120, hpRegen: 1.5, damage: 30, damageType: 'physical', attackSpeed: 70,
     armor: 5, ward: 2, evasion: 0, missChance: 0,
     moveSpeed: 2.7, range: 1.4, vision: [30, 16], aggro: 8, radius: 0.6,
     abilities: ['cleave'],
@@ -396,6 +398,7 @@ export const ABILITIES = {
     id: 'eagleEye', kind: 'passive', name: 'Eagle Eye', icon: 'p-eye',
     chance: 0.2, bonusDamage: 5, bonusPct: 0, bonusMagic: 0, trueStrike: false,   // skill-tree forms change these (Scout Ranger)
     desc: '20% chance on each shot to deal +5 bonus damage (critical shot).',
+    text: (A, P) => `${P(A.chance)} chance on each shot to be a critical shot${A.trueStrike ? ' and a <b>true strike</b> (can\'t miss or be evaded)' : ''}: ${[A.bonusDamage ? `+${A.bonusDamage} damage` : '', A.bonusPct ? `+${P(A.bonusPct)} damage` : '', A.bonusMagic ? `+${A.bonusMagic} magic damage` : ''].filter(Boolean).join(', ')}.`,
   },
   cutThroat: {
     id: 'cutThroat', kind: 'passive', name: 'Cut Throat', icon: 'p-cutthroat', duration: 2,
@@ -404,6 +407,7 @@ export const ABILITIES = {
   bowsling: {
     id: 'bowsling', kind: 'passive', name: 'Bowsling', icon: 'p-bowsling', chance: 0.4,
     desc: '40% chance on each shot to fire a second arrow at another enemy within attack range.',
+    text: (A, P) => `${A.chance >= 1 ? 'Every shot fires' : `${P(A.chance)} chance on each shot to fire`} a second arrow at another enemy within attack range.`,
   },
   tumble: {
     id: 'tumble', kind: 'active', name: 'Tumble', icon: 'a-tumble', cast: 'line', range: 3.4, width: 1.2, cooldown: 3,
@@ -413,8 +417,9 @@ export const ABILITIES = {
   },
   fervor: {
     id: 'fervor', kind: 'passive', name: 'Fervor', icon: 'p-fervor',
-    perStack: 6, maxStacks: 10, resetAfter: 2.5,
+    perStack: 6, maxStacks: 10, resetAfter: 2.5, pctPerStack: 0,   // pctPerStack: % of attack speed per stack instead of flat (Machine Gunner)
     desc: 'Each consecutive attack on the same target grants +6 attack speed, stacking up to 10 times (+60). Switching targets, or not attacking for 2.5s, resets the stacks.',
+    text: (A, P) => `Each consecutive attack on the same target grants ${A.pctPerStack ? `+${P(A.pctPerStack)} bonus attack speed` : `+${A.perStack} attack speed`}, stacking ${A.maxStacks ? `up to ${A.maxStacks} times (max ${A.pctPerStack ? '+' + P(A.pctPerStack * A.maxStacks) : '+' + A.perStack * A.maxStacks})` : '<b>with no limit</b>'}. Switching targets, or not attacking for ${A.resetAfter}s, resets the stacks.`,
   },
   swiftStep: {
     id: 'swiftStep', kind: 'passive', name: 'Swift Step', icon: 'a-swift',
@@ -438,27 +443,38 @@ export const ABILITIES = {
     cooldown: 0, radius: 2.2, damage: 70, damageType: 'magic', selfDestruct: true,
     aiCast: { minTargets: 2, lowHpPct: 0.35 },          // when the AI uses it
     desc: 'Sacrifices itself in an organic explosion, dealing 70 magic damage to every enemy within 2.2 range (bases included). Can\'t be evaded.',
+    // skill-tree variants (Imp tree) set: stun (s), shred { armor, t, buildings }, dmgMult, leap { range, speed }, burn { pct, t }
+    text: (A, P) => [
+      A.leap ? `Leaps up to ${A.leap.range} range toward the target point (speed ${A.leap.speed}) and explodes where it lands` : 'Sacrifices itself in an organic explosion',
+      `: ${fmtN(A.damage * (A.dmgMult || 1))} magic damage to every enemy within ${A.radius} range (bases included)${A.dmgMult > 1 ? ` (+${P(A.dmgMult - 1)})` : ''}.`,
+      A.stun ? ` Stuns them for ${A.stun}s.` : '',
+      A.shred ? ` Reduces their armor by ${A.shred.armor} for ${A.shred.t}s${A.shred.buildings ? ' — buildings and the enemy base too' : ''}.` : '',
+      A.burn ? ` Burns them for ${P(A.burn.pct)} of their max HP as magic damage per second for ${A.burn.t}s.` : '',
+      ' Can\'t be evaded. Benefits from Organic Matter.',
+    ].join(''),
   },
   // ---------- neutral creep abilities ----------
   resentment: { id: 'resentment', kind: 'passive', name: 'Resentment', icon: 'a-resent', threshold: 30, bonusDamage: 5, bonusAS: 30, duration: 3,
     desc: 'After taking 30 damage, gains +5 damage and +30 attack speed for 3 seconds.' },
-  immaterial: { id: 'immaterial', kind: 'passive', name: 'Immaterial', icon: 'a-immaterial', unbreakable: true, static: { bonusEvasion: 50 }, desc: '50% chance to evade attacks. Can\'t be broken.' },
+  immaterial: { id: 'immaterial', kind: 'passive', name: 'Immaterial', icon: 'a-immaterial', unbreakable: true, static: { bonusEvasion: 30 }, desc: '30% chance to evade attacks. Can\'t be broken.' },
   brainwash: { id: 'brainwash', kind: 'active', name: 'Brainwash', icon: 'a-brainwash', cooldown: 20, castRange: 8, duration: 15, castChance: 0.25,
     desc: 'Each fight (and each time the 20s cooldown ends mid-fight) the Banshee has a 25% chance to cast it, a few seconds in: one enemy troop it is fighting loses its will for 15s — it switches sides, attacks its former allies, then despawns (no bounty).' },
   moraleAura: { id: 'moraleAura', kind: 'passive', name: 'Morale Aura', icon: 'a-morale', aura: { radius: 4, bonusArmor: 2 },
     desc: 'Allies within 4 range (including itself) gain +2 armor.' },
-  cleave: { id: 'cleave', kind: 'passive', name: 'Cleave', icon: 'a-cleave', pct: 0.4, radius: 2.2, cone: 0.8,
-    desc: 'Melee attacks also hit enemies in a cone behind the target for 40% of the damage.' },
+  cleave: { id: 'cleave', kind: 'passive', name: 'Cleave', icon: 'a-cleave', pct: 0.4, radius: 3, cone: 1.2,   // cone = half-angle (rad), ~70°
+    desc: 'Melee attacks also hit enemies in a wide cone (3 deep, ~140°) behind the target for 40% of the damage.' },
   // ---------- skill-tree passives (js/skilltree.js) ----------
   fury: {
     id: 'fury', kind: 'passive', name: 'Fury', icon: 'p-fury',
     duration: 5, maxStacks: 10, perStack: 0.04,   // +4% damage taken from Vikings per stack; maxStacks 0 = no limit (Chaotic Viking)
     desc: 'Each hit puts 1 Fury stack on the target for 5s (hitting again refreshes it and adds 1, max 10). The target takes +4% damage from every Viking per stack.',
+    text: (A, P) => `Each hit puts 1 Fury stack on the target for ${A.duration}s (hitting again refreshes it and adds 1, ${A.maxStacks ? `max ${A.maxStacks}` : '<b>no limit</b>'}). The target takes +${P(A.perStack)} damage from every Viking per stack.`,
   },
   chainLightning: {
     id: 'chainLightning', kind: 'passive', name: 'Chain Lightning', icon: 'p-chain',
     chance: 0.2, damage: 25, damageType: 'magic', jump: 2, targets: 4, bounceDelay: 0.3,
     desc: '20% chance on hit to zap the target with lightning for 25 magic damage. Every 0.3s it jumps to a random enemy within 2 range of the last one, up to 4 enemies.',
+    text: (A, P) => `${P(A.chance)} chance on hit to zap the target with lightning for ${A.damage} magic damage. Every ${A.bounceDelay}s it jumps to a random enemy within ${A.jump} range of the last one, up to ${A.targets} enemies.`,
   },
   // ---------- granted by Barracks upgrades (not on any troop by default) ----------
   flurry: {
@@ -489,7 +505,9 @@ export const ABILITIES = {
   arrowPiercer: { id: 'arrowPiercer', kind: 'active', name: 'Arrow Piercer', icon: 'u-piercer', granted: true, cast: 'line',
     castTime: 0.4, cooldown: 20, manaCost: 50, speed: 35, range: 25, affectsFlying: true, width: 1, bonusMagic: [0, 50, 100, 150, 250], falloff: 0.1, slow: 70, slowTime: 1,
     ai: { whenAttacking: true },
-    desc: 'Aim a piercing arrow in a line (25 range). Hits every enemy on its path for the Elf\'s attack damage + 0/50/100/150/250 magic and slows 70% for 1s. Each enemy hit weakens it by 10%. Costs 50 mana.' },
+    postBuff: null,   // High Elf: { as, attacks, t } attack-speed burst after casting
+    desc: 'Aim a piercing arrow in a line (25 range). Hits every enemy on its path for the Elf\'s attack damage + 0/50/100/150/250 magic and slows 70% for 1s. Each enemy hit weakens it by 10%. Costs 50 mana.',
+    text: (A) => `Aim a piercing arrow in a line (${A.range} range). Hits every enemy on its path for the Elf's attack damage + ${A.bonusMagic.join('/')} magic (by upgrade level) and slows ${A.slow}% for ${A.slowTime}s. Each enemy hit weakens it by ${Math.round(A.falloff * 100)}%. Costs ${A.manaCost} mana.${A.postBuff ? ` <b>After casting:</b> +${A.postBuff.as} attack speed for the next ${A.postBuff.attacks} attacks (within ${A.postBuff.t}s).` : ''}` },
   nightMeld: { id: 'nightMeld', kind: 'passive', name: 'Night Meld', icon: 'a-nightmeld', stillFor: 2,
     desc: 'At night, standing still for 2s without attacking makes the Elf invisible. Moving or attacking breaks it.' },
   shieldStomp: { id: 'shieldStomp', kind: 'active', name: 'Shield Stomp', icon: 'u-stomp', granted: true,
@@ -500,8 +518,45 @@ export const ABILITIES = {
     desc: 'Basic attacks from the front (120°) deal 30% less damage, crits included. On-hit extras are not reduced. Can\'t be broken.' },
   penetration: { id: 'penetration', kind: 'passive', name: 'Penetration', icon: 'a-penetration', shred: [2, 4, 6, 8, 10, 12], duration: 3, maxBonusAS: 20,
     desc: 'Attacks reduce the target\'s armor by 2 (4–12 with the Penetration upgrade) for 3s. Max upgrade: +20 attack speed.' },
-};
-export const PASSIVES = ABILITIES;   // back-compat alias
+  // ---------- skill-tree abilities, v0.23 (Imp, Lancer, Elf, Police, Gunner trees) ----------
+  counterstrike: { id: 'counterstrike', kind: 'passive', name: 'Counterstrike', icon: 'p-counter', chance: 0.3,
+    text: (A, P) => `When a basic attack hits him, ${P(A.chance)} chance to strike back at the attacker at once (if it is within his attack range). Doesn't use up his own attack.` },
+  dkCurse: { id: 'dkCurse', kind: 'passive', name: 'Curse of the Death Knight', icon: 'p-dkcurse', slow: 20, duration: 4, heal: 10,
+    text: (A) => `Attacks curse the target for ${A.duration}s: ${A.slow}% slower, and every ally that hits it heals ${A.heal} HP per hit.` },
+  zealot: { id: 'zealot', kind: 'passive', name: 'Zealot', icon: 'p-zealot',
+    text: () => 'Basic attacks ignore the target\'s <b>base</b> armor (armor from items, auras and buffs still counts).' },
+  galewinds: { id: 'galewinds', kind: 'passive', name: 'Galewinds', icon: 'p-gale', moveSpeed: 3, duration: 1,
+    text: (A) => `On hit, gains +${A.moveSpeed} move speed for ${A.duration}s (refreshes, doesn't stack).` },
+  enforce: { id: 'enforce', kind: 'active', name: 'Enforce', icon: 'a-enforce', cooldown: 60, radius: 3, fear: 2, affectsFlying: true,
+    ai: { minTargets: 2 },
+    text: (A) => `Fears every enemy troop within ${A.radius} range for ${A.fear}s: they run away from him and can't attack or cast. ${A.cooldown}s cooldown.` },
+  execute: { id: 'execute', kind: 'active', name: 'Execute', icon: 'a-execute', cast: 'unit', castRange: 6, castTime: 0.25, cooldown: 20, missingPct: 0.1,
+    ai: { whenAttacking: true },
+    text: (A, P) => `Target an enemy troop within ${A.castRange} range (walks closer if needed): after a ${A.castTime}s wind-up, instantly deals 100% of his attack damage + ${P(A.missingPct)} of the target's missing HP as physical damage. Can't be evaded. ${A.cooldown}s cooldown.` },
+  disrupt: { id: 'disrupt', kind: 'passive', name: 'Disrupt', icon: 'p-disrupt', every: 3, stun: 0.8,
+    text: (A) => `Every ${A.every}rd attack stuns the target for ${A.stun}s.` },
+  outnumbered: { id: 'outnumbered', kind: 'passive', name: 'Outnumbered', icon: 'p-outnumbered', radius: 8, dmgPct: 0.15, armor: 5, ward: 5,
+    text: (A, P) => `Counts troops within ${A.radius} range. As many or more allies than enemies: <b>+${P(A.dmgPct)} damage</b>. More enemies than allies: <b>+${A.armor} armor and +${A.ward} ward</b>.` },
+  mediator: { id: 'mediator', kind: 'active', name: 'Mediator', icon: 'a-mediator', cooldown: 50, radius: 6, weaken: 0.5, duration: 5, affectsFlying: true,
+    ai: { minTargets: 2 },
+    text: (A, P) => `Screams: enemy troops within ${A.radius} range deal ${P(A.weaken)} less damage for ${A.duration}s. Several Mediators don't stack (it only refreshes). ${A.cooldown}s cooldown.` },
+  doubleTap: { id: 'doubleTap', kind: 'passive', name: 'Double Tap', icon: 'p-doubletap', cooldown: 6, delay: 0.12,
+    text: (A) => `His next attack fires twice in quick succession. Recharges ${A.cooldown}s after it triggers.` },
+  boomstick: { id: 'boomstick', kind: 'passive', name: 'Boomstick', icon: 'p-boomstick', far: 5, near: 1, minPct: 0.1, maxPct: 1,
+    text: (A, P) => `Shots hit harder the closer the target is: +${P(A.minPct)} damage at ${A.far} range, rising to +${P(A.maxPct)} at ${A.near} range or closer. No bonus beyond ${A.far}.` },
+  scattershot: { id: 'scattershot', kind: 'active', name: 'Scattershot', icon: 'a-scatter', cast: 'line', cooldown: 11, flat: 10, adPct: 1,
+    width: 2.4, speed: 20, range: 8, affectsFlying: true, ai: { whenAttacking: true },
+    text: (A, P) => `Fires a wide blast in a straight line (${A.range} range, ${A.width} wide): ${A.flat} + ${P(A.adPct)} of his attack damage as magic damage to every enemy it passes. ${A.cooldown}s cooldown.` },
+  rapidFire: { id: 'rapidFire', kind: 'passive', name: 'Rapid Fire', icon: 'p-rapid', attacks: 8, bonusAS: 40, shred: 1, shredTime: 4, cooldown: 15,
+    text: (A) => `His next ${A.attacks} attacks get +${A.bonusAS} attack speed and each one lowers the target's armor by ${A.shred} for ${A.shredTime}s (stacks; every hit refreshes all stacks). Recharges ${A.cooldown}s after the last of them.` },
+  flick: { id: 'flick', kind: 'passive', name: 'Flick', icon: 'p-flick', chance: 0.3, slow: 60, slowTime: 1, onAttack: false,
+    text: (A, P) => `When ${A.onAttack ? 'he attacks or is attacked' : 'he is attacked'}, ${P(A.chance)} chance to fire an extra shot at a random enemy in range that slows it by ${A.slow}% for ${A.slowTime}s.` },
+};export const PASSIVES = ABILITIES;   // back-compat alias
+
+/** Exact, current text for an ability definition (form overrides already merged in): `text(A, pct)` if it has one, else `desc`. */
+const fmtN = (x) => Math.round(x * 100) / 100;
+const pct = (x) => fmtN(x * 100) + '%';
+export function abilityText(A) { try { return typeof A.text === 'function' ? A.text(A, pct) : A.desc; } catch { return A.desc || ''; } }
 
 // sanity check: no troop may exceed the ability cap
 for (const u of Object.values(UNITS)) {
@@ -573,7 +628,7 @@ export const AI_PERSONALITIES = {
 };
 
 /** attacks per minute -> seconds between attacks */
-export const attackInterval = (aps) => 60 / Math.max(1, aps);
+export const attackInterval = (aps) => 60 / Math.max(1, Math.min(GAME.maxAttackSpeed, aps));   // capped: uncapped stacking (Mercenary) can't break the sim
 
 /** Damage per second vs a target's defenses (base stats, passives excluded). */
 export function dps(stats, target = { armor: 0, ward: 0 }) {
