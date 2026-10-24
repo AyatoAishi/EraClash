@@ -107,7 +107,7 @@ export class Game {
   on(evt, fn) { (this.listeners[evt] ||= []).push(fn); }
   emit(evt, ...a) { (this.listeners[evt] || []).forEach((fn) => fn(...a)); }
 
-  pop(team) { return this.units.filter((u) => u.team === team && !u.dead && !u.tower).length + this.teams[team].queue.length; }
+  pop(team) { return this.units.filter((u) => u.team === team && !u.dead && !u.tower && !u.raised).length + this.teams[team].queue.length; }
   unitCost(team, unitId) { return Math.round((UNITS[unitId].cost * this.statMult(team, unitId) + (this.teams[team]?.costAdd[unitId] || 0)) * 100) / 100; }
   /** Stat boost multiplier for a troop type: 1 + 10% per level of every statBoost upgrade that targets it. */
   statMult(team, unitId) {
@@ -364,6 +364,36 @@ export class Game {
     if (this.audible(t.pos.x)) sfx('whiff', 40);
     this.emit('brainwash', t, orig);
   }
+  /** Raise a dead unit as an ally of `curse.team` for curse.def.raiseTime seconds (full HP, no items, keeps original upgrades). */
+  raiseUnit(dead, curse) {
+    const team = curse.team, A = curse.def;
+    const r = new Unit(this, dead.def.id, team);
+    r.raised = { t: A.raiseTime, orig: dead.statTeam };
+    r.recalcStats(); r.hp = r.maxHp;
+    r.invulnT = 0; r.shield.visible = false;
+    r.spawnAt(dead.pos.x, dead.pos.z);
+    r.facing = dead.facing;
+    for (const m of r.rig.matList) { m.transparent = true; m.opacity = 0.7; m.color.lerp(new THREE.Color(0xb070ff), 0.35); }
+    r.ring.material = new THREE.MeshBasicMaterial({ color: 0xb070ff, transparent: true, opacity: 0.9, depthWrite: false });
+    r.fill.material = new THREE.MeshBasicMaterial({ color: 0xb070ff, depthWrite: false, depthTest: false });
+    if (team === NEUTRAL_TEAM) {
+      // joins the Banshee's camp: same leash/home/sleep rules, already fighting whoever the camp is fighting
+      const src = curse.src;
+      r.camp = src?.camp || null;
+      r.home = src?.home ? { x: src.home.x + (Math.random() - 0.5) * 2, z: src.home.z + (Math.random() - 0.5) * 2 } : { x: dead.pos.x, z: dead.pos.z };
+      r.nState = src?.nState === 'chase' ? 'chase' : 'home';
+      r.aggroTeam = src?.aggroTeam ?? dead.team; r.lastHitT = this.time; r.nTarget = null;
+    } else {
+      r.command({ type: 'charge' });
+      if (!r.zzz) { /* team units: normal brain */ }
+    }
+    this.units.push(r);
+    this.scene.add(r.obj);
+    this.burst(dead.pos, 14, [0xb070ff, 0xd8c8ff, 0x3a2a5a], 3, 0.9);
+    if (this.audible(dead.pos.x)) sfx('whiff', 50);
+    this.emit('raise', r, dead);
+    return r;
+  }
   despawnBrainwashed(u) {
     u.hp = 0;
     u.die(null);
@@ -616,7 +646,9 @@ export class Game {
   }
 
   onUnitDeath(u, killer) {
-    if (u.brainwashed) {   // no bounty, no drops, no stats: it was never really theirs
+    // Banshee Curse: a cursed unit rises for the curse owner's side (not towers, not raised/brainwashed ones, not exploded Imps)
+    if (u.curse && u.curse.t > 0 && !u.tower && !u.raised && !u.brainwashed && !u._exploded && u.curse.team !== u.team) this.raiseUnit(u, u.curse);
+    if (u.brainwashed || u.raised) {   // no bounty, no drops, no stats: it was never really theirs
       if (!u._exploded) { this.burst(u.pos, 14, [0x9a6ad8, 0xd8c8ff, 0x3a2a5a], 4, 1.1); if (this.audible(u.pos.x)) sfx('death', 80); }
       this.emit('death', u); return;
     }

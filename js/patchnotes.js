@@ -7,6 +7,18 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.12.0', date: '2026-10-24T12:25:00+08:00', title: 'Banshee rework',
+    sections: [
+      { title: 'Changes', items: [
+        '<b>Banshee</b>: attack speed 50 → <b>70</b>. <b>Brainwash removed</b> (too random).',
+        'New passive <b>Banshee Curse</b>: attacks curse the target for 4s. Anyone attacking a cursed unit gets <b>+30 attack speed</b> for 1s. A unit that <b>dies while cursed rises as the Banshee\'s ally</b> for 20s (full HP, no items, keeps its upgrades), then fades.',
+        'A camp Banshee\'s risen units join her camp (leash, home, sleep). A hired Banshee\'s risen units charge for your side and don\'t count toward the army limit.',
+        'Risen units give no bounty and drop nothing, and can\'t rise twice.',
+      ] },
+      { title: 'Fixes', items: ['See-through parts (riot shields, visors, ghost bodies) no longer turn solid when a unit stops being invisible.'] },
+    ],
+  },
+  {
     version: '0.11.1', date: '2026-10-24T12:02:00+08:00', title: 'New troop tuning',
     sections: [
       { title: 'Balance', items: [

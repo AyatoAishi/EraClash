@@ -56,7 +56,7 @@ export class Unit {
     this.maxMana = this.def.mana || 0; this.mana = this.maxMana;
     this.breakT = 0;                   // Break debuff: passives disabled (except unbreakable ones)
     this.stillT = 0;                   // seconds standing still without attacking (Night Meld)
-    this.invisible = false;
+    this.invisible = false; this._lookInvis = false;
     this.syncAbilities();
     this.invulnT = GAME.spawnInvuln;   // spawn protection
     this.lastCrit = false;
@@ -137,7 +137,7 @@ export class Unit {
   }
   get maxHp() { return this.stats.hp; }
   /** Team whose upgrades this troop uses (a brainwashed troop keeps its original side's upgrades). */
-  get statTeam() { return this.brainwashed ? this.brainwashed.orig : this.team; }
+  get statTeam() { return this.brainwashed ? this.brainwashed.orig : this.raised ? this.raised.orig : this.team; }
   hasItem(id) { return this.items.includes(id); }
   get disarmed() { return this.disarmT > 0; }
   /** Hostile troop for on-hit effects (cleave, splash): neutrals only count once they're fighting you. */
@@ -278,6 +278,9 @@ export class Unit {
     if (this.breakT > 0) this.breakT -= dt;
     if (this.shredT > 0) this.shredT -= dt;
     if (this.rallyT > 0) this.rallyT -= dt;
+    if (this.curse) { this.curse.t -= dt; if (this.curse.t <= 0) this.curse = null; }
+    if (this.curseHasteT > 0) this.curseHasteT -= dt;
+    if (this.raised && !this.dead) { this.raised.t -= dt; if (this.raised.t <= 0) { this.game.despawnBrainwashed(this); return; } }
     this.updateCasting(dt);
     // standing still without attacking (Night Meld etc.)
     this.stillT = this.moving || (this.aimT > 0) || this.casting ? 0 : this.stillT + dt;
@@ -368,6 +371,7 @@ export class Unit {
       sum.bonusDamage += s.bonusDamage; sum.bonusAS += s.bonusAS; sum.bonusRegen += s.bonusRegen; sum.bonusEvasion += s.bonusEvasion; sum.bonusArmor += s.bonusArmor || 0; sum.bonusWard += s.bonusWard || 0; sum.bonusRange += s.bonusRange || 0; sum.lifesteal += s.lifesteal || 0;
     }
     this.invisible = invis;
+    if (this.curseHasteT > 0) sum.bonusAS += this.curseHaste || 0;
     // auras received: every aura ability (def.aura) from allies in range. The same aura never stacks (strongest
     // copy wins); different auras add up. A broken aura carrier stops emitting.
     this.auraScan = (this.auraScan || 0) - dt;
@@ -397,6 +401,7 @@ export class Unit {
   /** Called when a swing/shot starts against `tg`. */
   onAttackStart(tg) {
     this.stillT = 0; this.invisible = false;
+    if (tg && tg.curse && tg.curse.t > 0) { this.curseHasteT = tg.curse.def.hasteTime; this.curseHaste = tg.curse.def.hasteAS; }
     if (tg && tg.team !== undefined) this.game.vision?.reveal(this, tg.team);   // attacking gives your position away
     const f = this.ability('fervor');
     if (f) { if (f.st.target !== tg) { f.st.target = tg; f.st.stacks = 0; } f.st.sinceAttack = 0; }
@@ -434,6 +439,9 @@ export class Unit {
     if (dealt > 0) this.game.emit('hitDmg', tg.pos, dealt, crit, this.team);
     if (this.pas.lifesteal && dealt > 0 && !this.dead) this.hp = Math.min(this.maxHp, this.hp + dealt * this.pas.lifesteal / 100);
     const g = this.game;
+    // Banshee Curse: mark the target (rises for our side if it dies while cursed)
+    const bc = this.ability('bansheeCurse');
+    if (bc && !bc.st.broken && !tg.dead && !tg.tower) tg.curse = { t: bc.def.duration, team: this.team, src: this, def: bc.def };
     // Penetration: armor shred on the target
     const pen = this.ability('penetration');
     if (pen && !pen.st.broken && !tg.dead) tg.applyShred(pen.def.shred[this.upLevel('penetration')], pen.def.duration);
@@ -599,6 +607,7 @@ export class Unit {
       if (this.brainwashed.t <= 0) { g.despawnBrainwashed(this); return false; }
     }
     this.updatePassive(dt);
+    if (this.dead) return false;
     if (g.teams[this.team].isAI && this.abil.length) { this.aiT = (this.aiT || 0) - dt; if (this.aiT <= 0) { this.aiT = 0.3; this.aiCast(); if (this.dead) return false; } }
     const regen = this.stats.hpRegen + this.pas.bonusRegen;
     if (regen && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + regen * dt);
@@ -712,6 +721,7 @@ export class Unit {
     if (this.slows.length) { for (const s of this.slows) s.t -= dt; this.slows = this.slows.filter((s) => s.t > 0); }
     if (this.kb) { const f = Math.min(1, dt / this.kb.t); this.pos.x += this.kb.x * f; this.pos.z += this.kb.z * f; this.kb.x *= 1 - f; this.kb.z *= 1 - f; this.kb.t -= dt; if (this.kb.t <= 0) this.kb = null; }
     this.updatePassive(dt);
+    if (this.dead) return false;
     const regen = this.stats.hpRegen + this.pas.bonusRegen;
     if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + (regen + (this.nState === 'return' ? this.maxHp * R.returnRegen : 0)) * dt);
     if (this.pendingHit) { this.pendingHit.t -= dt; if (this.pendingHit.t <= 0) { this.releaseAttack(this.pendingHit.target); this.pendingHit = null; } }
@@ -798,6 +808,7 @@ export class Unit {
     const g = this.game;
     this.atkCd -= dt; this.retarget -= dt;
     this.updatePassive(dt);
+    if (this.dead) return false;
     if (this.pendingHit) { this.pendingHit.t -= dt; if (this.pendingHit.t <= 0) { this.releaseAttack(this.pendingHit.target); this.pendingHit = null; } }
     if (this.retarget <= 0) {
       this.retarget = 0.3;
@@ -963,7 +974,10 @@ export class Unit {
     }
     if (this.invisible !== this._lookInvis) {   // own side sees an invisible troop as a ghost
       this._lookInvis = this.invisible;
-      for (const m of r.matList) { m.transparent = this.invisible; m.opacity = this.invisible ? 0.35 : 1; m.needsUpdate = true; }
+      for (const m of r.matList) {
+        if (m.userData.op0 === undefined) m.userData.op0 = { o: m.opacity, t: m.transparent };
+        m.transparent = this.invisible || m.userData.op0.t; m.opacity = this.invisible ? 0.35 * m.userData.op0.o : m.userData.op0.o; m.needsUpdate = true;
+      }
     }
     if (this.flying) {   // propellers + gentle bob; selection ring stays on the ground
       this.bobT = (this.bobT || 0) + dt * 2.5;
@@ -971,6 +985,14 @@ export class Unit {
       if (r.props) for (const pr of r.props) pr.rotation.y += dt * 40;
       if (r.muzzle && r.style === 'drone') { this.muzzleT -= dt; r.muzzle.visible = this.muzzleT > 0; }
       this.ring.position.y = -GAME.flyHeight + 0.06;
+    }
+    if (this.curse || this.curseMark) {   // purple wisp over cursed units
+      if (!this.curseMark) {
+        this.curseMark = new THREE.Mesh(new THREE.OctahedronGeometry(0.18), new THREE.MeshBasicMaterial({ color: 0xb070ff, transparent: true, opacity: 0.85 }));
+        this.obj.add(this.curseMark);
+      }
+      this.curseMark.visible = !!this.curse;
+      if (this.curse) { this.curseMark.position.set(0, (r.barY || 2.95) * (r.scale || 1) * 1.25 + 0.55, 0); this.curseMark.rotation.y += dt * 4; }
     }
     if (this.zzz) {
       this.zzz.visible = !!this.sleeping;

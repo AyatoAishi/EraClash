@@ -231,11 +231,11 @@ Object.assign(UNITS, {
   banshee: {
     id: 'banshee', name: 'Banshee', theme: 'medieval', family: 'marksman', role: 'Wraith caster', type: 'ranged',
     cost: 150, trainTime: 2.5,
-    hp: 90, hpRegen: 2, damage: 20, damageType: 'physical', attackSpeed: 50,
+    hp: 90, hpRegen: 2, damage: 20, damageType: 'physical', attackSpeed: 70,
     armor: 4, ward: -1, evasion: 0, missChance: 0,
     moveSpeed: 3, range: 8, vision: [30, 16], aggro: 8, radius: 0.5,
     projectile: { kind: 'wisp', speed: 16, arc: 0.05 },
-    abilities: ['immaterial', 'brainwash'],
+    abilities: ['immaterial', 'bansheeCurse'],
     lore: 'A wailing spirit. Blades pass straight through it, and its whisper turns soldiers against their own.',
   },
   smallBanshee: {
@@ -353,6 +353,8 @@ export const ABILITIES = {
     id: 'deathSplatter', kind: 'passive', name: 'Death Splatter', icon: 'u-deathsplat', granted: true,
     desc: 'When this Imp dies, it automatically triggers Splatter.',
   },
+  bansheeCurse: { id: 'bansheeCurse', kind: 'passive', name: 'Banshee Curse', icon: 'a-curse', duration: 4, hasteAS: 30, hasteTime: 1, raiseTime: 20,
+    desc: 'Attacks curse the target for 4s. Anyone attacking a cursed unit gains +30 attack speed for 1s. A unit that dies while cursed rises as the Banshee\'s ally for 20s (full HP, no items, keeps its upgrades), then fades.' },
   // ---------- v0.11.0 ----------
   courageAura: { id: 'courageAura', kind: 'passive', name: 'Courage Aura', icon: 'a-courage', aura: { radius: 3, bonusWard: 2, bonusRegen: 1 },
     desc: 'Allies (and itself) within 3 range gain +2 ward and +1 HP regen. Doesn\'t stack with other Courage Auras.' },
