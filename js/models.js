@@ -596,111 +596,319 @@ export function buildBullet() {
 
 // ======================= STRUCTURES & PROPS =======================
 
-export function buildCastle() {
+// Castle tiers (Grow Castle-style growth). Level 3 is the classic castle the lane map uses.
+export const CASTLE_TIERS = [
+  { name: 'Wooden Fort', desc: 'Small stone keep behind a wooden palisade.' },
+  { name: 'Stone Keep', desc: 'Full-size keep with two gate towers.' },
+  { name: 'Castle', desc: 'Four corner towers and full battlements.' },
+  { name: 'Fortress', desc: 'Adds a central donjon (watchtower) and gilded spires.' },
+  { name: 'Citadel', desc: 'Taller towers, braziers at the gate and royal banners.' },
+];
+const TOWER_SPOTS = [[-4.5, -6], [-4.5, 6], [4.5, -6], [4.5, 6]];
+/**
+ * Where wall troops stand at each castle level (local coords, gate faces +x). Front-wall troops stand on
+ * the roof behind the battlements, in the gaps between the merlons (merlons sit at z = 0, ±2, ±4).
+ * Filled center-out, so the first Battlement level takes the middle gap.
+ */
+export function castleSlots(level = 3) {
+  const L = Math.max(1, Math.min(CASTLE_TIERS.length, level));
+  if (L === 1) return [{ x: 1.9, y: 7, z: 0 }];
+  const wall = (L === 2 ? [-1, 1] : [-1, 1, -3, 3]).map((z) => ({ x: 3.4, y: 9, z }));
+  const th = L >= 5 ? 16 : 13;
+  if (L >= 4) wall.push({ x: 4.5, y: th, z: -6 }, { x: 4.5, y: th, z: 6 });
+  if (L >= 5) wall.push({ x: -1.5, y: 17, z: -1.2 }, { x: -1.5, y: 17, z: 1.2 });
+  return wall;
+}
+
+export function buildCastle(level = 3) {
+  const L = Math.max(1, Math.min(CASTLE_TIERS.length, level));
   const g = new THREE.Group();
   const stone = [0x8d8f93, 0x7f8186, 0x9a9ca0, 0x74767b];
   const pick = (i) => stone[i % stone.length];
-  // main keep
-  B(g, 9, 9, 12, 0x86888d, 0, 4.5, 0, null);
+  const GOLD = 0xe0b040;
+  // main keep: half sizes + height
+  const [hx, hz, kh] = L === 1 ? [3, 4, 7] : [4.5, 6, 9];
+  B(g, hx * 2, kh, hz * 2, 0x86888d, 0, kh / 2, 0, null);
   // corner towers
-  const towers = [[-4.5, -6], [-4.5, 6], [4.5, -6], [4.5, 6]];
+  const th = L >= 5 ? 16 : 13;
+  const towers = L === 1 ? [] : L === 2 ? TOWER_SPOTS.slice(2) : TOWER_SPOTS;
   towers.forEach(([x, z], i) => {
-    B(g, 3.2, 13, 3.2, pick(i), x, 6.5, z, null);
+    B(g, 3.2, th, 3.2, pick(i), x, th / 2, z, null);
     for (let a = 0; a < 4; a++) {
       const ox = [-1.2, 1.2][a % 2], oz = [-1.2, 1.2][a >> 1];
-      B(g, 0.9, 0.9, 0.9, 0x7a7c80, x + ox, 13.45, z + oz, null);
+      B(g, 0.9, 0.9, 0.9, 0x7a7c80, x + ox, th + 0.45, z + oz, null);
     }
-    B(g, 3.6, 0.4, 3.6, 0x6e7075, x, 12.2, z, null);
+    B(g, 3.6, 0.4, 3.6, 0x6e7075, x, th - 0.8, z, null);
+    // Fortress+: front towers lose their roofs so wall troops can stand on them
+    if (L >= 4 && x > 0) return;
     // pointed roof (stacked)
-    B(g, 2.4, 1, 2.4, 0x6b2a24, x, 14.4, z, null);
-    B(g, 1.6, 1, 1.6, 0x7d3129, x, 15.4, z, null);
-    B(g, 0.8, 1, 0.8, 0x8e3a30, x, 16.4, z, null);
+    B(g, 2.4, 1, 2.4, 0x6b2a24, x, th + 1.4, z, null);
+    B(g, 1.6, 1, 1.6, 0x7d3129, x, th + 2.4, z, null);
+    B(g, 0.8, 1, 0.8, 0x8e3a30, x, th + 3.4, z, null);
+    if (L >= 4) B(g, 0.3, 0.9, 0.3, GOLD, x, th + 4.35, z, null, { emissive: 0x3a2800 });
   });
   // wall crenellations
-  for (let z = -4; z <= 4; z += 2) {
-    B(g, 0.9, 0.9, 0.9, 0x7a7c80, 4.1, 9.45, z, null);
-    B(g, 0.9, 0.9, 0.9, 0x7a7c80, -4.1, 9.45, z, null);
+  // (the small Wooden Fort keep leaves a gap in the middle for its one wall troop)
+  for (const z of L === 1 ? [-3, -1.2, 1.2, 3] : [-4, -2, 0, 2, 4]) {
+    B(g, 0.9, 0.9, 0.9, 0x7a7c80, hx - 0.4, kh + 0.45, z, null);
+    B(g, 0.9, 0.9, 0.9, 0x7a7c80, -(hx - 0.4), kh + 0.45, z, null);
   }
-  for (let x = -2.5; x <= 2.5; x += 2.5) {
-    B(g, 0.9, 0.9, 0.9, 0x7a7c80, x, 9.45, 5.6, null);
-    B(g, 0.9, 0.9, 0.9, 0x7a7c80, x, 9.45, -5.6, null);
+  for (let x = -(hx - 2); x <= hx - 2 + 1e-6; x += hx - 2) {
+    B(g, 0.9, 0.9, 0.9, 0x7a7c80, x, kh + 0.45, hz - 0.4, null);
+    B(g, 0.9, 0.9, 0.9, 0x7a7c80, x, kh + 0.45, -(hz - 0.4), null);
   }
   // brick accents
-  for (let i = 0; i < 70; i++) {
-    const face = i % 3;
-    const y = 0.6 + ((i * 37) % 80) / 10;
-    if (face === 0) B(g, 0.15, 0.5, 1, pick(i + 1), 4.55, y, -5 + ((i * 53) % 100) / 10, null);
-    else if (face === 1) B(g, 1, 0.5, 0.15, pick(i + 2), -4 + ((i * 29) % 80) / 10, y, 6.05, null);
-    else B(g, 1, 0.5, 0.15, pick(i + 3), -4 + ((i * 41) % 80) / 10, y, -6.05, null);
+  if (L >= 2) {
+    for (let i = 0; i < 70; i++) {
+      const face = i % 3;
+      const y = 0.6 + ((i * 37) % 80) / 10;
+      if (face === 0) B(g, 0.15, 0.5, 1, pick(i + 1), 4.55, y, -5 + ((i * 53) % 100) / 10, null);
+      else if (face === 1) B(g, 1, 0.5, 0.15, pick(i + 2), -4 + ((i * 29) % 80) / 10, y, 6.05, null);
+      else B(g, 1, 0.5, 0.15, pick(i + 3), -4 + ((i * 41) % 80) / 10, y, -6.05, null);
+    }
+  }
+  // Wooden Fort: palisade of sharpened logs around the keep, open at the gate
+  if (L === 1) {
+    const log = [0x6b4a2b, 0x5e4026, 0x7a5532];
+    let k = 0;
+    const post = (x, z) => {
+      const h = 2.4 + ((k * 7) % 5) / 10;
+      B(g, 0.5, h, 0.5, log[k++ % 3], x, h / 2, z, null);
+      B(g, 0.3, 0.35, 0.3, 0x8a6a42, x, h + 0.17, z, null);
+    };
+    for (let z = -5.2; z <= 5.21; z += 0.6) if (Math.abs(z) > 2) post(hx + 1.6, z);
+    for (let x = -4; x <= hx + 1.01; x += 0.6) { post(x, -5.5); post(x, 5.5); }
+    for (const z of [-2, 2]) B(g, 0.6, 3.6, 0.6, 0x4a3520, hx + 1.6, 1.8, z, null);   // gate posts
+  }
+  // Fortress+: central donjon (flat top, troops stand on it at Citadel)
+  const dh = L >= 5 ? 17 : 15;
+  if (L >= 4) {
+    B(g, 5, dh, 5, 0x7f8186, -1.5, dh / 2, 0, null);
+    B(g, 5.6, 0.4, 5.6, 0x6e7075, -1.5, dh - 0.8, 0, null);
+    for (const [ox, oz] of [[-2, -2], [-2, 2], [2, -2], [2, 2], [-2, 0], [2, 0], [0, -2], [0, 2]]) B(g, 0.8, 0.8, 0.8, 0x7a7c80, -1.5 + ox, dh + 0.4, oz, null);
+    for (const y of [kh + 1.5, kh + 3.5]) for (const z of [-2.52, 2.52]) B(g, 0.6, 0.9, 0.1, 0x1a1a22, -1.5, y, z, null);   // arrow slits
   }
   // gate facing +x
-  B(g, 0.3, 4.4, 3.4, 0x2a1d12, 4.55, 2.2, 0, null);
-  for (let z = -1.2; z <= 1.2; z += 0.6) B(g, 0.2, 4.2, 0.12, 0x3a3a3a, 4.75, 2.1, z, null);
-  B(g, 0.4, 0.6, 4.2, 0x6e7075, 4.6, 4.6, 0, null);
+  B(g, 0.3, 4.4, 3.4, 0x2a1d12, hx + 0.05, 2.2, 0, null);
+  for (let z = -1.2; z <= 1.2; z += 0.6) B(g, 0.2, 4.2, 0.12, 0x3a3a3a, hx + 0.25, 2.1, z, null);
+  B(g, 0.4, 0.6, 4.2, 0x6e7075, hx + 0.1, 4.6, 0, null);
   // banners
-  for (const z of [-2.6, 2.6]) {
-    B(g, 0.1, 3.2, 1.4, 0xa3221c, 4.6, 6.5, z, null);
-    B(g, 0.12, 0.8, 0.6, 0xe0b040, 4.62, 6.8, z, null);
+  if (L >= 2) {
+    for (const z of [-2.6, 2.6]) {
+      B(g, 0.1, 3.2, 1.4, 0xa3221c, 4.6, 6.5, z, null);
+      B(g, 0.12, 0.8, 0.6, GOLD, 4.62, 6.8, z, null);
+    }
   }
-  // flag on top
-  B(g, 0.15, 4, 0.15, 0x4a3520, 0, 11, 0, null);
-  const flag = B(g, 0.1, 1.2, 2, 0xa3221c, 0, 12.3, 1.05, null);
+  if (L >= 5) {   // royal banners hanging from the gate towers
+    for (const z of [-6, 6]) {
+      B(g, 0.1, 5, 1.8, 0x7a1a8a, 6.15, th - 4, z, null);
+      B(g, 0.12, 1, 0.8, GOLD, 6.17, th - 3.4, z, null);
+      B(g, 0.12, 0.2, 1.8, GOLD, 6.17, th - 6.4, z, null);
+    }
+  }
+  // flag on top (on the donjon from Fortress up)
+  const fx = L >= 4 ? -1.5 : 0, fy = L >= 4 ? dh : kh;
+  B(g, 0.15, 4, 0.15, 0x4a3520, fx, fy + 2, 0, null);
+  const flag = B(g, 0.1, 1.2, 2, 0xa3221c, fx, fy + 3.3, 1.05, null);
   g.userData.flag = flag;
   // torches (emissive, flicker)
   const torches = [];
   for (const z of [-2, 2]) {
-    B(g, 0.2, 0.6, 0.2, 0x4a3520, 4.75, 3.6, z * 1.1, null);
-    const fl = B(g, 0.3, 0.3, 0.3, 0xffa030, 4.75, 4.05, z * 1.1, null, { emissive: 0xff7a00 });
+    B(g, 0.2, 0.6, 0.2, 0x4a3520, hx + 0.25, 3.6, z * 1.1, null);
+    const fl = B(g, 0.3, 0.3, 0.3, 0xffa030, hx + 0.25, 4.05, z * 1.1, null, { emissive: 0xff7a00 });
     fl.castShadow = false; torches.push(fl);
   }
+  if (L >= 5) {   // big braziers either side of the gate
+    for (const z of [-3.6, 3.6]) {
+      B(g, 0.4, 1.6, 0.4, 0x3a3a3a, hx + 1.2, 0.8, z, null);
+      B(g, 1, 0.4, 1, 0x4a4a4a, hx + 1.2, 1.8, z, null);
+      const fl = B(g, 0.7, 0.7, 0.7, 0xffb040, hx + 1.2, 2.35, z, null, { emissive: 0xff7a00 });
+      fl.castShadow = false; torches.push(fl);
+    }
+  }
   g.userData.torches = torches;
+  g.userData.level = L;
+  g.userData.slots = castleSlots(L);
   return g;
 }
 
-export function buildHQ() {
+// HQ tiers — the Modern side's mirror of CASTLE_TIERS. Level 3 is the classic HQ the lane map uses. Front faces -x.
+export const HQ_TIERS = [
+  { name: 'Field Outpost', desc: 'Shipping-container office behind a sandbag ring, with a radio mast.' },
+  { name: 'Police Precinct', desc: 'Two-story station with front steps, a light bar and a flagpole.' },
+  { name: 'Command HQ', desc: 'Office block with a helipad and a concrete rooftop parapet.' },
+  { name: 'Military Compound', desc: 'Adds two guard towers with searchlights, razor wire and a radar dish.' },
+  { name: 'Tech Tower', desc: 'A glass tower on the roof, a helicopter on the pad and a rooftop turret.' },
+];
+/** Where Overwatch gunners stand at each HQ level (local coords). Roof gunners stand behind the parapet, in its gaps. */
+export function hqSlots(level = 3) {
+  const L = Math.max(1, Math.min(HQ_TIERS.length, level));
+  if (L === 1) return [{ x: -1.5, y: 3, z: 0 }];
+  if (L === 2) return [-1, 1].map((z) => ({ x: -3.1, y: 6, z }));
+  const roof = [-1, 1, -3, 3].map((z) => ({ x: -4, y: 10.5, z }));
+  if (L >= 4) roof.push({ x: -5, y: 11.15, z: -6 }, { x: -5, y: 11.15, z: 6 });
+  if (L >= 5) roof.push({ x: 1.1, y: 18.5, z: -2 }, { x: 1.1, y: 18.5, z: -4 });
+  return roof;
+}
+const CONCRETE = 0x9a9da2;
+/** Concrete parapet blocks along a roof's front edge (the gaps between them are the gunner slots). */
+function parapet(g, x, y, zs) { for (const z of zs) B(g, 0.5, 0.8, 1.2, CONCRETE, x, y + 0.4, z, null); }
+function sandbag(g, x, y, z, rot = false) { B(g, rot ? 1.1 : 1, 0.45, rot ? 1 : 1.1, 0xa8956a, x, y + 0.23, z, null); }
+
+export function buildHQ(level = 3) {
+  const L = Math.max(1, Math.min(HQ_TIERS.length, level));
   const g = new THREE.Group();
-  B(g, 10, 10, 12, 0xb8bcc2, 0, 5, 0, null);
-  B(g, 10.4, 0.5, 12.4, 0x9ea2a8, 0, 10.25, 0, null);
-  B(g, 10.4, 0.4, 12.4, 0x9ea2a8, 0, 0.2, 0, null);
-  // window strips on all faces
-  const glass = { emissive: 0x0b2a44 };
-  for (let y = 2.5; y <= 8.5; y += 2) {
-    B(g, 0.1, 0.9, 10.5, 0x4fa8e0, -5.03, y, 0, null, glass);
-    B(g, 0.1, 0.9, 10.5, 0x4fa8e0, 5.03, y, 0, null, glass);
-    B(g, 8.5, 0.9, 0.1, 0x4fa8e0, 0, y, 6.03, null, glass);
-    B(g, 8.5, 0.9, 0.1, 0x4fa8e0, 0, y, -6.03, null, glass);
+  if (L === 1) buildOutpost(g);
+  else if (L === 2) buildPrecinct(g);
+  else {
+    B(g, 10, 10, 12, 0xb8bcc2, 0, 5, 0, null);
+    B(g, 10.4, 0.5, 12.4, 0x9ea2a8, 0, 10.25, 0, null);
+    B(g, 10.4, 0.4, 12.4, 0x9ea2a8, 0, 0.2, 0, null);
+    // window strips on all faces
+    const glass = { emissive: 0x0b2a44 };
+    for (let y = 2.5; y <= 8.5; y += 2) {
+      B(g, 0.1, 0.9, 10.5, 0x4fa8e0, -5.03, y, 0, null, glass);
+      B(g, 0.1, 0.9, 10.5, 0x4fa8e0, 5.03, y, 0, null, glass);
+      B(g, 8.5, 0.9, 0.1, 0x4fa8e0, 0, y, 6.03, null, glass);
+      B(g, 8.5, 0.9, 0.1, 0x4fa8e0, 0, y, -6.03, null, glass);
+    }
+    // entrance facing -x
+    B(g, 0.2, 2.6, 3.2, 0x7fc4f0, -5.1, 1.5, 0, null, { emissive: 0x123a5a });
+    B(g, 2, 0.3, 4.4, 0x5a5e64, -6, 3, 0, null);
+    for (const z of [-1.9, 1.9]) B(g, 0.25, 2.8, 0.25, 0x5a5e64, -6.8, 1.5, z, null);
+    B(g, 0.15, 0.6, 3.6, 0x1c2a50, -5.12, 3.6, 0, null);
+    // rooftop
+    B(g, 3, 1.4, 3, 0x8a8e94, 2.5, 11.2, -3, null);
+    B(g, 1.4, 0.6, 1.4, 0x5a5e64, 2.5, 12.2, -3, null);
+    // helipad
+    B(g, 5, 0.1, 5, 0x3a3d42, -1.5, 10.55, 2, null);
+    B(g, 0.5, 0.12, 2.6, 0xf2c94c, -2.4, 10.62, 2, null);
+    B(g, 0.5, 0.12, 2.6, 0xf2c94c, -0.6, 10.62, 2, null);
+    B(g, 1.6, 0.12, 0.5, 0xf2c94c, -1.5, 10.62, 2, null);
+    // antenna + blinker
+    B(g, 0.2, 5, 0.2, 0x6a6e74, 3.5, 13, 3.5, null);
+    B(g, 0.9, 0.12, 0.12, 0x6a6e74, 3.5, 14.2, 3.5, null);
+    const blink = B(g, 0.35, 0.35, 0.35, 0xff2020, 3.5, 15.6, 3.5, null, { emissive: 0xff0000 });
+    blink.castShadow = false;
+    g.userData.blink = blink;
+    // flag
+    B(g, 0.15, 5, 0.15, 0xcccccc, -6.2, 2.5, 5.2, null);
+    const flag = B(g, 0.1, 1.1, 1.8, 0x2f6fd6, -6.2, 4.4, 6.1, null);
+    B(g, 0.12, 0.3, 1.8, 0xffffff, -6.2, 4.4, 6.1, null);
+    g.userData.flag = flag;
+    // sandbags / barriers out front
+    for (let z = -5; z <= 5; z += 1.2) {
+      if (Math.abs(z) < 2.2) continue;
+      B(g, 1, 0.5, 1.1, 0xa8956a, -7.6, 0.25, z, null);
+      B(g, 1, 0.45, 1.1, 0x9a8760, -7.6, 0.72, z + 0.3, null);
+    }
+    parapet(g, -4.75, 10.5, [0, -2, 2, -4, 4]);
   }
-  // entrance facing -x
-  B(g, 0.2, 2.6, 3.2, 0x7fc4f0, -5.1, 1.5, 0, null, { emissive: 0x123a5a });
-  B(g, 2, 0.3, 4.4, 0x5a5e64, -6, 3, 0, null);
-  for (const z of [-1.9, 1.9]) B(g, 0.25, 2.8, 0.25, 0x5a5e64, -6.8, 1.5, z, null);
-  B(g, 0.15, 0.6, 3.6, 0x1c2a50, -5.12, 3.6, 0, null);
-  // rooftop
-  B(g, 3, 1.4, 3, 0x8a8e94, 2.5, 11.2, -3, null);
-  B(g, 1.4, 0.6, 1.4, 0x5a5e64, 2.5, 12.2, -3, null);
-  // helipad
-  B(g, 5, 0.1, 5, 0x3a3d42, -1.5, 10.55, 2, null);
-  B(g, 0.5, 0.12, 2.6, 0xf2c94c, -2.4, 10.62, 2, null);
-  B(g, 0.5, 0.12, 2.6, 0xf2c94c, -0.6, 10.62, 2, null);
-  B(g, 1.6, 0.12, 0.5, 0xf2c94c, -1.5, 10.62, 2, null);
-  // antenna + blinker
-  B(g, 0.2, 5, 0.2, 0x6a6e74, 3.5, 13, 3.5, null);
-  B(g, 0.9, 0.12, 0.12, 0x6a6e74, 3.5, 14.2, 3.5, null);
-  const blink = B(g, 0.35, 0.35, 0.35, 0xff2020, 3.5, 15.6, 3.5, null, { emissive: 0xff0000 });
-  blink.castShadow = false;
-  g.userData.blink = blink;
-  // flag
-  B(g, 0.15, 5, 0.15, 0xcccccc, -6.2, 2.5, 5.2, null);
-  const flag = B(g, 0.1, 1.1, 1.8, 0x2f6fd6, -6.2, 4.4, 6.1, null);
-  B(g, 0.12, 0.3, 1.8, 0xffffff, -6.2, 4.4, 6.1, null);
-  g.userData.flag = flag;
-  // sandbags / barriers out front
-  for (let z = -5; z <= 5; z += 1.2) {
-    if (Math.abs(z) < 2.2) continue;
-    B(g, 1, 0.5, 1.1, 0xa8956a, -7.6, 0.25, z, null);
-    B(g, 1, 0.45, 1.1, 0x9a8760, -7.6, 0.72, z + 0.3, null);
+  if (L >= 4) {
+    // guard towers at the front corners: steel legs, platform, railing, searchlight
+    const lights = [];
+    for (const z of [-6, 6]) {
+      for (const [ox, oz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) B(g, 0.3, 11, 0.3, 0x4a4e54, -5 + ox, 5.5, z + oz, null);
+      for (const y of [3.5, 7]) { B(g, 2.3, 0.15, 0.15, 0x4a4e54, -5, y, z - 1, null); B(g, 2.3, 0.15, 0.15, 0x4a4e54, -5, y, z + 1, null); }
+      B(g, 2.8, 0.3, 2.8, 0x5a5e64, -5, 11, z, null);
+      for (const oz of [-1.3, 1.3]) B(g, 2.8, 0.6, 0.12, 0x3a3d42, -5, 11.45, z + oz, null);
+      B(g, 0.12, 0.6, 2.8, 0x3a3d42, -3.65, 11.45, z, null);
+      const sl = B(g, 0.5, 0.4, 0.5, 0xfff4c0, -6.1, 11.6, z, null, { emissive: 0xfff0a0 });
+      sl.castShadow = false; lights.push(sl);
+    }
+    g.userData.searchlights = lights;
+    // razor wire along the front
+    for (let z = -5; z <= 5.01; z += 1) if (Math.abs(z) > 2) { B(g, 0.6, 0.5, 0.9, 0x7a7e84, -8.6, 0.3, z, null); B(g, 0.15, 0.6, 0.15, 0x4a4e54, -8.6, 0.3, z + 0.45, null); }
+    // radar dish on the rooftop unit (Tech Tower: on the upper deck)
+    const radar = new THREE.Group();
+    B(radar, 0.25, 1, 0.25, 0x6a6e74, 0, 0.5, 0, null);
+    const dish = B(radar, 0.25, 1.4, 2.2, 0xd8dce2, 0.2, 1.2, 0, null);
+    dish.rotation.z = 0.35;
+    if (L >= 5) radar.position.set(3.8, 18.5, -4.6); else radar.position.set(2.5, 12.5, -3);
+    g.add(radar);
+    g.userData.radar = radar;
   }
+  if (L >= 5) {
+    // glass tower on the roof (back half, beside the helipad)
+    const glass = { emissive: 0x0b2a44 };
+    B(g, 4.5, 8, 5, 0x8fa4b8, 2.5, 14.5, -3, null);
+    for (let y = 11.5; y <= 17.5; y += 1.5) {
+      B(g, 0.1, 0.8, 4.4, 0x4fa8e0, 0.22, y, -3, null, glass);
+      B(g, 4, 0.8, 0.1, 0x4fa8e0, 2.5, y, -0.47, null, glass);
+      B(g, 4, 0.8, 0.1, 0x4fa8e0, 2.5, y, -5.53, null, glass);
+    }
+    B(g, 4.9, 0.3, 5.4, 0x6a6e74, 2.5, 18.35, -3, null);
+    parapet(g, 0.5, 18.5, [-1, -3, -5]);
+    // rooftop turret on the upper deck
+    B(g, 1.2, 0.6, 1.2, 0x3a3d42, 3.6, 18.8, -1.8, null);
+    B(g, 1.6, 0.25, 0.25, 0x2a2d32, 2.6, 19.2, -1.8, null);
+    // helicopter parked on the helipad
+    const heli = new THREE.Group();
+    B(heli, 2.4, 1.1, 1.2, 0x2f5f3a, 0, 0.75, 0, null);
+    B(heli, 0.8, 0.7, 1.1, 0x9ad8ff, -1.4, 0.8, 0, null, { emissive: 0x123a5a });
+    B(heli, 2.6, 0.35, 0.35, 0x2f5f3a, 2.3, 0.95, 0, null);
+    B(heli, 0.3, 0.8, 0.12, 0x2f5f3a, 3.5, 1.3, 0, null);
+    for (const z of [-0.55, 0.55]) B(heli, 2.4, 0.1, 0.1, 0x2a2d32, 0, 0.1, z, null);
+    const rotor = new THREE.Group(); rotor.position.set(0, 1.45, 0); heli.add(rotor);
+    B(rotor, 4.6, 0.06, 0.25, 0x2a2d32, 0, 0, 0, null);
+    B(rotor, 0.25, 0.06, 4.6, 0x2a2d32, 0, 0, 0, null);
+    heli.position.set(-1.5, 10.6, 2); heli.rotation.y = 0.5;
+    g.add(heli);
+    g.userData.rotor = rotor;
+  }
+  g.userData.level = L;
+  g.userData.slots = hqSlots(L);
   return g;
+}
+
+/** HQ Lv 1: a container office inside a sandbag ring. */
+function buildOutpost(g) {
+  B(g, 5, 3, 8, 0x5a6b4a, 0, 1.5, 0, null);
+  for (let z = -3.6; z <= 3.61; z += 0.6) { B(g, 0.08, 2.8, 0.2, 0x4e5e40, -2.53, 1.5, z, null); B(g, 0.08, 2.8, 0.2, 0x4e5e40, 2.53, 1.5, z, null); }
+  B(g, 5.1, 0.15, 8.1, 0x4e5e40, 0, 3.05, 0, null);
+  B(g, 0.12, 2.2, 1.2, 0x3a3d42, -2.56, 1.1, 0, null);                                    // door
+  B(g, 0.1, 0.8, 1.6, 0x4fa8e0, -2.56, 1.9, -2.4, null, { emissive: 0x0b2a44 });          // window
+  for (const z of [-2.6, -1.1, 1.1, 2.6]) sandbag(g, -2.2, 3.1, z, true);                // roof sandbags (slot gap in the middle)
+  // sandbag ring, open at the door
+  for (let z = -4.6; z <= 4.61; z += 1.15) if (Math.abs(z) > 1.5) { sandbag(g, -4.6, 0, z); sandbag(g, -4.6, 0.45, z + 0.3); }
+  for (let x = -3.4; x <= 3.4; x += 1.15) { sandbag(g, x, 0, -5.2, true); sandbag(g, x, 0, 5.2, true); }
+  // radio mast + blinker
+  B(g, 0.15, 6, 0.15, 0x6a6e74, 1.6, 6, 3.2, null);
+  B(g, 1, 0.1, 0.1, 0x6a6e74, 1.6, 7.6, 3.2, null);
+  const blink = B(g, 0.3, 0.3, 0.3, 0xff2020, 1.6, 9.1, 3.2, null, { emissive: 0xff0000 });
+  blink.castShadow = false; g.userData.blink = blink;
+  B(g, 0.12, 4, 0.12, 0xcccccc, -3.6, 2, 3.8, null);
+  const flag = B(g, 0.1, 0.9, 1.5, 0x2f6fd6, -3.6, 3.5, 4.55, null);
+  B(g, 0.12, 0.25, 1.5, 0xffffff, -3.6, 3.5, 4.55, null);
+  g.userData.flag = flag;
+}
+
+/** HQ Lv 2: a two-story police precinct. */
+function buildPrecinct(g) {
+  B(g, 8, 6, 10, 0xa88c6a, 0, 3, 0, null);
+  B(g, 8.3, 0.4, 10.3, 0x8a7458, 0, 6.05, 0, null);
+  B(g, 8.1, 0.5, 10.1, 0x2a4a8a, 0, 3.1, 0, null);                                       // blue band between floors
+  const glass = { emissive: 0x0b2a44 };
+  for (const y of [1.6, 4.6]) for (const z of [-3.6, -2, 2, 3.6]) B(g, 0.1, 1.1, 1, 0x4fa8e0, -4.03, y, z, null, glass);
+  for (const y of [1.6, 4.6]) for (const x of [-2.5, 0, 2.5]) { B(g, 1, 1.1, 0.1, 0x4fa8e0, x, y, 5.03, null, glass); B(g, 1, 1.1, 0.1, 0x4fa8e0, x, y, -5.03, null, glass); }
+  // entrance: double door, steps, sign
+  B(g, 0.15, 2.4, 2.2, 0x3a3d42, -4.05, 1.2, 0, null);
+  B(g, 0.2, 2.4, 0.08, 0x9aa3ab, -4.12, 1.2, 0, null);
+  for (let k = 0; k < 3; k++) B(g, 0.6, 0.2, 3.4 - k * 0.3, 0x9a9da2, -4.6 - (2 - k) * 0.5, 0.1 + k * 0.2, 0, null);
+  B(g, 0.15, 0.6, 3, 0x1c2a50, -4.1, 2.8, 0, null);
+  B(g, 0.17, 0.2, 2.4, 0xffffff, -4.12, 2.8, 0, null);
+  parapet(g, -3.75, 6.25, [0, -2, 2, -4, 4]);
+  // light bar + antenna
+  B(g, 0.4, 0.3, 1.6, 0x2a2d32, 2, 6.4, -2.5, null);
+  B(g, 0.4, 0.3, 0.7, 0xff2020, 2, 6.7, -2.9, null, { emissive: 0xaa0000 });
+  const blink = B(g, 0.4, 0.3, 0.7, 0x2060ff, 2, 6.7, -2.1, null, { emissive: 0x0030cc });
+  blink.castShadow = false; g.userData.blink = blink;
+  B(g, 0.15, 3, 0.15, 0x6a6e74, 2.5, 7.75, 3.5, null);
+  // flagpole out front
+  B(g, 0.15, 6, 0.15, 0xcccccc, -6, 3, 4, null);
+  const flag = B(g, 0.1, 1.1, 1.8, 0x2f6fd6, -6, 5.4, 4.9, null);
+  B(g, 0.12, 0.3, 1.8, 0xffffff, -6, 5.4, 4.9, null);
+  g.userData.flag = flag;
 }
 
 export function buildTree(scale = 1, hue = 0) {

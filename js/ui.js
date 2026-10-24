@@ -1,7 +1,7 @@
 // All DOM UI: menus, options, help, HUD, shop, selection panel + inventory, minimap, toasts.
 import * as THREE from 'three';
-import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps } from './config.js';
-import { UNIT_BUILDERS, buildCastle, buildHQ } from './models.js';
+import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS } from './config.js';
+import { UNIT_BUILDERS, buildCastle, buildHQ, CASTLE_TIERS, HQ_TIERS } from './models.js';
 import { settings, saveSettings, ACTIONS, SCOPE_LABEL, scopeOf, keyLabel, resetKeys } from './settings.js';
 import { sfx, applyAudioSettings, initAudio } from './audio.js';
 import { ORDER_LABEL } from './unit.js';
@@ -115,6 +115,7 @@ export class UI {
       else if (go === 'resume') this.app.resume();
       else if (go === 'restart') this.app.restart();
       else if (go === 'quit') this.app.quitToMenu();
+      else if (go === 'devlab') this.app.openDevLab();
       else this.show(go);
     });
     $('#btn-pause').addEventListener('click', () => { sfx('click'); this.app.pause(); });
@@ -663,12 +664,14 @@ export class UI {
       const done = g.upLevel(this.app.playerTeam, U.id);
       const lvl = g.pendingLevel(this.app.playerTeam, U.id);      // next level to queue (after running + queued)
       const queued = lvl - done;
-      const maxed = lvl >= U.max;
+      const cap = g.upgradeMax(this.app.playerTeam, U);
+      const maxed = lvl >= cap;
+      const locked = maxed && lvl < U.max;      // tower upgrade waiting on a higher base level
       const price = maxed ? 0 : upgradePrice(U, lvl);
       const mine = R?.id === U.id;
       const full = g.researchCount(this.app.playerTeam) >= GAME.researchQueueMax;
-      $('.blvl', el).textContent = (U.max === Infinity ? `Lv ${done}` : `Lv ${done}/${U.max}`) + (queued ? ` (+${queued} queued)` : '');
-      $('.bnext', el).innerHTML = maxed ? (queued ? 'Max level queued' : 'MAXED') : `Lv ${lvl + 1}: ` + U.levelText(lvl + 1, U);
+      $('.blvl', el).textContent = (U.max === Infinity ? `Lv ${done}` : `Lv ${done}/${cap}`) + (queued ? ` (+${queued} queued)` : '');
+      $('.bnext', el).innerHTML = locked ? this.baseLevelNeed(lvl) : maxed ? (queued ? 'Max level queued' : 'MAXED') : `Lv ${lvl + 1}: ` + U.levelText(lvl + 1, U);
       $('.bprice', el).innerHTML = maxed ? '' : `<svg class="ico"><use href="#i-coin"/></svg>${price}`;
       $('.btime', el).textContent = maxed ? '' : `${fmt(upgradeTime(U, lvl) * g.speedMult(this.app.playerTeam))}s`;
       $('.bprog', el).style.width = mine ? (R.t / R.total * 100) + '%' : '0';
@@ -718,10 +721,9 @@ export class UI {
       const f = FACTIONS[g.teams[t].faction];
       const el = $(`#base-${t}`);
       el.className = 'basebar ' + f.id + (t === pt ? ' you' : '');
-      $('.bname', el).innerHTML = t === 0
-        ? `${f.baseName}${t === pt ? '<em>YOU</em>' : '<em class="ai">AI</em>'}`
-        : `${t === pt ? '<em>YOU</em>' : '<em class="ai">AI</em>'}${f.baseName}`;
     }
+    this.renderBaseNames();
+    g.on('baseLevel', () => this.renderBaseNames());
     this.buildCommandCard();
     this.buildShop();
     this.buildBarracks();
@@ -729,6 +731,16 @@ export class UI {
     this.toggleBarracks(false);
     this.lastSelKey = '#';
     this.refreshSelection(true);
+  }
+
+  /** Top bar base names follow the base level (Wooden Fort → … → Citadel). */
+  renderBaseNames() {
+    const g = this.app.game, pt = this.app.playerTeam;
+    for (const t of [0, 1]) {
+      const name = `${(t === 0 ? CASTLE_TIERS : HQ_TIERS)[g.bases[t].level - 1].name} <small>Lv ${g.bases[t].level}</small>`;
+      const tag = t === pt ? '<em>YOU</em>' : '<em class="ai">AI</em>';
+      $('.bname', $(`#base-${t}`)).innerHTML = t === 0 ? name + tag : tag + name;
+    }
   }
 
   update(dt) {
@@ -765,6 +777,12 @@ export class UI {
   }
 
   // ======================= selection panel + inventory =======================
+  /** "Needs Fortress (Castle Lv 4)": the first base level with more wall spots than `lvl`. */
+  baseLevelNeed(lvl) {
+    const L = BASE_LEVELS.find((s) => s.slots > lvl)?.level; if (!L) return 'MAXED';
+    const castle = this.app.playerFaction !== 'modern';
+    return `Needs ${(castle ? CASTLE_TIERS : HQ_TIERS)[L - 1].name} (${castle ? 'Castle' : 'HQ'} Lv ${L}) · research ${castle ? 'Fortify' : 'Expand HQ'}`;
+  }
   /** Base selected: HP, defenses, economy, towers and every researched upgrade (own or enemy). */
   renderBaseSelection(b, force) {
     const g = this.app.game, T = g.teams[b.team], pt = this.app.playerTeam;
@@ -775,11 +793,11 @@ export class UI {
     panel.classList.remove('empty');
     panel.classList.toggle('enemy', enemy);
     const f = FACTIONS[T.faction];
-    const key = 'base' + b.team + ':' + I.seen + ':' + JSON.stringify(I.upLevels || {}) + (I.research?.id || '');
+    const key = 'base' + b.team + ':' + b.level + ':' + I.seen + ':' + JSON.stringify(I.upLevels || {}) + (I.research?.id || '');
     if (key !== this.lastSelKey || force) {
       this.lastSelKey = key;
       $('#sp-portrait').src = PORTRAITS['base' + b.team].face;
-      $('#sp-name').textContent = f.baseName + (enemy ? ' (enemy)' : '');
+      $('#sp-name').textContent = (b.team === 0 ? CASTLE_TIERS : HQ_TIERS)[b.level - 1].name + (enemy ? ' (enemy)' : '');
       const ups = Object.entries(I.upLevels || {}).filter(([, l]) => l > 0);
       const grid = $('#sp-grid');
       grid.style.display = 'grid';
@@ -800,7 +818,7 @@ export class UI {
     const rr = g.repairRates(b.team);
     const stat = (label, val) => `<div><span>${label}</span><b>${val}</b></div>`;
     const q = (v) => (I.seen ? v : '?');
-    $('#sp-stats').innerHTML = stat('ARMOR', fmt(GAME.baseArmor)) + stat('INCOME', q(fmt(I.income) + '/s')) + stat('TOWERS', q(I.towers)) +
+    $('#sp-stats').innerHTML = stat('LEVEL', b.level) + stat('ARMOR', fmt(b.armor)) + stat('INCOME', q(fmt(I.income) + '/s')) + stat('TOWERS', q(I.towers)) +
       stat('REPAIR', q(I.repairOn ? `ON +${rr.heal}/s` : 'off')) + (enemy ? '' : stat('ARMY', g.pop(b.team))) + stat('UPGRADES', q(Object.values(I.upLevels || {}).reduce((a, l) => a + l, 0)));
   }
 

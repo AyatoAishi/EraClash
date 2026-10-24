@@ -580,3 +580,4 @@ small.passive { color: var(--gold) !important; }
 .update-banner span { color: var(--muted); max-width: 26rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* v0.12.3: no hint panel — the selection panel only appears when something is selected (keeps its slot so the HUD doesn't jump) */
 #selpanel.empty { visibility: hidden; }
+.basebar .bname small { font-size: .85em; opacity: .7; margin: 0 .35em; }

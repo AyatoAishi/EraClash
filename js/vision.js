@@ -3,7 +3,7 @@
 //
 //  Vision sources (anything with a team and a vision radius):
 //    - troops: def.vision = [day, night]   (Sniper +3 while prone, towers see their attack range)
-//    - bases:  GAME.baseVision
+//    - bases:  base.vision (BASE_LEVELS)
 //    - game.structures (future: player-built turrets etc.) — { team, pos:{x,z}, dead, visionRadius(nightF) }
 //  Rules:
 //    - trees / buildings block line of sight (terrain.visBlocked)
@@ -69,7 +69,7 @@ export class Vision {
     const lerp = (v) => v[0] + (v[1] - v[0]) * f;
     for (const u of g.units) if (!u.dead && u.team === team) out.push({ x: u.pos.x, z: u.pos.z, r: u.visionRadius(f), level: u.groundLevel, air: u.flying });
     const b = g.bases[team];
-    if (b && !b.dead) out.push({ x: b.x, z: 0, r: lerp(GAME.baseVision), level: 1 });
+    if (b && !b.dead) out.push({ x: b.x, z: 0, r: lerp(b.vision), level: 1 });
     for (const s of g.structures || []) if (!s.dead && s.team === team) out.push({ x: s.pos.x, z: s.pos.z, r: s.visionRadius(f), level: this.terrain.level(s.pos.x) });
     return out;
   }

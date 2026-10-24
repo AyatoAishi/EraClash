@@ -9,6 +9,7 @@ import { Game } from './game.js';
 import { Controls } from './controls.js';
 import { UI, makePortraits } from './ui.js';
 import { sfx, setMusicMood } from './audio.js';
+import { DevLab } from './dev/devlab.js';
 
 const app = {
   state: 'menu',          // menu | playing | paused | ended
@@ -60,23 +61,24 @@ addEventListener('resize', resize);
 makePortraits();
 
 app.controls = new Controls(() => renderer.domElement, camera, {
-  onSelectionChange: () => app.ui?.refreshSelection(true),
+  onSelectionChange: () => (app.state === 'devlab' ? app.devlab?.onSelection() : app.ui?.refreshSelection(true)),
   toast: (m, k) => app.ui.toast(m, k),
   lootHover: (L) => {
     const ui = app.ui, cv = renderer.domElement; if (!ui) return;
     if (L) { cv.dataset.tip = 'item:' + L.id; if (ui.tipEl !== cv || ui._lootId !== L.id) { ui._lootId = L.id; ui.tipEl = cv; ui.renderTip(); } }
     else if (ui.tipEl === cv) { delete cv.dataset.tip; ui._lootId = null; ui.hideTip(); }
   },
-  toggleShop: () => app.ui.toggleShop(),
-  toggleBarracks: () => app.ui.toggleBarracks(),
-  toggleRepair: () => app.ui.toggleRepair(),
-  toggleAutoLoot: () => app.ui.toggleAutoLoot(),
+  toggleShop: () => app.state === 'playing' && app.ui.toggleShop(),
+  toggleBarracks: () => app.state === 'playing' && app.ui.toggleBarracks(),
+  toggleRepair: () => app.state === 'playing' && app.ui.toggleRepair(),
+  toggleAutoLoot: () => app.state === 'playing' && app.ui.toggleAutoLoot(),
   shopOpen: () => app.ui.shopOpen(),
   roster: () => (app.playerFaction ? FACTIONS[app.playerFaction].units : []),
   buy: (id, many) => { const i = FACTIONS[app.playerFaction].units.indexOf(id); for (let k = 0; k < (many ? 5 : 1); k++) if (!app.trainSlot(i, k > 0)) break; },
   onCenter: () => app.controls.centerOn(app.playerTeam === 0 ? -GAME.baseX + 14 : GAME.baseX - 14),
 });
 app.ui = new UI(app);
+app.devlab = new DevLab(app, { renderer, scene, world, camera });
 app.applyGraphics();
 
 // ---------------- match lifecycle ----------------
@@ -173,9 +175,18 @@ app.resume = () => {
 };
 app.restart = () => app.startMatch(app.playerFaction, app.difficulty);
 app.quitToMenu = () => { startDemo(); app.ui.show('main'); };
+// Dev Lab (main menu button): model viewer + sandbox. It takes over the frame loop until closed.
+app.openDevLab = () => {
+  app.game?.dispose(); app.game = null;
+  app.state = 'devlab';
+  app.ui.show('devlab');
+  app.devlab.open();
+};
+app.closeDevLab = () => { app.devlab.close(); startDemo(); app.ui.show('main'); };
 
 addEventListener('keydown', (e) => {
   if (e.code !== 'Escape') return;
+  if (app.state === 'devlab') { app.devlab.onEscape(); return; }
   const s = app.ui.screen;
   if (app.state === 'playing') {
     if (app.controls.cancelTargeting()) { /* aiming cancelled */ }
@@ -198,6 +209,12 @@ function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05);
   const g = app.game;
+  if (app.state === 'devlab') {
+    app.devlab.update(dt);
+    fpsAcc += dt; fpsN++;
+    if (fpsAcc > 0.5) { fpsEl.textContent = Math.round(fpsN / fpsAcc) + ' FPS'; fpsAcc = 0; fpsN = 0; }
+    return;
+  }
 
   if (app.state === 'menu') {
     menuT += dt;

@@ -74,9 +74,9 @@ export function createWorld(scene) {
   far.rotation.x = -Math.PI / 2; far.position.y = -0.6; scene.add(far);
 
   // ---------- bases ----------
-  const castle = M.buildCastle();
+  let castle = M.buildCastle(GAME.baseLevel);
   castle.position.set(-GAME.baseX, 0, 0); scene.add(castle);
-  const hq = M.buildHQ();
+  let hq = M.buildHQ(GAME.baseLevel);
   hq.position.set(GAME.baseX, 0, 0); scene.add(hq);
 
   // ---------- props ----------
@@ -139,7 +139,7 @@ export function createWorld(scene) {
     place(M.buildLamp(), x + 4.5, GAME.laneHalfWidth + 1.5, Math.PI, { r: 0.3, kind: 'lamp' });
     glowSources.push({ x: x + 3.5, y: 4.1, z: GAME.laneHalfWidth + 1.5, color: 0xffd98a });
   }
-  const flames = [...castle.userData.torches];
+  let flames = [...castle.userData.torches];
   for (let x = -8; x > -54; x -= 9) {
     for (const [zz, off] of [[-(GAME.laneHalfWidth + 1.5), 0], [GAME.laneHalfWidth + 1.5, -4.5]]) {
       const t = place(M.buildTorch(), x + off, zz, 0, { r: 0.3, kind: 'torch' });
@@ -193,7 +193,17 @@ export function createWorld(scene) {
   let t = 0, nightF = 0;
   const tmpC = new THREE.Color();
   return {
-    sun, tiles, castle, hq, terrain,
+    sun, tiles, terrain,
+    get castle() { return castle; },
+    get hq() { return hq; },
+    /** A base leveled up (Game.swapBaseModel): animate the new model instead (flag, torches, blinker). */
+    setBaseModel(team, obj) {
+      if (team === 0) {
+        const old = new Set(castle.userData.torches);
+        flames = flames.filter((f) => !old.has(f)).concat(obj.userData.torches || []);
+        castle = obj;
+      } else hq = obj;
+    },
     get night() { return nightF; },
     /** 0 = full day, 1 = full night */
     setNight(f) {
