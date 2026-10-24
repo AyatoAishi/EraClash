@@ -1,6 +1,6 @@
 // Match state: economy, training queues, AI, combat bookkeeping, particles, win/lose.
 import * as THREE from 'three';
-import { GAME, FACTIONS, UNITS, DIFFICULTY, defenseMult, baseLevelStats, BASE_LEVELS } from './config.js';
+import { GAME, FACTIONS, UNITS, DIFFICULTY, AI_PERSONALITIES, defenseMult, baseLevelStats, BASE_LEVELS } from './config.js';
 import { Unit } from './unit.js';
 import { UPGRADES, STAT_BOOST, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
 import { ABILITIES, ITEMS } from './config.js';
@@ -27,8 +27,8 @@ export class Game {
     this.sandbox = sandbox;
     this.world = world;
     this.playerTeam = playerTeam;
-    this.diff = DIFFICULTY[difficulty];
-    this.diffId = difficulty;
+    this.diff = DIFFICULTY[difficulty] || DIFFICULTY[2];
+    this.diffId = DIFFICULTY[difficulty] ? difficulty : 2;
     this.getViewX = getViewX;
     this.time = 0;
     this.over = false;
@@ -47,7 +47,7 @@ export class Game {
       team: t,
       faction: FACTION_BY_TEAM[t],
       gold: GAME.startGold,
-      income: GAME.incomePerSec * (this.isAI(t) ? this.diff.incomeMult : 1),
+      income: GAME.incomePerSec * (this.isAI(t) ? this.diff.goldMult : 1),
       queue: [],
       queuePaid: [],
       // Barracks (per match)
@@ -89,6 +89,13 @@ export class Game {
     this.trails = [];      // Barding Rally: { team, x, z, t, bonus, mesh }
     this.skillshots = [];  // line projectiles (Arrow Piercer)
     this.teams.forEach((T) => (T.autoLoot = false));
+    // AI teams: difficulty head start + a personality for this match
+    this.teams.forEach((T) => {
+      if (!T.isAI || sandbox) return;
+      T.gold += this.diff.startGold || 0;
+      T.persona = this.rollPersona();
+      if (this.diff.baseLevel > 1) { this.setBaseLevel(T.team, this.diff.baseLevel); if (world?.castle) this.swapBaseModel(T.team, this.diff.baseLevel); }
+    });
     this.vision = this.terrain ? new Vision(this) : null;
   }
   /** Can the local viewer see world point p? (spectator sees everything) */
@@ -185,11 +192,20 @@ export class Game {
     for (let k = 0; k < 4; k++) this.burst({ x: b.x + (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 10 }, 14, cols, 5, 1.4, 3);
     if (this.audible(b.x)) sfx('train');
   }
-  /** Logistics: multiplier on research & training durations. */
-  speedMult(team) {
+  /** Logistics: multiplier on research & training durations (kind 'train' | 'research': high AI difficulties are faster). */
+  speedMult(team, kind = 'train') {
     if (!this.teams[team]) return 1; const L = this.upLevel(team, 'logistics');
     const cheat = team === this.playerTeam && this.cheat?.hireSpeed ? 1 / this.cheat.hireSpeed : 1;
-    return (L ? 1 - UPGRADES.logistics.values.speed[L - 1] : 1) * cheat; }
+    const ai = this.teams[team].isAI && !this.sandbox ? (kind === 'research' ? this.diff.researchMult : this.diff.trainMult) || 1 : 1;
+    return (L ? 1 - UPGRADES.logistics.values.speed[L - 1] : 1) * cheat * ai; }
+  /** Difficulty 4+: AI troops/base take less damage and deal more (only vs a different team). */
+  dmgMult(srcTeam, victimTeam) {
+    if (this.sandbox || srcTeam === victimTeam) return 1;
+    let m = 1;
+    if (this.teams[victimTeam]?.isAI) m *= this.diff.dmgTaken || 1;
+    if (this.teams[srcTeam]?.isAI) m *= this.diff.dmgDealt || 1;
+    return m;
+  }
   repairRates(team) { const L = this.upLevel(team, 'repairCrews'), R = GAME.repair; return { heal: R.heal + R.healPerLevel * L, drain: R.drain + R.drainPerLevel * L }; }
   setAutoLoot(team, on) { const T = this.teams[team]; if (T) { T.autoLoot = !!on; this.emit('autoLoot', team, T.autoLoot); } }
   setRepair(team, on) {
@@ -219,7 +235,7 @@ export class Game {
   }
   startResearch(team, e) {
     const T = this.teams[team], U = UPGRADES[e.id];
-    T.research = { ...e, t: 0, total: upgradeTime(U, e.level - 1) * this.speedMult(team) };
+    T.research = { ...e, t: 0, total: upgradeTime(U, e.level - 1) * this.speedMult(team, 'research') };
   }
   /**
    * Cancel research: slot -1 = the running one, 0.. = queued entry. Refunds it and any later
@@ -344,7 +360,7 @@ export class Game {
   addTroopKill(team, unitId) {
     const T = this.teams[team]; if (!T) return;
     const before = this.troopLevel(team, unitId).level;
-    T.troopKills[unitId] = (T.troopKills[unitId] || 0) + 1;
+    T.troopKills[unitId] = (T.troopKills[unitId] || 0) + (T.isAI && !this.sandbox ? this.diff.xpMult || 1 : 1);
     const now = this.troopLevel(team, unitId).level;
     if (now > before) this.emit('troopLevel', team, unitId, now);
   }
@@ -531,7 +547,7 @@ export class Game {
 
   // ---------------- combat callbacks ----------------
   // ---------------- projectiles ----------------
-  fireProjectile(src, target) {
+  fireProjectile(src, target, extra = false) {
     const pdef = src.def.projectile;
     const mesh = pdef.kind === 'arrow' ? buildArrow() : pdef.kind === 'wisp' ? buildWisp() : buildBullet();
     if (pdef.kind === 'sniper') mesh.scale.set(1.4, 1.4, 2.6);
@@ -541,10 +557,17 @@ export class Game {
     this.scene.add(mesh);
     const end = this.projectileAim(target, src);
     const dist0 = Math.max(0.5, start.distanceTo(end));
-    const dmg = src.rollDamage(), crit = src.lastCrit;
+    const dmg = src.rollDamage(), crit = src.lastCrit, shot = src.lastShot;
     if (crit) mesh.scale.multiplyScalar(1.6);
-    this.projectiles.push({ mesh, src, target, start, end, dist0, u: 0, speed: pdef.speed, arc: pdef.arc, kind: pdef.kind, team: src.team, dmg, crit });
+    this.projectiles.push({ mesh, src, target, start, end, dist0, u: 0, speed: pdef.speed, arc: pdef.arc, kind: pdef.kind, team: src.team, dmg, crit, shot });
     if (this.audible(src.pos.x)) sfx(pdef.kind === 'arrow' ? 'bow' : pdef.kind === 'sniper' ? 'snipe' : 'gun', 35);
+    // Bowsling: a second arrow at ANOTHER enemy in attack range (never chains off itself)
+    const bs = !extra && src.ability('bowsling');
+    if (bs && !bs.st.broken && !target.isBase && Math.random() < bs.def.chance) {
+      const r = src.effRange + src.radius + 0.5;
+      const pool = this.units.filter((o) => o !== target && src.isFoe(o) && !o.tower && this.canSee(src.team, o) && Math.hypot(o.pos.x - src.pos.x, o.pos.z - src.pos.z) - o.radius <= r);
+      if (pool.length) this.fireProjectile(src, pool[Math.floor(Math.random() * pool.length)], true);
+    }
   }
   projectileAim(target, src) {
     if (target.isBase) { const p = this.baseClosestPoint(src, target.team); return new THREE.Vector3(p.x, 2.2, p.z); }
@@ -655,6 +678,19 @@ export class Game {
       this.burst(u.pos, 8, A.id === 'flurry' ? [0x9ad87a, 0xffffff] : [0xffd040, 0xff7a2e], 2, 0.5, 0.8);
       return true;
     }
+    if (A.id === 'tumble') {
+      // roll toward the aim point (or away from the nearest threat when the AI casts without one)
+      let dx, dz;
+      if (aim) { dx = aim.x - u.pos.x; dz = aim.z - u.pos.z; }
+      else { const t = this.findNearestEnemy(u, 6); if (!t) return false; dx = u.pos.x - t.pos.x; dz = u.pos.z - t.pos.z; }
+      const d = Math.hypot(dx, dz); if (d < 0.01) return false;
+      const speed = u.effMoveSpeed + A.speedBonus;
+      u.dash = { dx: dx / d, dz: dz / d, left: A.range, total: A.range, speed };
+      u.pendingHit = null; u.swing = 0;
+      this.burst(u.pos, 6, [0xb8a070, 0x8a6a42], 2, 0.4, 0.7);
+      if (this.audible(u.pos.x)) sfx('whiff', 40);
+      return true;
+    }
     if (A.id === 'splatter') {
       this.splatterBlast(u, A);
       // self-destruct: no bounty for the enemy, model vanishes instantly
@@ -720,11 +756,11 @@ export class Game {
       if (p.u >= 1) {
         if (t.isBase) { this.damageBase(t.team, p.dmg, p.src.dead ? null : p.src, p.end); if (p.crit) this.emit('crit', p.end, p.dmg); }
         else if (!t.dead) {
-          const dodge = t.dodgeCheck(p.src);
+          const dodge = p.shot?.trueStrike ? null : t.dodgeCheck(p.src);   // true strike: can't miss or be evaded
           if (dodge) { this.onDodge(p.src, t, dodge); this.scene.remove(p.mesh); this.projectiles.splice(i, 1); continue; }
           const dealt = t.takeDamage(p.dmg, p.src, p.src.def.damageType || 'physical', { attack: true, ranged: true });
           p.src.damageDealt += dealt;
-          p.src.onAttackLanded(t, dealt, p.dmg, p.crit);
+          p.src.onAttackLanded(t, dealt, p.dmg, p.crit, p.shot);
           this.onHit(p.src, t);
           if (p.crit) { this.emit('crit', t.pos, dealt); this.burst(t.pos, 6, [0xf7c948, 0xffe27a], 2.5, 0.5); }
         }
@@ -756,12 +792,15 @@ export class Game {
       if (killer && !killer.dead && !killer.tower && !killer.brainwashed && this.teams[killer.team]?.autoLoot && killer.addItem(id) >= 0) this.emit('pickup', killer, id);
       else this.spawnLoot(id, u.pos);
     }
+    // Cut Throat (Stalker): a kill makes the killer untouchable for a moment
+    const ct = killer && !killer.dead && killer.ability?.('cutThroat');
+    if (ct && !ct.st.broken && killer.team !== u.team) { killer.invulnT = Math.max(killer.invulnT, ct.def.duration); this.burst(killer.pos, 6, [0xff3b2f, 0x1e1e26], 2, 0.5, 0.7); }
     if (killer && !killer.brainwashed && this.teams[killer.team] && killer.team !== u.team) {   // brainwashed killers earn nobody gold
       const T = this.teams[killer.team];
       T.stats.kills++;
       this.addTroopKill(killer.team, killer.def.id);
       // kill bounty: % of what the victim cost (what was paid; camp creeps / free spawns = their listed cost)
-      const bounty = Math.round((u.paid ?? u.def.cost) * GAME.bountyPct);
+      const bounty = Math.round((u.paid ?? u.def.cost) * GAME.bountyPct * (T.isAI && !this.sandbox ? this.diff.goldMult : 1));
       T.gold += bounty; T.stats.bounty = (T.stats.bounty || 0) + bounty;
       this.emit('bounty', u.pos, bounty, killer.team);
     }
@@ -793,7 +832,7 @@ export class Game {
     const b = this.bases[team];
     if (b.dead || this.over || b.invulnerable) return;
     if (this.cheat?.god && team === this.playerTeam) return;
-    const dmg = raw * defenseMult(b.armor);
+    const dmg = raw * defenseMult(b.armor) * this.dmgMult(src?.team, team);
     b.hp = Math.max(0, b.hp - dmg);
     b.shake = 0.18;
     if (src) { src.damageDealt += dmg; this.teams[src.team].stats.baseDamage += dmg; }
@@ -826,11 +865,12 @@ export class Game {
       const price = upgradePrice(U, lvl);
       let w = 1;
       if (U.unit) w = 0.4 + myUnits.filter((u) => u.def.id === U.unit).length * 0.6;
-      if (U.id === 'finance') w = lvl === 0 ? 4 : 0.3;
+      const P = T.persona || {};
+      if (U.id === 'finance') w = (lvl === 0 ? 4 : 0.3) * (0.5 + (P.greed ?? 0.5) * 1.5);   // greedy AIs love economy
       if (U.id === 'reinforce') w = (1 - b.hp / b.maxHp) * 6;
       if (U.effects?.[0]?.type === 'towers') w = 1.5;
       const grow = U.effects?.[0]?.type === 'baseLevel';
-      if (grow) w = 5 + (1 - b.hp / b.maxHp) * 8;   // growing the base is a priority, more so when it's hurt
+      if (grow) w = (5 + (1 - b.hp / b.maxHp) * 8) * (0.7 + (P.caution ?? 0.5) * 0.6);   // growing the base is a priority, more so when it's hurt
       w /= 1 + price / (grow ? 1200 : 300);          // prefer cheaper steps (base levels are pricey by design)
       return w > 0 ? { U, w } : null;
     }).filter(Boolean);
@@ -864,59 +904,151 @@ export class Game {
     return T.gold - unitCost < upgradePrice(U, this.upLevel(T.team, U.id));
   }
 
-  aiRepair(T) {
+  aiRepair(T, P = T.persona) {
     const B = this.bases[T.team], f = B.hp / B.maxHp;
-    if (!T.repairOn && f < 0.65 && T.gold > 40) T.repairOn = true;
+    if (!T.repairOn && f < 0.5 + (P?.caution || 0.3) * 0.35 && T.gold > 40) T.repairOn = true;
     else if (T.repairOn && (f > 0.95 || T.gold < 15)) T.repairOn = false;
   }
+
+  // ---------- personality ----------
+  /** Roll an AI personality for this match: a base archetype + random jitter on every trait. Low levels play sloppier. */
+  rollPersona() {
+    const ids = Object.keys(AI_PERSONALITIES);
+    const id = ids[Math.floor(Math.random() * ids.length)], P = AI_PERSONALITIES[id];
+    const j = (v) => Math.max(0, Math.min(1, v + (Math.random() - 0.5) * 0.3));
+    return { id, name: P.name, greed: j(P.greed), aggro: j(P.aggro), caution: j(P.caution), smart: j(P.smart), chaos: !!P.chaos,
+      sloppy: Math.max(0, Math.min(1, (this.diff.sloppy ?? 0.3) + (Math.random() - 0.5) * 0.2)) };
+  }
+  /** Rough fighting strength of a group: HP x damage per second (enough to compare two sides). */
+  power(list) { return list.reduce((a, u) => a + u.hp * Math.max(1, u.effDamage) * u.effAttackSpeed / 60, 0); }
+  /** Visible enemy troops (not neutrals) of team T within r of point p. */
+  foesNear(T, p, r) {
+    return this.units.filter((u) => !u.dead && !u.tower && u.team !== T.team && u.team !== NEUTRAL_TEAM && this.canSee(T.team, u) && Math.hypot(u.pos.x - p.x, u.pos.z - p.z) < r);
+  }
+  center(list) { const n = list.length || 1; return { x: list.reduce((a, u) => a + u.pos.x, 0) / n, z: list.reduce((a, u) => a + u.pos.z, 0) / n }; }
 
   updateAI(T, dt) {
     T.aiT -= dt;
     if (T.aiT > 0) return;
-    T.aiT = this.diff.thinkEvery * (0.7 + Math.random() * 0.6);
+    T.persona ||= this.rollPersona();
+    const P = T.persona;
+    T.aiT = this.diff.thinkEvery * (0.7 + Math.random() * 0.6) * (1 + P.sloppy * 0.5);
     if (Math.random() < this.diff.hesitate) return;
+    // Wildcard: changes its mind about who it is every ~minute
+    if (P.chaos && this.time - (T.personaT || 0) > 50 + Math.random() * 30) {
+      T.personaT = this.time;
+      for (const k of ['greed', 'aggro', 'caution', 'smart']) P[k] = Math.random();
+    }
     const roster = FACTIONS[T.faction].units.map((id) => UNITS[id]);
     const melees = roster.filter((d) => d.type === 'melee').sort((a, b) => a.cost - b.cost);
     const rangeds = roster.filter((d) => d.type === 'ranged').sort((a, b) => a.cost - b.cost);
-    const ranged = rangeds.length > 1 && Math.random() < 0.25 ? rangeds[1 + Math.floor(Math.random() * (rangeds.length - 1))] : rangeds[0];
-    // mostly the cheap core melee, sometimes a specialist (e.g. Imp)
-    const melee = melees.length > 1 && Math.random() < 0.2 ? melees[1 + Math.floor(Math.random() * (melees.length - 1))] : melees[0];
-    const mine = [...this.units.filter((u) => u.team === T.team && !u.dead).map((u) => u.def), ...T.queue.map((id) => UNITS[id])];
+    const mine = [...this.units.filter((u) => u.team === T.team && !u.dead && !u.tower).map((u) => u.def), ...T.queue.map((id) => UNITS[id])];
     const nM = mine.filter((d) => d.type === 'melee').length, nR = mine.length - nM;
-    // keep roughly 1 ranged per 2 melee, always open with a melee body in front
-    // commit to a pick until it's affordable (otherwise expensive specialists never get saved up for)
-    T.aiNext ||= (ranged && nM >= 2 && nR < nM / 2 ? ranged : melee).id;
+    // smart AIs counter what they see: lots of enemy melee -> more ranged behind a wall; lots of ranged -> more bodies
+    const seen = this.units.filter((u) => !u.dead && !u.tower && u.team !== T.team && u.team !== NEUTRAL_TEAM && this.canSee(T.team, u));
+    const eR = seen.filter((u) => u.ranged).length, eM = seen.length - eR;
+    let rangedShare = 1 / 3;
+    if (P.smart > 0.6 && seen.length >= 3) rangedShare = eM > eR * 2 ? 0.5 : eR > eM ? 0.25 : rangedShare;
+    const specialist = 0.15 + P.aggro * 0.15 + (P.chaos ? 0.3 : 0);
+    const pickOf = (list) => list.length > 1 && Math.random() < specialist ? list[1 + Math.floor(Math.random() * (list.length - 1))] : list[0];
+    const ranged = pickOf(rangeds), melee = pickOf(melees);
+    // sloppy: sometimes just buys whatever
+    if (!T.aiNext && Math.random() < P.sloppy * 0.15) T.aiNext = roster[Math.floor(Math.random() * roster.length)].id;
+    T.aiNext ||= (ranged && nM >= 2 && nR < (nM + nR) * rangedShare ? ranged : melee).id;
     this.aiResearch(T, this.diff.thinkEvery);
     for (const id of FACTIONS[T.faction].units) {   // evolutions are free: take one as soon as it unlocks
       const opts = Object.keys(SKILL_TREES[id] || {}).filter((f) => !this.formBlock(T.team, id, f));
       if (opts.length) this.pickForm(T.team, id, opts[Math.floor(Math.random() * opts.length)]);
     }
-    this.aiRepair(T);
+    if (Math.random() > P.sloppy * 0.4) this.aiRepair(T, P);   // sloppy AIs forget to repair now and then
     const uc = this.unitCost(T.team, T.aiNext);
     if (T.gold >= uc && T.queue.length < 2 && !this.aiSaving(T, uc) && !this.train(T.team, T.aiNext)) T.aiNext = null;
 
-    // AI groups up at home and launches waves (wave size per difficulty) — lets packs/auras work
-    const threat = this.units.some((u) => u.team !== T.team && u.team !== NEUTRAL_TEAM && !u.dead && !u.tower && Math.abs(u.pos.x - this.bases[T.team].x) < 25 && this.canSee(T.team, u));
-    if (this.diff.waveSize > 1) {
-      const home = this.units.filter((u) => u.team === T.team && !u.dead && u.order.type === 'idle' && u._waiting);
-      if (home.length >= this.diff.waveSize || (threat && home.length)) home.forEach((u) => { u._waiting = false; u.command({ type: 'charge' }); });
-    }
-    this.aiJungle(T, threat);
+    // ---- army ----
+    const base = this.bases[T.team];
+    const threats = this.units.filter((u) => u.team !== T.team && u.team !== NEUTRAL_TEAM && !u.dead && !u.tower && Math.abs(u.pos.x - base.x) < 25 && this.canSee(T.team, u));
+    const threat = threats.length > 0;
+    // wave size: aggressive AIs go early with small groups, cautious ones wait for a big push
+    const W = this.diff.waveSize > 1 ? Math.max(3, Math.round(this.diff.waveSize + P.caution * 2 - P.aggro * 2)) : 1;
+    T.waveNow = W;
+    const home = this.units.filter((u) => u.team === T.team && !u.dead && u.order.type === 'idle' && u._waiting);
+    if (this.diff.waveSize > 1 && (home.length >= W || (threat && home.length))) home.forEach((u) => { u._waiting = false; u.command({ type: 'charge' }); });
+    // sloppy: a lone troop wanders off early
+    if (home.length && Math.random() < P.sloppy * 0.05) { const u = home[0]; u._waiting = false; u.command({ type: 'charge' }); }
+    this.aiFights(T, P);
+    this.aiJungle(T, threat, P);
   }
 
   /**
-   * AI jungling: now and then the troops waiting at home go clear a camp on their own side,
-   * grab any drop, and walk back. Recalled instantly if the base is threatened.
+   * Reading fights (scaled by `smart`): fall back when a push is badly outnumbered, regroup, and push again;
+   * focus wounded enemies in range.
    */
-  aiJungle(T, threat) {
+  aiFights(T, P) {
+    if (P.smart < 0.35 || this.time - (T.fightT || 0) < 1.5) return;
+    T.fightT = this.time;
+    const army = this.units.filter((u) => u.team === T.team && !u.dead && !u.tower && !u._jungle && !u._waiting && (u.order.type === 'charge' || u.order.type === 'attackMove'));
+    if (!army.length) return;
+    const base = this.bases[T.team], dir = T.team === 0 ? 1 : -1;
+    const c = this.center(army);
+    const foes = this.foesNear(T, c, 14);
+    if (foes.length) {
+      const ours = this.power(army.filter((u) => Math.hypot(u.pos.x - c.x, u.pos.z - c.z) < 14)), theirs = this.power(foes);
+      const far = Math.abs(c.x - base.x) > 30;            // only retreat from forward fights (at home: hold the line)
+      if (far && theirs > ours * (1.4 + (1 - P.caution) * 0.8 + P.aggro * 0.6) && Math.random() < P.smart) {
+        for (const u of army) { u._waiting = true; u.command({ type: 'move', point: { x: base.x + dir * (GAME.baseHalfX + 4 + Math.random() * 3), z: (Math.random() - 0.5) * 8 } }); u._regroup = true; }
+        this.emit('aiRetreat', T.team);
+        return;
+      }
+      // focus fire: ranged troops pick the most wounded enemy they can reach
+      if (P.smart > 0.6) for (const u of army) if (u.ranged && Math.random() < 0.5) {
+        const inR = foes.filter((f) => u.edgeDist(f) <= u.effRange);
+        if (inR.length > 1) { inR.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp); u.target = inR[0]; u.retarget = 1; }
+      }
+    }
+  }
+
+  /**
+   * Jungling (scaled by `greed`): troops waiting at home clear a camp, grab drops and walk back.
+   * They now REACT to invaders: fight if they're stronger, run home if not (smart AIs also send help),
+   * and an aggressive AI sometimes invades your camps instead of farming its own.
+   */
+  aiJungle(T, threat, P = T.persona) {
     const mine = this.units.filter((u) => u.team === T.team && !u.dead && !u.tower && !u.brainwashed);
     const dir = T.team === 0 ? 1 : -1;
     const rally = { x: this.bases[T.team].x + dir * (GAME.baseHalfX + 3), z: 0 };
     const campAlive = (c) => this.units.filter((n) => !n.dead && n.team === NEUTRAL_TEAM && n.camp === c);
-    for (const u of mine) {
-      if (u._jungle) {
-        const c = CAMPS.find((k) => k.id === u._jungle);
-        if (threat) { u._jungle = null; u.command({ type: 'charge' }); continue; }
+    // enemy troops on OUR half of the map: the troops waiting at home stay home to guard the base
+    const bx = this.bases[T.team].x;
+    const pushing = this.units.some((u) => u.team !== T.team && u.team !== NEUTRAL_TEAM && !u.dead && !u.tower && Math.abs(u.pos.x - bx) < 50 && Math.abs(u.pos.z) < GAME.laneHalfWidth + 2 && this.canSee(T.team, u));
+    const spareHome = () => { const h = mine.filter((u) => u._waiting && u.order.type === 'idle'); return pushing ? [] : h; };
+    const goHome = (u) => { u._jungle = null; u._homing = true; u.command({ type: 'move', point: { x: rally.x + (Math.random() - 0.5) * 2, z: (Math.random() - 0.5) * 6 } }); };
+    // ---- crews out in the jungle: check for invaders first ----
+    const crews = {};
+    for (const u of mine) if (u._jungle) (crews[u._jungle] ||= []).push(u);
+    for (const [cid, crew] of Object.entries(crews)) {
+      const c = CAMPS.find((k) => k.id === cid);
+      const cc = this.center(crew);
+      const foes = this.foesNear(T, cc, 13);
+      if (threat && P.caution > 0.3) { crew.forEach((u) => { u._jungle = null; u.command({ type: 'charge' }); }); continue; }   // base first
+      if (foes.length) {
+        const ours = this.power(crew), theirs = this.power(foes);
+        const brave = 0.8 + P.aggro * 0.8 - P.caution * 0.4;                       // how much stronger they may be before we run
+        if (ours * brave >= theirs || Math.random() < P.sloppy * 0.3) {            // fight the invaders (sloppy: sometimes a bad fight)
+          for (const u of crew) {
+            const tgt = foes.slice().sort((a, b) => Math.hypot(a.pos.x - u.pos.x, a.pos.z - u.pos.z) - Math.hypot(b.pos.x - u.pos.x, b.pos.z - u.pos.z))[0];
+            if (u.order.type !== 'attack' || u.order.target?.team === NEUTRAL_TEAM || u.order.target?.dead) u.command({ type: 'attack', target: tgt });
+          }
+        } else crew.forEach(goHome);
+        // smart / cautious AIs send the troops waiting at home to help
+        if ((P.smart + P.caution) / 2 > 0.45 && this.time - (T.helpT || 0) > 8) {
+          const helpers = spareHome();
+          if (helpers.length) { T.helpT = this.time; helpers.forEach((u) => { u._waiting = false; u.command({ type: 'attackMove', point: { x: cc.x, z: cc.z } }); }); this.emit('aiHelp', T.team, c); }
+        }
+        continue;
+      }
+      // no invaders: keep clearing the camp
+      for (const u of crew) {
+        if (u.order.type === 'attack' && u.order.target && !u.order.target.dead && u.order.target.team !== NEUTRAL_TEAM) u.command({ type: 'idle' });   // invaders gone/out of sight
         const alive = campAlive(c);
         if (alive.length) {
           if (u.order.type !== 'attack' || u.order.target?.dead) {
@@ -928,20 +1060,43 @@ export class Game {
         if (u.order.type === 'pickup') continue;
         const L = u.items.includes(null) && this.loot.find((l) => !l.taken && Math.hypot(l.x - c.x, l.z - c.z) < 9 && !mine.some((o) => o.order.type === 'pickup' && o.order.loot === l));
         if (L) { u.command({ type: 'pickup', loot: L }); continue; }
-        u._jungle = null; u._homing = true;
-        u.command({ type: 'move', point: { x: rally.x + (Math.random() - 0.5) * 2, z: (Math.random() - 0.5) * 6 } });
-      } else if (u._homing && u.order.type === 'idle') { u._homing = false; u._waiting = this.diff.waveSize > 1; if (!u._waiting) u.command({ type: 'charge' }); }
+        goHome(u);
+      }
     }
-    if (threat || this.time - (T.jungleT ?? -999) < 20) return;
+    for (const u of mine) if (!u._jungle && u._homing && u.order.type === 'idle') { u._homing = false; u._waiting = this.diff.waveSize > 1; if (!u._waiting) u.command({ type: 'charge' }); }
+    for (const u of mine) if (u._regroup && u.order.type === 'idle') u._regroup = false;   // back home after a retreat: waits for the next wave
+
+    // ---- defend our camps from enemy junglers (cautious/smart AIs) ----
+    if (!threat && this.time - (T.defendT || 0) > 12) {
+      const ownCamps = CAMPS.filter((c) => c.side === T.faction);
+      for (const c of ownCamps) {
+        const inv = this.foesNear(T, c, 11);
+        if (!inv.length || Math.random() > (P.caution + P.smart) / 2) continue;
+        const helpers = spareHome();
+        if (helpers.length && this.power(helpers) > this.power(inv) * 0.8) {
+          T.defendT = this.time;
+          helpers.forEach((u) => { u._waiting = false; u.command({ type: 'attackMove', point: { x: c.x, z: c.z } }); });
+          this.emit('aiDefendCamp', T.team, c);
+        }
+        break;
+      }
+    }
+
+    // ---- start a new jungle trip ----
+    const every = 32 - P.greed * 22;                                    // greedy AIs farm a lot more often
+    if (threat || this.time - (T.jungleT ?? -999) < every) return;
     T.jungleT = this.time;
-    if (Math.random() > 0.6) return;                                   // not every chance: keeps it unpredictable
+    if (Math.random() > 0.3 + P.greed * 0.6) return;
+    if (pushing) return;
     const waiting = mine.filter((u) => u._waiting && u.order.type === 'idle');
-    // easy AI (waveSize 1) never waits at home, so it pulls a couple of fresh troops instead
     const crew = waiting.length >= 2 ? waiting : (this.diff.waveSize <= 1 ? mine.filter((u) => !u._jungle && !u._homing && Math.abs(u.pos.x - this.bases[T.team].x) < 18).slice(0, 2) : []);
     if (crew.length < 2) return;
-    const camps = CAMPS.filter((c) => c.side === T.faction && campAlive(c).length);
+    // aggressive: sometimes invade the enemy's camps instead (steal farm, pick fights)
+    const invade = P.aggro > 0.55 && Math.random() < P.aggro * 0.45;
+    const camps = CAMPS.filter((c) => (invade ? c.side !== T.faction : c.side === T.faction) && campAlive(c).length);
     if (!camps.length) return;
-    const c = camps[Math.floor(Math.random() * camps.length)];
+    // smart: closest camp; others: random
+    const c = P.smart > 0.6 ? camps.slice().sort((a, b) => Math.abs(a.x - bx) + Math.abs(a.z) * 0.5 - (Math.abs(b.x - bx) + Math.abs(b.z) * 0.5))[0] : camps[Math.floor(Math.random() * camps.length)];
     crew.forEach((u) => { u._waiting = false; u._jungle = c.id; u.command({ type: 'idle' }); });
     this.emit('aiJungle', T.team, c);
   }
@@ -963,40 +1118,67 @@ export class Game {
     }
   }
 
-  /** Chain Lightning: hit `first`, then jump to a random enemy within def.jump of the last one (no repeats). */
+  /**
+   * Chain Lightning: hit `first` now, then every def.bounceDelay seconds jump to a random enemy within def.jump of the
+   * last one (no repeats), up to def.targets. Each jump draws a crackling tether between the two troops.
+   */
   chainLightning(src, first, def) {
-    const hit = [first];
-    let cur = first;
-    for (;;) {
-      const dmg = cur.takeDamage(def.damage, src, def.damageType || 'magic');
-      src.damageDealt += dmg;
-      if (dmg > 0) this.emit('hitDmg', cur.pos, dmg, false, src.team);
-      if (hit.length >= def.targets) break;
-      const near = this.units.filter((o) => !hit.includes(o) && src.isFoe(o) && Math.hypot(o.pos.x - cur.pos.x, o.pos.z - cur.pos.z) - o.radius <= def.jump);
-      if (!near.length) break;
-      const nxt = near[Math.floor(Math.random() * near.length)];
-      this.bolt(cur.pos, nxt.pos);
-      hit.push(nxt); cur = nxt;
-    }
-    this.bolt(src.pos, first.pos, true);
-    this.burst(first.pos, 4, [0x9ad8ff, 0xffffff], 2, 0.3, 0.7);
+    const c = { src, def, team: src.team, hit: [first], cur: first, t: 0 };
+    this.zap(c, first);
+    this.tether(src, first, def.bounceDelay || 0.3);
     if (this.audible(first.pos.x)) sfx('zap', 60);
+    (this.chains ||= []).push(c);
   }
-  /** A jagged, fading lightning line between two points. */
-  bolt(a, b, short = false) {
-    if (!this.seenByViewer(a) && !this.seenByViewer(b)) return;
-    const pts = [], n = 6, y0 = short ? 1.6 : 1.1;
-    for (let i = 0; i <= n; i++) {
-      const f = i / n, j = i === 0 || i === n ? 0 : 0.35;
-      pts.push(new THREE.Vector3(a.x + (b.x - a.x) * f + (Math.random() - 0.5) * j, y0 + (Math.random() - 0.5) * j, a.z + (b.z - a.z) * f + (Math.random() - 0.5) * j));
+  zap(c, t) {
+    const dmg = t.takeDamage(c.def.damage, c.src.dead ? null : c.src, c.def.damageType || 'magic');
+    if (!c.src.dead) c.src.damageDealt += dmg;
+    if (dmg > 0) this.emit('hitDmg', t.pos, dmg, false, c.team);
+    this.burst(t.pos, 4, [0x9ad8ff, 0xffffff], 2, 0.3, 0.7);
+  }
+  updateChains(dt) {
+    if (!this.chains?.length) return;
+    for (let i = this.chains.length - 1; i >= 0; i--) {
+      const c = this.chains[i];
+      c.t += dt;
+      if (c.t < (c.def.bounceDelay || 0.3)) continue;
+      c.t = 0;
+      const foe = (o) => !o.dead && !o.tower && o.team !== c.team && (o.team !== NEUTRAL_TEAM || c.src.dead || c.src.isFoe(o));
+      const near = c.hit.length >= c.def.targets ? [] : this.units.filter((o) => !c.hit.includes(o) && foe(o) && Math.hypot(o.pos.x - c.cur.pos.x, o.pos.z - c.cur.pos.z) - o.radius <= c.def.jump);
+      if (!near.length) { this.chains.splice(i, 1); continue; }
+      const nxt = near[Math.floor(Math.random() * near.length)];
+      this.tether(c.cur, nxt, (c.def.bounceDelay || 0.3) + 0.05);
+      this.zap(c, nxt);
+      if (this.audible(nxt.pos.x)) sfx('zap', 60);
+      c.hit.push(nxt); c.cur = nxt;
     }
+  }
+  /** A crackling lightning tether that follows two units (re-jagged every frame) and fades out. */
+  tether(a, b, life) {
+    const mats = [0x6fe3ff, 0xffffff].map((c) => new THREE.LineBasicMaterial({ color: c, transparent: true, depthWrite: false }));
     const g = new THREE.Group();
-    for (const [c, off] of [[0x6fe3ff, 0], [0xffffff, 0.04]]) {
-      const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map((p) => p.clone().setY(p.y + off))), new THREE.LineBasicMaterial({ color: c, transparent: true, depthWrite: false }));
-      g.add(l);
-    }
+    const lines = mats.map((m) => { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 8 }, () => new THREE.Vector3())), m); l.frustumCulled = false; g.add(l); return l; });
     this.scene.add(g);
-    this.decals.push({ g, t: 0, life: 0.3, lines: true });
+    (this.tethers ||= []).push({ a, b, g, lines, t: 0, life });
+  }
+  updateTethers(dt) {
+    if (!this.tethers?.length) return;
+    for (let i = this.tethers.length - 1; i >= 0; i--) {
+      const T = this.tethers[i];
+      T.t += dt;
+      if (T.t >= T.life) { this.scene.remove(T.g); T.lines.forEach((l) => { l.geometry.dispose(); l.material.dispose(); }); this.tethers.splice(i, 1); continue; }
+      const A = T.a.pos, B = T.b.pos, ya = 1.2 + (A.y || 0), yb = 1.2 + (B.y || 0);
+      T.g.visible = this.seenByViewer(A) || this.seenByViewer(B);
+      const f = 1 - T.t / T.life;
+      T.lines.forEach((l, k) => {
+        const pos = l.geometry.attributes.position, n = pos.count;
+        for (let j = 0; j < n; j++) {
+          const u = j / (n - 1), jit = j === 0 || j === n - 1 ? 0 : (k ? 0.18 : 0.38);
+          pos.setXYZ(j, A.x + (B.x - A.x) * u + (Math.random() - 0.5) * jit, ya + (yb - ya) * u + (Math.random() - 0.5) * jit, A.z + (B.z - A.z) * u + (Math.random() - 0.5) * jit);
+        }
+        pos.needsUpdate = true;
+        l.material.opacity = f;
+      });
+    }
   }
 
   marker(point, color) {
@@ -1063,6 +1245,8 @@ export class Game {
     this.updateProjectiles(dt);
     this.updateSkillshots(dt);
     this.updateTrails(dt);
+    this.updateChains(dt);
+    this.updateTethers(dt);
     if (!this.over) { if (!this.sandbox) this.updateCamps(); this.updateLoot(dt); }
     this.vision?.update(dt);
     this.applyFog();
@@ -1099,6 +1283,7 @@ export class Game {
     this.loot.forEach((L) => this.scene.remove(L.mesh)); this.loot = [];
     this.markers.forEach((k) => this.scene.remove(k.m));
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
+    (this.tethers || []).forEach((T) => this.scene.remove(T.g)); this.tethers = []; this.chains = [];
     this.units = []; this.particles = []; this.markers = []; this.projectiles = [];
     this.bases.forEach((b, t) => {
       const orig = this.baseOrig[t];

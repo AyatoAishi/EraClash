@@ -313,7 +313,10 @@ export class Controls {
     const a = units[0].abil[i];
     if (!a) return false;
     if (a.def.kind !== 'active') { this.hooks.toast?.(`${a.def.name} is passive`); return false; }
-    const ready = units.filter((u) => u.def.id === type && u.abil[i]?.st.cd <= 0 && (u.abil[i].def.manaCost || 0) <= u.mana && !u.casting);
+    // every selected troop of that type that HAS this ability (skill-tree forms can put it in a different slot)
+    const aid = a.def.id, slotOf = (u) => u.abil.findIndex((x) => x.def.id === aid);
+    const readyIn = (u) => { const k = slotOf(u); return u.def.id === type && k >= 0 && u.abil[k].st.cd <= 0 && (u.abil[k].def.manaCost || 0) <= u.mana && !u.casting; };
+    const ready = units.filter(readyIn);
     if (!ready.length) { this.hooks.toast?.((a.def.manaCost || 0) > units[0].mana ? `Not enough mana for ${a.def.name}` : `${a.def.name} not ready`); return false; }
     if (a.def.cast === 'line') {
       // Quick cast (Options > Gameplay): fire at the cursor right away. Normal cast: show the aim lines and wait for a click.
@@ -321,14 +324,14 @@ export class Controls {
         const p = this.mouse.inside ? this.groundAt(this.mouse.x, this.mouse.y) : null;
         if (!p) return false;
         let n = 0;
-        for (const u of ready) if (u.castAbility(i, { x: p.x, z: p.z })) n++;
+        for (const u of ready) if (u.castAbility(slotOf(u), { x: p.x, z: p.z })) n++;
         if (n) sfx('attack');
         return n > 0;
       }
-      this.setArmed(false); this.targeting = { slot: i, def: a.def, type }; document.body.classList.add('armed'); return true;
+      this.setArmed(false); this.targeting = { abil: aid, def: a.def, type }; document.body.classList.add('armed'); return true;
     }
     let n = 0;
-    for (const u of ready) if (u.castAbility(i)) n++;
+    for (const u of ready) if (u.castAbility(slotOf(u))) n++;
     return n > 0;
   }
   /** Ground-targeted cast: every ready troop of that type fires toward the clicked point. */
@@ -336,7 +339,7 @@ export class Controls {
     const T = this.targeting; this.cancelTargeting();
     const p = this.groundAt(sx, sy); if (!T || !p) return;
     let n = 0;
-    for (const u of this.own()) if (u.def.id === T.type && u.castAbility(T.slot, { x: p.x, z: p.z })) n++;
+    for (const u of this.own()) { const k = u.abil.findIndex((x) => x.def.id === T.abil); if (u.def.id === T.type && k >= 0 && u.castAbility(k, { x: p.x, z: p.z })) n++; }
     if (n) sfx('attack');
   }
   cancelTargeting() {
@@ -350,7 +353,7 @@ export class Controls {
     const T = this.targeting;
     this.aimMeshes ||= [];
     if (!T || !this.game) { for (const m of this.aimMeshes) m.visible = false; return; }
-    const casters = this.own().filter((x) => x.def.id === T.type && x.abil[T.slot]?.st.cd <= 0 && (x.abil[T.slot].def.manaCost || 0) <= x.mana && !x.casting);
+    const casters = this.own().filter((x) => { const a = x.ability(T.abil); return x.def.id === T.type && a && a.st.cd <= 0 && (a.def.manaCost || 0) <= x.mana && !x.casting; });
     if (!casters.length) return this.cancelTargeting();
     const p = this.groundAt(this.mouse.x, this.mouse.y);
     while (this.aimMeshes.length < casters.length) {

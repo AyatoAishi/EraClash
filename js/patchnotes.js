@@ -7,6 +7,45 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.18.0', date: '2026-10-24T20:30:00+08:00', title: 'Smarter AI, difficulty 1–10, Ranger tree & new items',
+    sections: [
+      { title: 'New — AI difficulty 1 to 10', items: [
+        'The difficulty pills are now a <b>slider from 1 to 10</b> (remembered). 1–3 are the old Recruit, Veteran and Warlord.',
+        '<b>4 Champion</b>: AI takes 20% less damage, +50% gold. <b>5 Conqueror</b>: takes 20% less, deals 20% more, double gold.',
+        '<b>6 Tyrant</b> → <b>10 HELL</b>: up to half damage taken, +75% damage dealt, 4x gold, faster training/research/evolutions, extra starting gold and a bigger starting base (level 2 at 8, level 3 at 9–10).',
+        'AI "gold" bonuses apply to its income and its kill bounty.',
+      ] },
+      { title: 'Reworked — AI brain', items: [
+        'Every AI rolls a <b>personality</b> each match: <b>Greedy</b> (farms and saves a lot), <b>Defensive</b> (big waves, protects its camps, repairs early), <b>Aggressive</b> (small early waves, sometimes invades your camps), <b>Tactician</b> (reads fights) or <b>Wildcard</b> (changes its mind every minute). Each trait gets a random twist, and low levels play sloppier (odd buys, lone troops wandering off, forgetting to repair).',
+        'Junglers now <b>react to invaders</b>: they fight you if they\'re stronger, run home if not, and smart/defensive AIs send their waiting troops to help.',
+        'Smart AIs fall back when a push is badly outnumbered and regroup, focus fire on wounded troops, and counter your army mix.',
+        'The end screen shows which personality you played against. Test command: <b>/ai</b>.',
+      ] },
+      { title: 'Skill trees', items: [
+        'Kill scaling lowered: <b>3, 6, 9, 12…</b> kills per level (was 5, 10, 15…). Lv 5 = 45 kills, Lv 15 = 360.',
+        'Stats in a tree <b>no longer stack</b> with the parent: each evolution\'s numbers are its totals vs the base troop (Chaotic Viking +2 HP regen total, Storm Viking +20 attack speed total). The tree marks these "(total)".',
+        '<b>Fury</b> (Frenzy/Chaotic): instead of +2 damage per stack, each stack makes the target take <b>+4% damage from Vikings</b>.',
+        '<b>Chain Lightning</b>: now <b>25</b> magic (Storm Viking <b>40</b>), with a crackling lightning tether and a 0.3s delay per bounce.',
+      ] },
+      { title: 'New — Ranger tree', items: [
+        '<b>Lv 5 Scout Ranger</b>: +5 price, +2 damage, Eagle Eye becomes a 30% <b>true strike</b> (can\'t miss or be evaded) for +30% damage and 5 magic.',
+        '<b>Lv 15 Stalker</b> (after Scout): +5 price, +2 damage, +1 range, 100 mana, +1 mana regen, same Eagle Eye, new passive <b>Cut Throat</b>: invulnerable for 2s after a kill.',
+        '<b>Lv 5 Stray Ranger</b>: +20 attack speed, new passive <b>Bowsling</b>: 40% chance to fire a second arrow at another enemy in range.',
+        '<b>Lv 15 Rogue</b> (after Stray): +40 attack speed total, Bowsling, new active <b>Tumble</b> (Q): roll 3.4 toward the cursor at move speed +15, 3s cooldown. Works with quick cast.',
+        '<b>Lv 15 Hunter</b> (after Stray): +20 attack speed, +0.5 move speed, Bowsling always fires.',
+      ] },
+      { title: 'Items', items: [
+        'Tier 1 drop chance <b>20% → 50%</b>. Each higher tier drops <b>25%</b> less often.',
+        'New Tier 1 items: <b>Well Done Steak</b> (click to eat: +50 HP, used up), <b>Robe</b> (+5 max mana, +1 mana regen, troops with mana only), <b>Broadsword</b> (+15 damage, −20 attack speed), <b>Javelin</b> (+2 damage; click: for 3s your next attack is a true strike and Breaks the target for 3s, 12s cooldown).',
+        'Items with an active glow green in the inventory: <b>click to use</b>. The AI uses them too.',
+      ] },
+      { title: 'Map & visuals', items: [
+        'Modern side: a <b>road grid</b> now links the lane to every camp (an avenue to each camp, a cross street between them). Crossing the city jungle is now as quick as the forest: camp-to-camp detours went from about 1.9x to 1.0x the straight line.',
+        'Nights are brighter (moonlit), and the fog of war lifts a little at night so it\'s never pitch black.',
+      ] },
+    ],
+  },
+  {
     version: '0.17.0', date: '2026-10-24T18:30:00+08:00', title: 'Skill trees & a bigger map',
     sections: [
       { title: 'New — Skill Tree', items: [

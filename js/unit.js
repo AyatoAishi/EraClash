@@ -42,7 +42,8 @@ export class Unit {
     this.ranged = this.def.type === 'ranged';
     this.family = this.def.family;
     this.radius = this.def.radius;
-    this.items = new Array(GAME.invSlots).fill(null); // future: item ids from ITEMS
+    this.items = new Array(GAME.invSlots).fill(null); // item ids from ITEMS
+    this.itemCd = new Array(GAME.invSlots).fill(0);    // per-slot cooldown of item actives (Javelin...)
     this.stats = {};
     this.bonus = {};
     this.recalcStats();
@@ -56,7 +57,7 @@ export class Unit {
     this.pas = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, armorPierce: 0, lifesteal: 0 };   // summed passive bonuses
     this.slows = [];                   // [{ pct, t }] movement slows (strongest applies)
     this.flying = !!this.def.flying;   // flying: hovers, ignores obstacles/terrain for movement & sight, melee can't hit it
-    this.maxMana = this.def.mana || 0; this.mana = this.maxMana;
+    this.mana = this.maxMana;   // maxMana / manaRegen come from recalcStats (definition + Robe)
     this.breakT = 0;                   // Break debuff: passives disabled (except unbreakable ones)
     this.stillT = 0;                   // seconds standing still without attacking (Night Meld)
     this.invisible = false; this._lookInvis = false;
@@ -129,6 +130,13 @@ export class Unit {
     add(T?.upgrades?.[this.def.family]);
     add(T?.unitMods?.[this.def.id]);     // Barracks stat upgrades
     for (const id of this.items) { add(id && ITEMS[id]?.stats); if (this.ranged) add(id && ITEMS[id]?.rangedStats); }   // Quiver: ranged carriers only
+    // mana: only troops that have mana get item mana (Robe)
+    const m0 = this.def.mana || 0;
+    let mBonus = 0, mrBonus = 0;
+    if (m0) for (const id of this.items) { const M = id && ITEMS[id]?.manaStats; if (M) { mBonus += M.mana || 0; mrBonus += M.manaRegen || 0; } }
+    const oldMana = this.maxMana;
+    this.maxMana = m0 + mBonus; this.manaRegen = (this.def.manaRegen || 0) + mrBonus;
+    if (oldMana !== undefined && this.mana !== undefined) this.mana = Math.min(this.maxMana, this.mana + Math.max(0, this.maxMana - oldMana));
     this.bonus = bonus;
     // BASE stats = definition, scaled by Barracks stat boosts (+10% per level). BONUS stats = items, family/flat upgrades, buffs.
     const mult = this.game.statMult ? this.game.statMult(this.statTeam, this.def.id) : 1;
@@ -204,9 +212,36 @@ export class Unit {
   }
   removeItem(slot) {
     const id = this.items[slot];
-    this.items[slot] = null;
+    this.items[slot] = null; this.itemCd[slot] = 0;
     this.recalcStats();
     return id;
+  }
+
+  /** Use the item in `slot` (items with an `active`). Returns an error string, or null when it worked. */
+  useItem(slot) {
+    const id = this.items[slot], it = id && ITEMS[id], A = it?.active;
+    if (!A) return it ? `${it.name} has no active` : 'Empty slot';
+    if (this.dead) return 'Dead';
+    if (this.itemCd[slot] > 0) return `${it.name} is on cooldown (${Math.ceil(this.itemCd[slot])}s)`;
+    if (A.heal) {
+      if (this.hp >= this.maxHp) return 'Already at full HP';
+      this.hp = Math.min(this.maxHp, this.hp + A.heal);
+      this.game.emit('heal', this.pos, A.heal, this.team);
+      this.game.burst(this.pos, 6, [0x5ce36f, 0xffffff], 1.6, 0.5);
+    }
+    if (A.trueStrike) { this.trueStrikeT = A.trueStrike; this.trueStrikeBreak = A.breakT || 0; this.game.burst(this.pos, 5, [0xf2c94c, 0xffffff], 1.5, 0.4, 0.7); }
+    if (A.consumable) this.removeItem(slot);
+    else this.itemCd[slot] = A.cooldown || 0;
+    return null;
+  }
+  /** AI: use item actives (eat when hurt, Javelin when fighting). */
+  aiItems() {
+    for (let k = 0; k < this.items.length; k++) {
+      const A = this.items[k] && ITEMS[this.items[k]]?.active;
+      if (!A || this.itemCd[k] > 0) continue;
+      if (A.ai === 'lowHp' && this.hp / this.maxHp < 0.45) this.useItem(k);
+      else if (A.ai === 'attacking' && this.target && !this.target.dead && this.aimT > 0 && !(this.trueStrikeT > 0)) this.useItem(k);
+    }
   }
 
   // ---------------- lifecycle ----------------
@@ -234,6 +269,9 @@ export class Unit {
     if (this.tower) return 0;
     if (this.invulnerable) { this.shieldPing = 1; return 0; }
     if (this.game.cheat?.god && this.team === this.game.playerTeam) return 0;
+    if (source && source.team !== undefined) raw *= this.game.dmgMult ? this.game.dmgMult(source.team, this.team) : 1;   // AI difficulty 4+
+    const fz = this.fury;   // Fury: more damage from the troop type that stacked it (Vikings), any damage type
+    if (fz && fz.t > 0 && fz.stacks > 0 && source && source.team === fz.team && source.def?.id === fz.unit) raw *= 1 + fz.stacks * fz.per;
     if (opts?.attack) {
       // Old Man Shield: flat block on basic attacks, before armor
       const sh = ITEMS.oldManShield;
@@ -280,12 +318,14 @@ export class Unit {
   /** Passive logic + active cooldowns. Aura-style passives rescan 5x/sec. */
   updatePassive(dt) {
     const sum = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, armorPierce: 0, lifesteal: 0 };
-    if (this.maxMana && this.mana < this.maxMana) this.mana = Math.min(this.maxMana, this.mana + (this.def.manaRegen || 0) * dt);
+    if (this.maxMana && this.mana < this.maxMana) this.mana = Math.min(this.maxMana, this.mana + (this.manaRegen || 0) * dt);
+    for (let k = 0; k < this.itemCd.length; k++) if (this.itemCd[k] > 0) this.itemCd[k] -= dt;
     if (this.breakT > 0) this.breakT -= dt;
     if (this.shredT > 0) this.shredT -= dt;
     if (this.rallyT > 0) this.rallyT -= dt;
     if (this.curse) { this.curse.t -= dt; if (this.curse.t <= 0) this.curse = null; }
     if (this.fury) { this.fury.t -= dt; if (this.fury.t <= 0) this.fury = null; }
+    if (this.trueStrikeT > 0) this.trueStrikeT -= dt;
     if (this.curseHasteT > 0) this.curseHasteT -= dt;
     if (this.raised && !this.dead) { this.raised.t -= dt; if (this.raised.t <= 0) { this.game.despawnBrainwashed(this); return; } }
     this.updateCasting(dt);
@@ -423,6 +463,11 @@ export class Unit {
   rollDamage() {
     let d = this.effDamage + Math.round((Math.random() * 2 - 1) * GAME.dmgVariance);
     this.lastCrit = false;
+    // per-shot extras, carried by the projectile / melee swing: true strike (can't miss/evade), bonus magic, break
+    const shot = this.lastShot = { trueStrike: false, magic: 0, breakT: 0 };
+    if (this.trueStrikeT > 0) {   // Javelin: the next attack within the window
+      shot.trueStrike = true; shot.breakT = this.trueStrikeBreak || 0; this.trueStrikeT = 0;
+    }
     const be = this.ability('bullsEye');
     if (be) {
       const L = this.upLevel('hollowPoints'), HP = UPGRADES.hollowPoints;     // Hollow Points upgrade
@@ -437,22 +482,28 @@ export class Unit {
       d = Math.round(d * (1 + cs.def.bonus[L - 1])); this.lastCrit = true;
     }
     const e = this.ability('eagleEye');
-    if (e && Math.random() < e.def.chance) { d += e.def.bonusDamage; this.lastCrit = true; }
+    if (e && Math.random() < e.def.chance) {
+      d = Math.round((d + (e.def.bonusDamage || 0)) * (1 + (e.def.bonusPct || 0)));
+      if (e.def.trueStrike) shot.trueStrike = true;
+      shot.magic += e.def.bonusMagic || 0;
+      this.lastCrit = true;
+    }
     return d;
   }
 
   /** After an attack's damage lands (melee or projectile): lifesteal, on-hit slows. */
-  onAttackLanded(tg, dealt, raw = 0, crit = false) {
+  onAttackLanded(tg, dealt, raw = 0, crit = false, shot = null) {
     if (dealt > 0) this.game.emit('hitDmg', tg.pos, dealt, crit, this.team);
+    if (shot?.magic && !tg.dead) { const m = tg.takeDamage(shot.magic, this, 'magic'); this.damageDealt += m; if (m > 0) this.game.emit('hitDmg', tg.pos, m, false, this.team); }
+    if (shot?.breakT && !tg.dead) tg.applyBreak(shot.breakT);
     if (this.pas.lifesteal && dealt > 0 && !this.dead) this.hp = Math.min(this.maxHp, this.hp + dealt * this.pas.lifesteal / 100);
     const g = this.game;
     // Banshee Curse: mark the target (rises for our side if it dies while cursed)
     const bc = this.ability('bansheeCurse');
     if (bc && !bc.st.broken && !tg.dead && !tg.tower) tg.curse = { t: bc.def.duration, team: this.team, src: this, def: bc.def };
-    // Fury stacks on the target (any Frenzy line Viking put them there): every troop of that type on that
-    // team deals +perStack damage per stack. Then a Fury carrier adds/refreshes a stack.
+    // Fury: a Fury carrier adds/refreshes a stack. Each stack makes the target take +perStack (4%) damage from every
+    // troop of that type on that team (see takeDamage).
     const fz = tg.fury;
-    if (fz && fz.t > 0 && fz.team === this.team && fz.unit === this.def.id && !tg.dead && fz.stacks > 0) this.damageDealt += tg.takeDamage(fz.stacks * fz.per, this, 'physical');
     const fu = this.ability('fury');
     if (fu && !fu.st.broken && !tg.dead && !tg.tower) {
       if (!fz || fz.t <= 0 || fz.team !== this.team || fz.unit !== this.def.id) tg.fury = { team: this.team, unit: this.def.id, stacks: 0, per: fu.def.perStack, t: 0 };
@@ -584,6 +635,11 @@ export class Unit {
         continue;
       }
       if (A.id === 'arrowPiercer' && this.target && !this.target.dead && this.aimT > 0 && this.mana >= (A.manaCost || 0)) { this.castAbility(i, { x: this.target.pos.x, z: this.target.pos.z }); continue; }
+      if (A.id === 'tumble') {   // roll away when something melee is on top of us and we're getting hurt
+        const close = this.game.units.some((o) => this.isFoe(o) && !o.ranged && this.edgeDist(o) < 1.2);
+        if (close && this.hp / this.maxHp < 0.7) this.castAbility(i);
+        continue;
+      }
       if (A.id === 'shieldStomp' && this.aimT > 0 && this.game.enemiesInRadius(this, A.radius + 0.3).length) { this.castAbility(i); continue; }
       if (A.id === 'splatter') {
         const n = this.game.enemiesInRadius(this, A.radius).length;
@@ -601,12 +657,12 @@ export class Unit {
     }
     if (tg.isBase) g.damageBase(tg.team, this.rollDamage(), this);
     else if (!tg.dead && this.edgeDist(tg) <= this.effRange + 0.6) {
-      const dodge = tg.dodgeCheck(this);
+      const raw = this.rollDamage(), shot = this.lastShot, crit = this.lastCrit;
+      const dodge = shot.trueStrike ? null : tg.dodgeCheck(this);   // true strike: can't miss or be evaded
       if (dodge) { g.onDodge(this, tg, dodge); this.onAttackDone(); return; }
-      const raw = this.rollDamage();
       const dealt = tg.takeDamage(raw, this, this.def.damageType || 'physical', { attack: true, ranged: false });
       this.damageDealt += dealt;
-      this.onAttackLanded(tg, dealt, raw, this.lastCrit);
+      this.onAttackLanded(tg, dealt, raw, crit, shot);
       g.onHit(this, tg);
       this.onAttackDone();
     }
@@ -630,7 +686,7 @@ export class Unit {
     }
     this.updatePassive(dt);
     if (this.dead) return false;
-    if (g.teams[this.team].isAI && this.abil.length) { this.aiT = (this.aiT || 0) - dt; if (this.aiT <= 0) { this.aiT = 0.3; this.aiCast(); if (this.dead) return false; } }
+    if (g.teams[this.team].isAI) { this.aiT = (this.aiT || 0) - dt; if (this.aiT <= 0) { this.aiT = 0.3; if (this.abil.length) this.aiCast(); if (this.dead) return false; this.aiItems(); } }
     const regen = this.stats.hpRegen + this.pas.bonusRegen;
     if (regen && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + regen * dt);
 
@@ -678,6 +734,7 @@ export class Unit {
 
     let attacking = false;
     if (this.stance === 'channel' || this.stance === 'standup' || this.casting) { engage = null; goal = null; attacking = true; }   // channeling: can't move or shoot
+    if (this.dash) { engage = null; goal = null; }   // Tumble: rolling, no attacks or walking until it ends
     if (engage) {
       const dist = engage.isBase ? g.distToBase(this, engage.team) : this.edgeDist(engage);
       if (dist <= this.effRange) {
@@ -721,6 +778,16 @@ export class Unit {
     }
     let sepK = attacking ? 3 : 7;
     if (this.immobile) sepK = 0;   // prone troops are planted; others walk around them
+    if (this.dash) {   // Tumble roll: fixed distance at a fixed speed, then back to normal
+      const D = this.dash, st = Math.min(D.left, D.speed * dt);
+      vx = D.dx * D.speed; vz = D.dz * D.speed; sepK = 0;
+      this.pos.x += D.dx * st - vx * dt; this.pos.z += D.dz * st - vz * dt;   // cancels the generic step below
+      D.left -= st;
+      this.facing = Math.atan2(D.dx, D.dz);
+      const f = 1 - D.left / D.total;                                        // the roll: duck forward + small hop
+      this.rig.root.rotation.x = Math.sin(Math.PI * f) * 0.7; this.rig.root.position.y = Math.sin(Math.PI * f) * 0.35;
+      if (D.left <= 1e-3) { this.dash = null; this.rig.root.rotation.x = 0; this.rig.root.position.y = 0; }
+    }
     this.pos.x += (vx + sx * sepK) * dt; this.pos.z += (vz + sz * sepK) * dt;
     const lim = GAME.baseX - GAME.baseHalfX - this.radius;
     this.pos.x = Math.max(-lim, Math.min(lim, this.pos.x));

@@ -17,7 +17,7 @@ const app = {
   game: null,
   playerTeam: null,
   playerFaction: null,
-  difficulty: 'normal',
+  difficulty: 2,
 };
 
 // ---------------- renderer / scene ----------------
@@ -99,7 +99,7 @@ let demoRestart = 0;
 function startDemo() {
   app.game?.dispose();
   app.playerTeam = null;
-  app.game = new Game({ scene, playerTeam: null, difficulty: 'normal', world, getViewX: () => app.controls.target.x });
+  app.game = new Game({ scene, playerTeam: null, difficulty: 2, world, getViewX: () => app.controls.target.x });
   // pre-fund the demo so the menu has a battle going quickly
   app.game.teams.forEach((t) => (t.gold = 400));
   app.controls.setGame(app.game, -1);
@@ -150,6 +150,7 @@ app.startMatch = (faction, difficulty) => {
     if (crit || settings.graphics.damageNumbers !== 'all' || !g.seenByViewer(pos)) return;
     app.ui.floatText(pos, String(Math.round(dmg)), 'dmg' + (app.playerTeam !== null && team !== app.playerTeam ? ' foe' : ''));
   });
+  g.on('heal', (pos, amt) => { if (settings.graphics.combatText && g.seenByViewer(pos)) app.ui.floatText(pos, '+' + Math.round(amt), 'heal'); });
   g.on('dodge', (pos, kind) => { if (settings.graphics.combatText && g.seenByViewer(pos)) app.ui.floatText(pos, kind === 'evade' ? 'EVADE' : kind === 'uphill' ? 'MISS ▲' : 'MISS', 'miss'); });
   g.on('bounty', (pos, gold, team) => { if (team === app.playerTeam) { app.ui.floatText(pos, '+' + gold, 'gold'); sfx('coin', 80); } });
   g.on('baseDestroyed', (team) => {
@@ -254,7 +255,7 @@ function frame() {
   if (app.state !== 'paused') g.update(dt, camera.quaternion);
   FOW.on.value = g && g.vision && g.playerTeam !== null && !g.cheat?.reveal ? 1 : 0;
   if (FOW.on.value) updateFogTexture(g.vision.vis[g.playerTeam], dt);
-  if (g) world.setNight(g.dayNight.f);
+  if (g) { world.setNight(g.dayNight.f); FOW.dark.value = 0.42 + 0.14 * g.dayNight.f; }   // fog lifts a little at night so it isn't pitch black
   world.update(dt);
   app.controls.update(dt);
   world.followCamera(app.controls.target);

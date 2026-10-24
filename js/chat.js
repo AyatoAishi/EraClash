@@ -79,6 +79,7 @@ export const COMMANDS = {
       return `${UNITS[id].name}: ${g.teams[me].troopKills[id]} kills → level ${g.troopLevel(me, id).level}`;
     },
   },
+  ai: { args: '', help: "show the enemy AI's difficulty and personality", run: ({ g, me }) => { const T = g.teams[1 - me], P = T.persona; return P ? `AI level ${g.diffId} (${g.diff.name}), ${P.name}: greed ${P.greed.toFixed(2)}, aggro ${P.aggro.toFixed(2)}, caution ${P.caution.toFixed(2)}, smart ${P.smart.toFixed(2)}, sloppy ${P.sloppy.toFixed(2)}` : 'no AI'; } },
   time: {
     args: '<day|night>', help: 'jump to day or night',
     run: ({ g }, [w]) => { const half = GAME.dayNight.half, cyc = Math.floor(g.time / (half * 2)) * half * 2; g.time = w === 'night' ? cyc + half + GAME.dayNight.fade + 1 : cyc + half * 2 + GAME.dayNight.fade + 1; g.nextCampSpawn = Math.ceil(g.time / 60) * 60; return `it is now ${w === 'night' ? 'night' : 'day'}`; },

@@ -84,7 +84,7 @@ export class UI {
     this.optionsReturn = 'main';
     this.helpReturn = 'main';
     this.pickFaction = 'medieval';
-    this.pickDiff = 'normal';
+    this.pickDiff = 2;
     this.panelT = 0;
     this.lastSelKey = '';
     this.lastQueueKey = '';
@@ -240,12 +240,12 @@ export class UI {
       html = `<div class="tip-h"><b style="color:${T.color}">${T.name} damage</b><small>DAMAGE TYPE</small></div><p>${line}</p>`;
     } else if (kind === 'item') {
       const it = ITEMS[id];
-      html = `<div class="tip-h"><svg class="ico"><use href="#${it.sprite}"/></svg><b>${it.name}</b><small>ITEM</small></div><p>${it.desc}</p><div class="tip-m">Dropped by neutral camps · kept until the carrier dies</div>`;
+      html = `<div class="tip-h"><svg class="ico"><use href="#${it.sprite}"/></svg><b>${it.name}</b><small>ITEM</small></div><p>${it.desc}</p><div class="tip-m">${it.active ? '<b>Click it in the inventory to use.</b> · ' : ''}Dropped by neutral camps · kept until the carrier dies</div>`;
     } else if (kind === 'daynight') {
       const dn = this.app.game?.dayNight;
       html = `<div class="tip-h"><b>${dn?.night ? 'Night' : 'Day'}</b><small>CYCLE</small></div><p>Day and night alternate every 5 minutes. Torches and street lamps light up the lane at night. (Future troops will get day/night bonuses.)</p>${dn ? `<div class="tip-s on">${dn.night ? 'Day' : 'Night'} in ${Math.floor(dn.left / 60)}:${String(Math.floor(dn.left % 60)).padStart(2, '0')}</div>` : ''}`;
     } else if (kind === 'slot') {
-      html = `<div class="tip-h"><b>Empty slot</b></div><p>Items will drop from neutral camps and bosses in a later version.</p>`;
+      html = `<div class="tip-h"><b>Empty slot</b></div><p>Neutral creeps drop items. Right-click one on the ground to pick it up.</p>`;
     } else html = el.dataset.tipText || '';
     this.tip.innerHTML = html;
     this.tip.classList.add('on');
@@ -319,15 +319,19 @@ export class UI {
       card.addEventListener('click', () => { sfx('click'); this.pickFaction = f.id; this.refreshFaction(); });
       wrap.appendChild(card);
     }
-    $$('#diff-pills button').forEach((b) => b.addEventListener('click', () => { sfx('click'); this.pickDiff = b.dataset.diff; this.refreshFaction(); }));
+    const dr = $('#diff-range');
+    try { const saved = +localStorage.getItem('eraclash.diff'); if (saved >= 1 && saved <= 10) this.pickDiff = saved; } catch { /* storage off */ }
+    dr.value = this.pickDiff;
+    dr.addEventListener('input', () => { this.pickDiff = +dr.value; try { localStorage.setItem('eraclash.diff', dr.value); } catch { /* storage off */ } this.refreshFaction(); });
+    dr.addEventListener('change', () => sfx('click'));
     this.refreshFaction();
   }
   refreshFaction() {
     $$('.fcard').forEach((c) => c.classList.toggle('on', c.classList.contains(this.pickFaction)));
-    $$('#diff-pills button').forEach((b) => b.classList.toggle('on', b.dataset.diff === this.pickDiff));
     const d = DIFFICULTY[this.pickDiff];
-    const hint = { easy: 'AI earns 20% less gold and second-guesses itself.', normal: 'Fair fight: same income as you, attacks in groups of 4.', hard: 'AI earns 25% more gold and attacks in waves of 5.' };
-    $('#diff-hint').textContent = `${d.name} — ${hint[this.pickDiff]}`;
+    $('#diff-name').textContent = `${this.pickDiff} · ${d.name}`;
+    $('#diff-name').className = this.pickDiff >= 8 ? 'hell' : this.pickDiff >= 4 ? 'hard' : '';
+    $('#diff-hint').textContent = `${d.hint} Every AI also rolls a random personality (greedy, defensive, aggressive, tactician or wildcard).`;
   }
 
   // ======================= options =======================
@@ -506,7 +510,7 @@ export class UI {
       <div><b>Camps</b> spawn at every full minute (from 1:00) if their spawn ring is empty. They chase up to ${CAMP_RULES.leash} range, then walk home and heal.</div>
       <div><b>Day:</b> a camp attacks anyone who walks within ${CAMP_RULES.dayAggroRange} range of it, or who attacks it. <b>Night:</b> camps sleep (Zzz) and ignore passers-by — but attacking one wakes the whole camp.</div>
       <div><b>Stacking.</b> Hit a camp just before the minute mark and pull it out of its ring: the ring is empty when the timer hits, so a second group spawns, and the first one walks back — now there are two.</div>
-      <div><b>Loot.</b> Creeps drop items of their tier (Tier 1: ${Math.round(CAMP_RULES.dropChance * 100)}%, each higher tier 20% less often). Select a troop and <kbd>RMB</kbd> the item: the closest selected troop with a free slot walks over and picks it up. Items are kept until the carrier dies — then they're gone. The AI also farms its own side's camps now and then.</div>
+      <div><b>Loot.</b> Creeps drop items of their tier (Tier 1: ${Math.round(CAMP_RULES.dropChance * 100)}%, each higher tier ${Math.round(CAMP_RULES.dropFalloff * 100)}% less often). Select a troop and <kbd>RMB</kbd> the item: the closest selected troop with a free slot walks over and picks it up. Items are kept until the carrier dies — then they're gone. The AI also farms its own side's camps now and then.</div>
       ${camps}</div><div id="help-creeps">${creeps}</div>`;
   }
   renderHelpControls() {
@@ -719,16 +723,22 @@ export class UI {
   formLines(id, formId) {
     const n = SKILL_TREES[id][formId], out = [];
     const label = { hp: 'HP', hpRegen: 'HP regen', damage: 'damage', attackSpeed: 'attack speed', moveSpeed: 'move speed', armor: 'armor', ward: 'ward', range: 'range', evasion: 'evasion' };
-    for (const [k, v] of Object.entries(n.stats || {})) out.push(`<span class="sk-l stat">${v > 0 ? '+' : ''}${fmt(v)} ${label[k] || k}</span>`);
-    if (n.cost) out.push(`<span class="sk-l stat">${n.cost > 0 ? '+' : ''}${fmt(n.cost)} gold price</span>`);
-    for (const a of n.abilities || []) out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')} New passive: <b>${ABILITIES[a].name}</b></span>`);
+    // stats are totals vs the base troop (not added to the parent's), so say so on deeper nodes
+    const tot = n.from ? ' <small>(total)</small>' : '';
+    Object.assign(label, { mana: 'max mana', manaRegen: 'mana regen' });
+    for (const [k, v] of Object.entries(n.stats || {})) out.push(`<span class="sk-l stat">${v > 0 ? '+' : ''}${fmt(v)} ${label[k] || k}${tot}</span>`);
+    if (n.cost) out.push(`<span class="sk-l stat">${n.cost > 0 ? '+' : ''}${fmt(n.cost)} gold price${tot}</span>`);
+    for (const a of n.abilities || []) out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')} New ${ABILITIES[a].kind === 'active' ? 'ability' : 'passive'}: <b>${ABILITIES[a].name}</b></span>`);
+    const NAME = { maxStacks: 'stacks', chance: 'chance', damage: 'damage', bonusPct: 'bonus damage', bonusMagic: 'bonus magic', bonusDamage: 'flat bonus', trueStrike: 'true strike' };
     for (const [a, m] of Object.entries(n.abilityMods || {})) {
-      const A = ABILITIES[a], parts = Object.entries(m).map(([f, v]) => {
-        const was = formDef(id, n.from).abilityMods?.[a]?.[f] ?? A[f];
-        const show = (x) => (f === 'chance' ? Math.round(x * 100) + '%' : f === 'maxStacks' && x === 0 ? 'unlimited' : fmt(x));
-        return `${f === 'maxStacks' ? 'stacks' : f} ${show(was)} → ${show(v)}`;
+      const A = ABILITIES[a], parent = formDef(id, n.from).abilityMods?.[a] || {};
+      const parts = Object.entries(m).filter(([f, v]) => f !== 'desc' && f !== 'bonusDamage' && (parent[f] ?? A[f]) !== v).map(([f, v]) => {
+        const was = parent[f] ?? A[f];
+        const show = (x) => (typeof x === 'boolean' ? (x ? 'yes' : 'no') : f === 'chance' || f === 'bonusPct' ? Math.round(x * 100) + '%' : f === 'maxStacks' && x === 0 ? 'unlimited' : fmt(x));
+        return `${NAME[f] || f} ${show(was)} → ${show(v)}`;
       });
-      out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')}<span><b>${A.name}</b>: ${parts.join(', ')}</span></span>`);
+      if (parts.length) out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')}<span><b>${A.name}</b>: ${parts.join(', ')}</span></span>`);
+      else if (!n.from || !parent) out.push(`<span class="sk-l">${pIcon(a, 'class="pico sm"')}<span><b>${A.name}</b> improved</span></span>`);
     }
     return out;
   }
@@ -1059,10 +1069,12 @@ export class UI {
         grid.appendChild(c);
       });
       if (sel.length > 24) grid.insertAdjacentHTML('beforeend', `<div class="more">+${sel.length - 24}</div>`);
+      this._invKey = '';
       this.renderInventory(single ? p : null);
       this.renderAbilityBar(p, isEnemy);
     }
     this.updateAbilityBar(p);
+    if (single) this.renderInventory(p);   // item cooldowns / used-up items
     const f = p.hp / p.maxHp;
     $('#sp-hpfill').style.width = (f * 100) + '%';
     $('#sp-hpfill').style.background = f > 0.5 ? 'var(--hp)' : f > 0.25 ? 'var(--gold)' : 'var(--bad)';
@@ -1124,13 +1136,23 @@ export class UI {
   renderInventory(u) {
     const inv = $('#sp-inv');
     inv.classList.toggle('on', !!u);
-    if (!u) { inv.innerHTML = ''; return; }
+    if (!u) { inv.innerHTML = ''; this._invKey = ''; return; }
+    const mine = u.team === this.app.playerTeam;
+    // only rebuild when items / cooldowns change (cheap, and clicks don't get eaten by a rebuild)
+    const key = u.id + ':' + u.items.join(',') + ':' + u.itemCd.map((c) => Math.ceil(Math.max(0, c))).join(',');
+    if (key === this._invKey) return;
+    this._invKey = key;
     inv.innerHTML = `<div class="lbl">ITEMS</div><div class="slots">${u.items.map((id, i) => {
       const it = id && ITEMS[id];
-      return it
-        ? `<div class="slot" data-tip="item:${id}"><svg class="it"><use href="#${it.sprite}"/></svg></div>`
-        : `<div class="slot empty" data-tip="slot:${i}"></div>`;
+      if (!it) return `<div class="slot empty" data-tip="slot:${i}"></div>`;
+      const act = it.active && mine, cd = u.itemCd[i] > 0 ? Math.ceil(u.itemCd[i]) : 0;
+      return `<div class="slot${act ? ' act' : ''}" data-tip="item:${id}" data-slot="${i}"><svg class="it"><use href="#${it.sprite}"/></svg>${cd ? `<span class="icd">${cd}</span>` : ''}</div>`;
     }).join('')}</div>`;
+    $$('.slot.act', inv).forEach((el) => (el.onclick = () => {
+      const err = u.useItem(+el.dataset.slot);
+      if (err) { this.toast(err, 'err'); sfx('error', 150); } else sfx('order');
+      this._invKey = ''; this.renderInventory(u);
+    }));
   }
 
   drawMinimap() {
@@ -1191,7 +1213,8 @@ export class UI {
     $('#end-title').className = win ? 'win' : 'lose';
     $('#end-sub').textContent = win ? `The ${FACTIONS[ai.faction].baseName} has fallen.` : `Your ${FACTIONS[me.faction].baseName} was destroyed.`;
     $('#end-stats').innerHTML = `
-      <tr><th></th><th>You</th><th>AI (${DIFFICULTY[g.diffId].name})</th></tr>
+      <tr><th></th><th>You</th><th>AI (${g.diffId} · ${DIFFICULTY[g.diffId].name})</th></tr>
+      <tr><td>AI personality</td><td colspan="2">${ai.persona?.name || '—'}</td></tr>
       <tr><td>Match time</td><td colspan="2">${fmtTime(g.time)}</td></tr>
       <tr><td>Troops trained</td><td>${me.stats.trained}</td><td>${ai.stats.trained}</td></tr>
       <tr><td>Kills</td><td>${me.stats.kills}</td><td>${ai.stats.kills}</td></tr>

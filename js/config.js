@@ -305,8 +305,22 @@ export const ABILITIES = {
   },
   eagleEye: {
     id: 'eagleEye', kind: 'passive', name: 'Eagle Eye', icon: 'p-eye',
-    chance: 0.2, bonusDamage: 5,
+    chance: 0.2, bonusDamage: 5, bonusPct: 0, bonusMagic: 0, trueStrike: false,   // skill-tree forms change these (Scout Ranger)
     desc: '20% chance on each shot to deal +5 bonus damage (critical shot).',
+  },
+  cutThroat: {
+    id: 'cutThroat', kind: 'passive', name: 'Cut Throat', icon: 'p-cutthroat', duration: 2,
+    desc: 'After killing an enemy, becomes invulnerable for 2 seconds.',
+  },
+  bowsling: {
+    id: 'bowsling', kind: 'passive', name: 'Bowsling', icon: 'p-bowsling', chance: 0.4,
+    desc: '40% chance on each shot to fire a second arrow at another enemy within attack range.',
+  },
+  tumble: {
+    id: 'tumble', kind: 'active', name: 'Tumble', icon: 'a-tumble', cast: 'line', range: 3.4, width: 1.2, cooldown: 3,
+    speedBonus: 15,                              // roll speed = current move speed + 15
+    ai: { whenThreatened: true },
+    desc: 'Roll 3.4 range toward the cursor at move speed +15. Cooldown 3s.',
   },
   fervor: {
     id: 'fervor', kind: 'passive', name: 'Fervor', icon: 'p-fervor',
@@ -349,13 +363,13 @@ export const ABILITIES = {
   // ---------- skill-tree passives (js/skilltree.js) ----------
   fury: {
     id: 'fury', kind: 'passive', name: 'Fury', icon: 'p-fury',
-    duration: 5, maxStacks: 10, perStack: 2,      // maxStacks 0 = no limit (Chaotic Viking)
-    desc: 'Each hit puts 1 Fury stack on the target for 5s (hitting again refreshes it and adds 1, max 10). Every Viking deals +2 damage per stack to that target.',
+    duration: 5, maxStacks: 10, perStack: 0.04,   // +4% damage taken from Vikings per stack; maxStacks 0 = no limit (Chaotic Viking)
+    desc: 'Each hit puts 1 Fury stack on the target for 5s (hitting again refreshes it and adds 1, max 10). The target takes +4% damage from every Viking per stack.',
   },
   chainLightning: {
     id: 'chainLightning', kind: 'passive', name: 'Chain Lightning', icon: 'p-chain',
-    chance: 0.2, damage: 10, damageType: 'magic', jump: 2, targets: 4,
-    desc: '20% chance on hit to zap the target with lightning for 10 magic damage. It jumps to a random enemy within 2 range of the last one, up to 4 enemies.',
+    chance: 0.2, damage: 25, damageType: 'magic', jump: 2, targets: 4, bounceDelay: 0.3,
+    desc: '20% chance on hit to zap the target with lightning for 25 magic damage. Every 0.3s it jumps to a random enemy within 2 range of the last one, up to 4 enemies.',
   },
   // ---------- granted by Barracks upgrades (not on any troop by default) ----------
   flurry: {
@@ -423,13 +437,50 @@ export const ITEMS = {
   shoulderGuard:{ id: 'shoulderGuard', sprite: 'it-shoulder', tier: 1,name: 'Shoulder Guard', icon: '#3b4652', desc: '+2 armor, +2 ward', stats: { armor: 2, ward: 2 } },
   shackles:     { id: 'shackles', sprite: 'it-shackles', tier: 1,     name: 'Shackles',       icon: '#5a5f69', desc: 'Passive: on a melee troop, 20% chance on hit to DISARM the target for 3s (it can\'t start attacks). Doesn\'t stack: an already-disarmed target can\'t be disarmed again or refreshed.', disarm: { chance: 0.2, duration: 3 } },
   riotHelmet:   { id: 'riotHelmet', sprite: 'it-helmet', tier: 1,   name: 'Riot Helmet',    icon: '#2f4a8a', desc: 'Passive: gain +3 armor for 3s after being hit by a ranged attack.', helmet: { armor: 3, duration: 3 } },
+  wellDoneSteak:{ id: 'wellDoneSteak', sprite: 'it-steak', tier: 1, name: 'Well Done Steak', icon: '#a8502a', desc: 'Active: eat it to heal 50 HP. Used up.',
+    active: { heal: 50, consumable: true, cooldown: 0, ai: 'lowHp' } },
+  robe:         { id: 'robe', sprite: 'it-robe', tier: 1,          name: 'Robe',           icon: '#4a3aa0', desc: '+5 max mana and +1 mana regen (only on troops that have mana).', manaStats: { mana: 5, manaRegen: 1 } },
+  broadsword:   { id: 'broadsword', sprite: 'it-broadsword', tier: 1, name: 'Broadsword',   icon: '#c9d1d8', desc: '+15 damage, -20 attack speed.', stats: { damage: 15, attackSpeed: -20 } },
+  javelin:      { id: 'javelin', sprite: 'it-javelin', tier: 1,     name: 'Javelin',        icon: '#a07040', desc: '+2 damage. Active: for 3s your next attack is a true strike (can\'t miss or be evaded) and Breaks the target for 3s. Cooldown 12s.',
+    stats: { damage: 2 }, active: { trueStrike: 3, breakT: 3, cooldown: 12, ai: 'attacking' } },
   pocketKnife:  { id: 'pocketKnife', sprite: 'it-knife', tier: 1,  name: 'Pocket Knife',   icon: '#c9d1d8', desc: '+4 damage. On hit, deals +3 damage to every enemy within 3 range of you.', stats: { damage: 4 }, splash: { damage: 3, radius: 3 } },
 };
 
+// AI difficulty 1-10. Levels 1-3 = the original Recruit / Veteran / Warlord brains. From 4 up the AI also gets cheats:
+//   dmgTaken / dmgDealt: multipliers on damage its troops and base take / its troops deal
+//   goldMult: income AND kill bounty; trainMult / researchMult: time multipliers; startGold: extra gold at 0:00
+//   baseLevel: its base starts at this level; xpMult: its troops level up (skill tree) this much faster
+//   brain: thinkEvery (s between decisions), hesitate (chance to skip a decision), waveSize, researchRate, sloppy (0-1)
+const BRAIN = {
+  recruit: { thinkEvery: 1.6, hesitate: 0.35, waveSize: 1, researchRate: 0.15, sloppy: 0.6 },
+  veteran: { thinkEvery: 0.8, hesitate: 0.1, waveSize: 4, researchRate: 0.35, sloppy: 0.3 },
+  warlord: { thinkEvery: 0.4, hesitate: 0, waveSize: 5, researchRate: 0.6, sloppy: 0.1 },
+  hell:    { thinkEvery: 0.3, hesitate: 0, waveSize: 5, researchRate: 0.8, sloppy: 0 },
+};
 export const DIFFICULTY = {
-  easy:   { name: 'Recruit',  incomeMult: 0.8,  thinkEvery: 1.6, hesitate: 0.35, waveSize: 1, researchRate: 0.15 },
-  normal: { name: 'Veteran',  incomeMult: 1.0,  thinkEvery: 0.8, hesitate: 0.1,  waveSize: 4, researchRate: 0.35 },
-  hard:   { name: 'Warlord',  incomeMult: 1.25, thinkEvery: 0.4, hesitate: 0,    waveSize: 5, researchRate: 0.6 },
+  1:  { name: 'Recruit',    ...BRAIN.recruit, goldMult: 0.8,  hint: 'Earns 20% less gold and second-guesses itself.' },
+  2:  { name: 'Veteran',    ...BRAIN.veteran, goldMult: 1.0,  hint: 'Fair fight: same income as you, attacks in groups of 4.' },
+  3:  { name: 'Warlord',    ...BRAIN.warlord, goldMult: 1.25, hint: '25% more gold, attacks in waves of 5.' },
+  4:  { name: 'Champion',   ...BRAIN.warlord, goldMult: 1.5,  dmgTaken: 0.8, hint: 'Its troops take 20% less damage. 50% more gold.' },
+  5:  { name: 'Conqueror',  ...BRAIN.warlord, goldMult: 2.0,  dmgTaken: 0.8, dmgDealt: 1.2, hint: 'Takes 20% less damage, deals 20% more. Double gold.' },
+  6:  { name: 'Tyrant',     ...BRAIN.warlord, goldMult: 2.25, dmgTaken: 0.75, dmgDealt: 1.3, trainMult: 0.85, startGold: 100, hint: 'Takes 25% less, deals 30% more, 2.25x gold, trains 15% faster.' },
+  7:  { name: 'Overlord',   ...BRAIN.hell,    goldMult: 2.5,  dmgTaken: 0.7, dmgDealt: 1.4, trainMult: 0.75, researchMult: 0.75, startGold: 200, xpMult: 1.5, hint: 'Takes 30% less, deals 40% more, 2.5x gold, faster training, research and evolutions.' },
+  8:  { name: 'Nightmare',  ...BRAIN.hell,    goldMult: 3.0,  dmgTaken: 0.65, dmgDealt: 1.5, trainMult: 0.65, researchMult: 0.6, startGold: 300, xpMult: 2, baseLevel: 2, hint: 'Takes 35% less, deals 50% more, triple gold, starts with a level 2 base.' },
+  9:  { name: 'Apocalypse', ...BRAIN.hell,    goldMult: 3.5,  dmgTaken: 0.6, dmgDealt: 1.6, trainMult: 0.55, researchMult: 0.5, startGold: 400, xpMult: 2.5, baseLevel: 3, hint: 'Takes 40% less, deals 60% more, 3.5x gold, starts with a level 3 base.' },
+  10: { name: 'HELL',       ...BRAIN.hell,    goldMult: 4.0,  dmgTaken: 0.5, dmgDealt: 1.75, trainMult: 0.5, researchMult: 0.4, startGold: 600, xpMult: 3, baseLevel: 3, hint: 'Takes half damage, deals 75% more, 4x gold, everything faster. Good luck.' },
+};
+// old names still work (saved links, Dev Lab, the demo match)
+DIFFICULTY.easy = DIFFICULTY[1]; DIFFICULTY.normal = DIFFICULTY[2]; DIFFICULTY.hard = DIFFICULTY[3];
+
+// AI personalities: every AI rolls one per match (weighted by difficulty), so no two matches feel the same.
+//   greed: jungles/saves more, defends less · aggro: smaller, earlier waves and invades · caution: bigger waves, defends,
+//   repairs early · smart: reads fights (retreats when outmatched, rescues its junglers, focuses) · sloppy comes from the level
+export const AI_PERSONALITIES = {
+  greedy:    { name: 'Greedy',     greed: 0.9, aggro: 0.3, caution: 0.3, smart: 0.5 },
+  defensive: { name: 'Defensive',  greed: 0.4, aggro: 0.2, caution: 0.9, smart: 0.6 },
+  aggressive:{ name: 'Aggressive', greed: 0.2, aggro: 0.9, caution: 0.2, smart: 0.4 },
+  tactician: { name: 'Tactician',  greed: 0.5, aggro: 0.5, caution: 0.5, smart: 1.0 },
+  wildcard:  { name: 'Wildcard',   greed: 0.5, aggro: 0.6, caution: 0.3, smart: 0.3, chaos: 1 },
 };
 
 /** attacks per minute -> seconds between attacks */

@@ -16,8 +16,8 @@ export const CAMP_RULES = {
   giveUpAfter: 5,     // seconds without being hit -> go home
   chaseWindow: 3,     // seconds a creep may chase OUTSIDE its spawn box before it gives up
   giveUpHeal: { pct: 0.05, time: 4 },   // on giving up: heal 5% max HP/s for 4s (camp creeps only)
-  dropChance: 0.20,   // per creep killed, Tier 1
-  dropFalloff: 0.20,  // each tier up drops 20% less often (T2 16%, T3 12.8%...)
+  dropChance: 0.50,   // per creep killed, Tier 1
+  dropFalloff: 0.25,  // each tier up drops 25% less often (T2 37.5%, T3 28.13%...)
   dayAggroRange: 2,   // during the day, enemies this close wake the camp; at night camps sleep
 };
 

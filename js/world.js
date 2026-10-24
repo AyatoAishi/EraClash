@@ -11,7 +11,7 @@ function rand(seed) { // deterministic so the map looks the same every match
 }
 
 const DAY = { sky: new THREE.Color(0x9cc4e4), hemiSky: new THREE.Color(0xdfefff), hemiGround: new THREE.Color(0x4a5a3a), sun: new THREE.Color(0xfff1d6), sunI: 1.6, hemiI: 0.9 };
-const NIGHT = { sky: new THREE.Color(0x0d1530), hemiSky: new THREE.Color(0x3a4f8a), hemiGround: new THREE.Color(0x141a24), sun: new THREE.Color(0x8fa8ff), sunI: 0.35, hemiI: 0.42 };
+const NIGHT = { sky: new THREE.Color(0x1c2850), hemiSky: new THREE.Color(0x6a80c0), hemiGround: new THREE.Color(0x2a3242), sun: new THREE.Color(0xa8bcff), sunI: 0.75, hemiI: 0.78 };   // moonlit, still readable
 
 export function createWorld(scene) {
   const r = rand(1337);
@@ -37,6 +37,14 @@ export function createWorld(scene) {
     { kind: 'plaza', x: 21, z: -23, r: 5 },
     { kind: 'park', x: 21, z: 23, r: 5 },
   ];
+  // Modern side road grid: an avenue up to every camp and a cross street joining them, so the city jungle is as
+  // quick to cross as the forest. Kept clear of buildings. { x0, x1, z0, z1 } boxes, mirrored on both sides.
+  const ROADS = [];
+  for (const sg of [-1, 1]) {
+    for (const ax of [27.5, 36, 48]) ROADS.push({ x0: ax - 2, x1: ax + 2, z0: Math.min(sg * 14, sg * 46), z1: Math.max(sg * 14, sg * 46), dir: 'z' });
+    ROADS.push({ x0: 7, x1: 56, z0: sg * 31.5 - 2, z1: sg * 31.5 + 2, dir: 'x' });
+  }
+  const onRoad = (x, z, hw = 0, hd = hw) => ROADS.some((R) => x + hw > R.x0 && x - hw < R.x1 && z + hd > R.z0 && z - hd < R.z1);
   const inFeature = (x, z, pad = 0) => FEATURES.some((f) => Math.hypot(x - f.x, z - f.z) < (f.r || Math.max(f.rx, f.rz)) + pad);
   const onHill = (x, z, pad = 0) => terrain.hillF(x, z) > 0 || Math.hypot((x - TERRAIN.hill.x) / (TERRAIN.hill.rx + pad + 7), (z - TERRAIN.hill.z) / (TERRAIN.hill.rz + pad + 3.5)) < 1;
 
@@ -51,6 +59,7 @@ export function createWorld(scene) {
   const asphalt = [0x4a4d52, 0x45484d, 0x505358];
   const concrete = [0x9a9da2, 0xa3a6ab, 0x8f9297];
   const darkLot = [0x3a3d42, 0x34373c, 0x404348];
+  const road = [0x3f4247, 0x3b3e43, 0x43464b];
   let i = 0;
   for (let ix = 0; ix < nx; ix++) {
     for (let iz = 0; iz < nz; iz++) {
@@ -67,6 +76,7 @@ export function createWorld(scene) {
       else if (Math.abs(x) < riverW && z > terrain.riverStart) palette = riverbed;
       else if (feat) palette = feat.kind === 'plaza' ? plazaStone : feat.kind === 'park' ? grass : jungle;
       else if (camp) palette = camp.side === 'medieval' ? dirt : darkLot;
+      else if (x > 0 && onRoad(x, z, 0.9)) palette = road;
       else if (!edge) palette = inLane ? (r() < 0.75 ? dirt : grass) : (Math.abs(z) > 18 ? jungle : grass);
       else palette = inLane ? asphalt : (Math.abs(z) > 30 && r() < 0.35 ? grass : concrete);   // city with patches of green
       col.setHex(palette[Math.floor(r() * palette.length)]);
@@ -83,6 +93,11 @@ export function createWorld(scene) {
   for (let x = 4; x < 50; x += 4) {
     const d = new THREE.Mesh(M.boxGeo(1.8, 0.05, 0.3), M.sharedMat(0xf2c94c));
     d.position.set(x, 0.03, 0); d.receiveShadow = true; scene.add(d);
+  }
+  for (const R of ROADS) {   // dashed white center lines on the city roads
+    const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2;
+    if (R.dir === 'z') for (let z = R.z0 + 1.5; z < R.z1 - 1; z += 3.5) { if (CAMPS.some((c) => Math.hypot(c.x - cx, c.z - z) < 5)) continue; const d = new THREE.Mesh(M.boxGeo(0.25, 0.05, 1.4), M.sharedMat(0xe8e8e8)); d.position.set(cx, 0.03, z); scene.add(d); }
+    else for (let x = R.x0 + 1.5; x < R.x1 - 1; x += 3.5) { if (CAMPS.some((c) => Math.hypot(c.x - x, c.z - cz) < 5)) continue; const d = new THREE.Mesh(M.boxGeo(1.4, 0.05, 0.25), M.sharedMat(0xe8e8e8)); d.position.set(x, 0.03, cz); scene.add(d); }
   }
   // shallow water over the river bed (walkable, purely visual)
   // the river springs from the foot of the north hill
@@ -172,32 +187,31 @@ export function createWorld(scene) {
   }
 
   // ---------- modern city blocks + gang hideouts ----------
-  for (let k = 0; k < 8; k++) place(M.buildBarrier(), 10 + r() * 40, (r() < 0.5 ? -1 : 1) * (GAME.laneHalfWidth + 3 + r() * 2), Math.floor(r() * 2) * Math.PI / 2, { hw: 1.2, hd: 0.35, kind: 'barrier' });
+  for (let k = 0; k < 8; k++) { const bx = 10 + r() * 40, bz = (r() < 0.5 ? -1 : 1) * (GAME.laneHalfWidth + 3 + r() * 2), ry = Math.floor(r() * 2) * Math.PI / 2; if (!onRoad(bx, bz, 1.3)) place(M.buildBarrier(), bx, bz, ry, { hw: 1.2, hd: 0.35, kind: 'barrier' }); }
   const bcols = [0x7d8794, 0x9a8f86, 0x6f7a86, 0xb0a99f, 0x8a7f78];
   for (let k = 0; k < 40; k++) {
     const side = k % 2 ? -1 : 1;
     const x = 4 + ((k >> 1) % 10) * 7 + r() * 2, z = side * (GAME.laneHalfWidth + 8 + r() * 26);
     const bw = 4 + Math.floor(r() * 4), bh = 6 + Math.floor(r() * 12), bd = 4 + Math.floor(r() * 3);
-    if (nearCamp(x, z, 9.5) || inCorridor(x, z) || x - bw / 2 < riverW + 1 || inFeature(x, z, 4) || onHill(x, z, 3)) continue;
+    if (nearCamp(x, z, 9.5) || inCorridor(x, z) || x - bw / 2 < riverW + 1 || inFeature(x, z, 4) || onHill(x, z, 3) || onRoad(x, z, bw / 2 + 0.6, bd / 2 + 0.6)) continue;
     const b = M.buildBuilding(bw, bh, bd, bcols[k % 5]);
     place(b, x, z, side > 0 ? Math.PI : 0, { hw: bw / 2, hd: bd / 2, vision: true, kind: 'building' });
   }
   for (const c of CAMPS.filter((c) => c.side === 'modern')) {
     const s = -Math.sign(c.z);   // toward lane
-    // buildings walling the alley on three sides, open toward the lane
+    // a building on each side of the lot where it doesn't block a road or sit on the hill (roads run through the lots)
     const BLD = (w, d) => ({ hw: w / 2, hd: d / 2, vision: true, kind: 'building' });
-    place(M.buildBuilding(6, 10, 5, 0x6f6660), c.x, c.z - s * 9.5, s > 0 ? 0 : Math.PI, BLD(6, 5));
-    if (!onHill(c.x - 9.5, c.z - s * 3, -6)) place(M.buildBuilding(5, 8, 6, 0x7d8794), c.x - 9.5, c.z - s * 3, Math.PI / 2, BLD(5, 6));
-    else place(M.buildFence(6), c.x - 6.5, c.z - s * 3, Math.PI / 2, { hw: 3, hd: 0.12, kind: 'fence' });
-    if (!onHill(c.x + 9.5, c.z - s * 3, -6)) place(M.buildBuilding(5, 12, 6, 0x8a7f78), c.x + 9.5, c.z - s * 3, -Math.PI / 2, BLD(5, 6));
-    else place(M.buildFence(6), c.x + 6.5, c.z - s * 3, Math.PI / 2, { hw: 3, hd: 0.12, kind: 'fence' });
-    place(M.buildDumpster(), c.x - 5, c.z - s * 5.5, 0, { hw: 1.15, hd: 0.65, kind: 'dumpster' });
-    const bf = place(M.buildBarrel(true), c.x + 4.5, c.z - s * 5.5, 0, { r: 0.45, kind: 'barrel' }); flames.push(...bf.userData.flames);
-    glowSources.push({ x: c.x + 4.5, y: 1.6, z: c.z - s * 5.5, color: 0xff7a2e, flicker: true });
-    place(M.buildBarrel(), c.x + 5.6, c.z - s * 4.6, 0, { r: 0.45, kind: 'barrel' });
-    place(M.buildCrate(), c.x - 6.5, c.z - s * 3.5, 0.3, { r: 0.55, kind: 'crate' });
-    place(M.buildFence(5), c.x - 6.5, c.z + s * 1.5, Math.PI / 2, { hw: 2.5, hd: 0.12, kind: 'fence' });
-    place(M.buildFence(5), c.x + 6.5, c.z + s * 1.5, Math.PI / 2, { hw: 2.5, hd: 0.12, kind: 'fence' });
+    if (!onRoad(c.x, c.z - s * 9.5, 3.4, 2.9)) place(M.buildBuilding(6, 10, 5, 0x6f6660), c.x, c.z - s * 9.5, s > 0 ? 0 : Math.PI, BLD(6, 5));
+    for (const sx of [-1, 1]) {
+      const bx = c.x + sx * 9.5, bz = c.z - s * 3;
+      if (!onHill(bx, bz, -6) && !onRoad(bx, bz, 3.4, 3.4)) place(M.buildBuilding(5, sx < 0 ? 8 : 12, 6, sx < 0 ? 0x7d8794 : 0x8a7f78), bx, bz, -sx * Math.PI / 2, BLD(5, 6));
+    }
+    const prop = (fn, x, z, ry, solid, pad = 1.2) => (onRoad(x, z, pad) ? null : place(fn(), x, z, ry, solid));
+    prop(M.buildDumpster, c.x - 5, c.z - s * 5.5, 0, { hw: 1.15, hd: 0.65, kind: 'dumpster' });
+    const bf = prop(() => M.buildBarrel(true), c.x + 4.5, c.z - s * 5.5, 0, { r: 0.45, kind: 'barrel' });
+    if (bf) { flames.push(...bf.userData.flames); glowSources.push({ x: c.x + 4.5, y: 1.6, z: c.z - s * 5.5, color: 0xff7a2e, flicker: true }); }
+    prop(M.buildBarrel, c.x + 5.6, c.z - s * 4.6, 0, { r: 0.45, kind: 'barrel' });
+    prop(M.buildCrate, c.x - 6.5, c.z - s * 3.5, 0.3, { r: 0.55, kind: 'crate' });
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 5) {     // painted spawn-box ring
       const m = new THREE.Mesh(M.boxGeo(0.7, 0.04, 0.25), M.sharedMat(0xf2c94c));
       m.position.set(c.x + Math.cos(a) * 4, 0.03, c.z + Math.sin(a) * 4); m.rotation.y = -a; scene.add(m);
@@ -246,7 +260,7 @@ export function createWorld(scene) {
   // street trees in planters along the city side of the lane (a bit of green between the blocks)
   for (let x = 12; x < 52; x += 13) for (const sz of [-1, 1]) {
     const z = sz * (GAME.laneHalfWidth + 5.5);
-    if (!blockedSpot(x, z, 9)) place(M.buildPlanter(r() < 0.5), x, z, 0, { hw: 0.8, hd: 0.8, kind: 'planter' });
+    if (!blockedSpot(x, z, 9) && !onRoad(x, z, 1.2)) place(M.buildPlanter(r() < 0.5), x, z, 0, { hw: 0.8, hd: 0.8, kind: 'planter' });
   }
 
   // ---------- night lights (point lights, faded in at night) ----------
