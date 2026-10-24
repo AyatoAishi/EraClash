@@ -32,7 +32,7 @@ export class Controls {
 
   setGame(game, team) {
     this.game = game; this.team = team; this.selection = []; this.groups = {}; this.armed = false; this.selectedBase = null;
-    if (this.hoverRing) { this.game.scene.remove(this.hoverRing, this.baseRing); this.hoverRing = null; }
+    for (const m of [this.rangeMesh, this.hoverRing, this.baseRing, this.aimMesh]) if (m) game.scene.add(m);   // the Dev Lab arena has its own scene
     this.hooks.onSelectionChange?.();
   }
 

@@ -6,6 +6,26 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.12.0', date: '2026-10-24T12:28:00+08:00', title: 'Dev Lab & base levels',
+    sections: [
+      { title: 'Dev Lab (main menu, top right)', items: [
+        '<b>Model Viewer</b>: every building, troop, creep and prop on a turntable. Orbit camera (drag / right-drag / wheel), wireframe, bounding box, grid, axes, night lighting, a Viking for scale, and the model\'s size and box count.',
+        'Troops preview their <b>idle / walk / attack</b> animations with a speed slider.',
+        '<b>Sandbox</b>: a live arena on a <b>flat floor</b> or the <b>lane map</b>. Place any unit for any side (Medieval, Modern, Neutral) ×1–10, set any Barracks upgrade level up or down instantly, give items, heal / kill / god-mode a troop, pause, step a frame or run at 0.25×–4×, switch day and night, and turn invulnerable bases and fog of war on or off.',
+        'Model list filter: <b>All / Medieval / Modern</b>. City block moved to Props.',
+        'The <b>Inspector</b> shows the selected troop\'s base, bonus and current stats live.',
+      ] },
+      { title: 'Base levels (groundwork for Grow Castle mode)', items: [
+        'The castle now has <b>5 levels</b>: Wooden Fort, Stone Keep, Castle (the current look), Fortress (central donjon, gilded spires) and Citadel (taller towers, braziers, royal banners).',
+        'Each level has its own <b>wall slots</b> (1 / 2 / 4 / 6 / 8). Battlement Rangers stand on these slots. Matches use the level 3 castle.',
+        'Front-wall Rangers now stand <b>behind the battlements</b>, in the gaps between the merlons, instead of on top of them.',
+        'The <b>Modern HQ</b> also has <b>5 levels</b>: Field Outpost, Police Precinct, Command HQ (the current look), Military Compound (guard towers with searchlights, razor wire, radar) and Tech Tower (glass tower, parked helicopter, rooftop turret). Rooftop slots: 1 / 2 / 4 / 6 / 8.',
+        'The Command HQ roof gets a <b>concrete parapet</b>. Overwatch Gunners stand behind it, in the gaps.',
+      ] },
+      { title: 'Balance', items: ['<b>Battlement</b> and <b>Rooftop Overwatch</b> max level 5 → <b>4</b> (four troops fit on each base front).'] },
+    ],
+  },
+  {
     version: '0.11.1', date: '2026-10-24T12:02:00+08:00', title: 'New troop tuning',
     sections: [
       { title: 'Balance', items: [

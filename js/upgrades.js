@@ -107,7 +107,7 @@ export const UPGRADES = {
   },
   battlement: {
     id: 'battlement', faction: 'medieval', category: 'base', icon: 'u-battlement',
-    name: 'Battlement', max: 5,
+    name: 'Battlement', max: 4,
     price: [100, 200, 400, 800, 1600], time: [12, 16, 20, 25, 30],
     effects: [{ type: 'towers', unit: 'archer', rangeBonus: 15 }],
     desc: 'Adds <b>+1 Ranger on the castle walls</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Ranger upgrades.',
@@ -199,7 +199,7 @@ export const UPGRADES = {
   },
   overwatch: {
     id: 'overwatch', faction: 'modern', category: 'base', icon: 'u-overwatch',
-    name: 'Rooftop Overwatch', max: 5,
+    name: 'Rooftop Overwatch', max: 4,
     price: [100, 200, 400, 800, 1600], time: [12, 16, 20, 25, 30],
     effects: [{ type: 'towers', unit: 'gunner', rangeBonus: 15 }],
     desc: 'Adds <b>+1 Gunner on the HQ roof</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Gunner upgrades.',

@@ -112,3 +112,9 @@ Systems are split so new features plug in without touching each other:
 - Casting: ability `castTime`, `cast: 'line'` (aimed). `Unit.castAbility(i, aim)` → `finishCast`. Controls `targeting` mode draws the line.
 - Auras: any passive with `aura: { radius, bonusX... }` is applied by `Unit.updatePassive` to allies (same aura = max, different auras add).
 - Trails: `Game.addTrail` / `updateTrails` (Barding Rally). Line projectiles: `Game.skillshots` (Arrow Piercer).
+
+## Dev Lab (v0.12.0)
+- Main menu → **DEV LAB** (top right). `js/dev/devlab.js` + `js/dev/orbit.js`, styles in `css/devlab.css`. While `app.state === 'devlab'` the frame loop calls `DevLab.update()` instead of the match loop (`app.openDevLab / closeDevLab` in main.js).
+- **Model Viewer**: entries carry a `theme` ('medieval' | 'modern' | 'any') for the All / Medieval / Modern filter. Catalog is built from `UNIT_BUILDERS` + the building/prop builders (`buildCatalog()`). Troops are real `Unit`s (from a never-updated sandbox `Game`), animated by calling `unit.animate()`. New models show up automatically once they're in `UNIT_BUILDERS`; add props/buildings to `buildCatalog()`.
+- **Sandbox**: `new Game({ ..., sandbox: true })` = no AI, no neutral camp spawns; `base.invulnerable` blocks base damage. Flat floor = the lab's own scene with `world = { terrain: null, castle, hq }` (no pathing/vision); "Lane map" uses the real world, terrain and fog. Upgrade "−" rebuilds the team's upgrades from scratch (`setUpgradeLevels`).
+- **Base levels**: `buildCastle(level)` / `buildHQ(level)` (1–5, default 3 = the classic look), tiers in `CASTLE_TIERS` / `HQ_TIERS`, troop spots in `castleSlots(level)` / `hqSlots(level)` (also on `obj.userData.slots`, local coords, HQ front = -x). `Game.spawnTower` uses the base's slots when it has them. Dev Lab's `BASES` table ties each base to its builder, tiers and wall troop.

@@ -19,9 +19,11 @@ export class Game {
    * @param {string} o.difficulty
    * @param {object} o.world
    * @param {function} o.getViewX  returns camera x (for audio culling)
+   * @param {boolean} o.sandbox  Dev Lab arena: no AI, no neutral camps (js/dev/devlab.js drives it)
    */
-  constructor({ scene, playerTeam, difficulty = 'normal', world, getViewX = () => 0 }) {
+  constructor({ scene, playerTeam, difficulty = 'normal', world, getViewX = () => 0, sandbox = false }) {
     this.scene = scene;
+    this.sandbox = sandbox;
     this.world = world;
     this.playerTeam = playerTeam;
     this.diff = DIFFICULTY[difficulty];
@@ -103,7 +105,7 @@ export class Game {
     const f = night ? ramp : 1 - ramp;            // fades over the first `fade` seconds of each phase
     return { night, f: this.time < fade && !night ? 0 : f, left: half - into, cycle: Math.floor(this.time / (half * 2)) + 1 };
   }
-  isAI(t) { return this.playerTeam === null || t !== this.playerTeam; }
+  isAI(t) { return !this.sandbox && (this.playerTeam === null || t !== this.playerTeam); }
   on(evt, fn) { (this.listeners[evt] ||= []).push(fn); }
   emit(evt, ...a) { (this.listeners[evt] || []).forEach((fn) => fn(...a)); }
 
@@ -208,9 +210,10 @@ export class Game {
     u.invulnT = 0; u.shield.visible = false; u.bar.visible = false;
     const b = this.bases[team];
     const zs = [0, -3.2, 3.2, -1.6, 1.6, -4.6, 4.6];
-    const front = team === 0 ? b.x + 4.2 : b.x - 4.4;
-    const y = team === 0 ? 9.9 : 10.5;
-    u.spawnAt(front, zs[idx % zs.length]);
+    const slot = b.obj.userData.slots?.[idx];   // castle levels define their own wall spots (models.js castleSlots)
+    const front = slot ? b.x + slot.x : team === 0 ? b.x + 4.2 : b.x - 4.4;
+    const y = slot ? slot.y : team === 0 ? 9.9 : 10.5;
+    u.spawnAt(front, slot ? slot.z : zs[idx % zs.length]);
     u.yOff = y;
     u.obj.position.y = y;
     u.order = { type: 'idle' };
@@ -662,7 +665,7 @@ export class Game {
 
   damageBase(team, raw, src, at = null) {
     const b = this.bases[team];
-    if (b.dead || this.over) return;
+    if (b.dead || this.over || b.invulnerable) return;
     const dmg = raw * defenseMult(GAME.baseArmor);
     b.hp = Math.max(0, b.hp - dmg);
     b.shake = 0.18;
@@ -886,7 +889,7 @@ export class Game {
     this.updateProjectiles(dt);
     this.updateSkillshots(dt);
     this.updateTrails(dt);
-    if (!this.over) { this.updateCamps(); this.updateLoot(dt); }
+    if (!this.over) { if (!this.sandbox) this.updateCamps(); this.updateLoot(dt); }
     this.vision?.update(dt);
     this.applyFog();
     for (let i = this.particles.length - 1; i >= 0; i--) {

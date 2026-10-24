@@ -115,6 +115,7 @@ export class UI {
       else if (go === 'resume') this.app.resume();
       else if (go === 'restart') this.app.restart();
       else if (go === 'quit') this.app.quitToMenu();
+      else if (go === 'devlab') this.app.openDevLab();
       else this.show(go);
     });
     $('#btn-pause').addEventListener('click', () => { sfx('click'); this.app.pause(); });
