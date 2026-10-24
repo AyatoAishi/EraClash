@@ -43,7 +43,7 @@ export const UPGRADES = {
     name: 'Flurry', max: 5,
     price: [100, 250, 400, 550, 700], time: [10, 14, 18, 22, 26],
     effects: [{ type: 'grantAbility', unit: 'archer', ability: 'flurry' }],
-    desc: 'Archers gain the active <b>Flurry</b> (Q-slot after their passive): +60/90/120/150/180 attack speed for 4s.',
+    desc: 'Rangers gain the active <b>Flurry</b> (Q-slot after their passive): +60/90/120/150/180 attack speed for 4s.',
     levelText: (l) => `Flurry: +${[60, 90, 120, 150, 180][l - 1]} attack speed for 4s`,
   },
   accuracyTraining: {
@@ -51,7 +51,7 @@ export const UPGRADES = {
     name: 'Accuracy Training', max: Infinity,
     price: boostPrice('archer'), time: STAT_BOOST_TIME,
     effects: [{ type: 'statBoost', unit: 'archer', pct: STAT_BOOST.pct }],
-    desc: 'Stat boost: every Archer (incl. Battlement archers) gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Archer cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    desc: 'Stat boost: every Ranger (incl. Battlement rangers) gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Ranger cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
     levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
   },
 
@@ -78,8 +78,8 @@ export const UPGRADES = {
     name: 'Battlement', max: 5,
     price: [100, 200, 400, 800, 1600], time: [12, 16, 20, 25, 30],
     effects: [{ type: 'towers', unit: 'archer', rangeBonus: 15 }],
-    desc: 'Adds <b>+1 Archer on the castle walls</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Archer upgrades.',
-    levelText: (l) => `${l} wall archer${l > 1 ? 's' : ''}`,
+    desc: 'Adds <b>+1 Ranger on the castle walls</b> per level (+15 range, invulnerable, can\'t be selected). Benefits from Ranger upgrades.',
+    levelText: (l) => `${l} wall ranger${l > 1 ? 's' : ''}`,
   },
 
   // ===================== MODERN =====================
@@ -186,10 +186,10 @@ export const upgradeTime = (U, lvl) => pick(U.time, lvl);
 /**
  * What a faction can research:
  *  - BASE upgrades: the faction's own (faction: id) + shared ones (faction: 'both'). These stay faction-bound
- *    (Battlement always puts Archers on the castle, Overwatch always Gunners on the HQ).
+ *    (Battlement always puts Rangers on the castle, Overwatch always Gunners on the HQ).
  *  - TROOP upgrades follow the UNIT, not the faction: available for every unit the faction can field —
  *    its hiring roster AND the units its base upgrades spawn (so Battlement archers can still get
- *    Accuracy Training even if Archers are removed from the roster). The troop upgrade's `faction` field is ignored.
+ *    Accuracy Training even if Rangers are removed from the roster). The troop upgrade's `faction` field is ignored.
  */
 export const upgradesFor = (factionId) => {
   const base = (u) => u.category === 'base' && (u.faction === factionId || u.faction === 'both');

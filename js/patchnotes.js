@@ -6,6 +6,10 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.10.4', date: '2026-10-24T10:35:00+08:00', title: 'Ranger',
+    sections: [ { title: 'Changes', items: ['The <b>Archer</b> is now called the <b>Ranger</b> (stats and upgrades unchanged; Battlement now puts Rangers on the walls).'] } ],
+  },
+  {
     version: '0.10.3', date: '2026-10-24T03:01:00+08:00', title: 'Emblems & unit-bound upgrades',
     sections: [
       { title: 'Changes', items: [

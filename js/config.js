@@ -114,7 +114,7 @@ export const UNITS = {
     lore: 'A horned raider from the frozen north. Hits hard, swings slow, and refuses to share the spotlight with another Viking.',
   },
   archer: {
-    id: 'archer', name: 'Archer', theme: 'medieval', family: 'marksman', role: 'Ranged marksman', type: 'ranged',
+    id: 'archer', name: 'Ranger', theme: 'medieval', family: 'marksman', role: 'Ranged marksman', type: 'ranged',
     cost: 75, trainTime: 2.0,
     hp: 70, hpRegen: 0.5, damage: 16, damageType: 'physical', attackSpeed: 45,
     armor: 0, ward: 0, evasion: 0, missChance: 0,
@@ -241,7 +241,7 @@ export const ABILITIES = {
   loneWolf: {
     id: 'loneWolf', kind: 'passive', name: 'Lone Wolf', icon: 'p-wolf',
     radius: 9, bonusDamage: 5, bonusRegen: 1, bonusArmor: 3,
-    desc: 'If he is the only Viking within 9 range, gains +5 damage, +1 HP regen and +3 armor. Other troop types don\'t count — pair him with Archers.',
+    desc: 'If he is the only Viking within 9 range, gains +5 damage, +1 HP regen and +3 armor. Other troop types don\'t count — pair him with Rangers.',
   },
   blueLine: {
     id: 'blueLine', kind: 'passive', name: 'Thin Blue Line', icon: 'p-blueline',
