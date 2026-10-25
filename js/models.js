@@ -719,14 +719,39 @@ export function buildZzz() {
 // ======================= DEPLOYABLE BUILDINGS (artillery) =======================
 // Same rig contract as troops (root/body/matList/barY) plus: yaw (turns to aim), barrel (pivot, x = elevation),
 // recoil (slides back on firing), muzzle (flash), scaffold (shown while under construction). Forward = +z.
+// Extended artillery architecture: chassisRock (suspension/recoil pitch), recoils/muzzles arrays, auxiliary hooks.
 function structureRig() {
-  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  return { root, body, mats: new Map(), style: 'structure' };
+  const root = new THREE.Group();
+  const chassisRock = new THREE.Group();
+  root.add(chassisRock);
+  const body = new THREE.Group();
+  chassisRock.add(body);
+  return {
+    root,
+    chassisRock,
+    body,
+    mats: new Map(),
+    style: 'structure',
+    recoils: [],
+    muzzles: [],
+    recoil: null,
+    muzzle: null,
+    drum: null,
+    glow: null,
+    exhaust: null,
+    touchholes: []
+  };
 }
 function finishStructure(r) {
   r.matList = [...r.mats.values()];
   for (const mt of r.matList) mt.emissive = new THREE.Color(0x000000);
-  r.muzzle.visible = false; r.scaffold.visible = false;
+  if (!r.recoil && r.recoils.length > 0) r.recoil = r.recoils[0];
+  if (!r.muzzle && r.muzzles.length > 0) r.muzzle = r.muzzles[0];
+  if (r.muzzle) r.muzzle.visible = false;
+  if (r.muzzles) for (const mz of r.muzzles) mz.visible = false;
+  if (r.exhaust) r.exhaust.visible = false;
+  for (const th of r.touchholes || []) th.visible = false;
+  if (r.scaffold) r.scaffold.visible = false;
   if (r.crew?.muzzle) r.crew.muzzle.visible = false;   // the crew's own rifle flash: the tower draws its own
   return r;
 }
@@ -743,152 +768,1156 @@ function scaffold(parent, half, h, mats) {
 // B3 Twin Cannons, B4 Grapeshot Battery, B5 Thunder Organ. `muzzles` = every barrel tip (multi-barrel guns fire in turn).
 export function buildCannon(level = 1, path = null) {
   const r = structureRig(), m = r.mats;
+  r.rigType = 'cannon';
   const L = level, A = L >= 3 && path === 'a', Bp = L >= 3 && path === 'b';
-  const stone = L >= 2 ? 0x7f8186 : 0x8d8f93, stoneH = L >= 2 ? 0.65 : 0.45, half = A && L >= 4 ? 1.35 : Bp && L >= 5 ? 1.45 : 1.15;
-  // emplacement (gap at the front for the muzzle)
-  for (const [x, z, w, d] of [[-half, 0, 0.4, half * 2 + 0.4], [half, 0, 0.4, half * 2 + 0.4], [0, -half, half * 2 - 0.4, 0.4], [-half * 0.65, half, half * 0.45, 0.4], [half * 0.65, half, half * 0.45, 0.4]])
-    B(r.body, w, stoneH, d, stone, x, stoneH / 2, z, m);
-  if (L >= 2) for (const s of [-1, 1]) B(r.body, 0.42, 0.08, half * 2 + 0.42, 0x4a4a4a, s * half, stoneH + 0.02, 0, m);   // iron coping
-  B(r.body, half * 2, 0.08, half * 2, 0x6e6252, 0, 0.04, 0, m);
-  r.yaw = pivot(r.body, 0, 0, 0);
-  const iron = 0x26282c, ring = 0x34363b, bronze = 0xb0782c, bronzeRing = 0x8a5a1c;
-  const metal = L >= 2 ? bronze : iron, band = L >= 2 ? bronzeRing : ring;
-  const wheel = (x, z, s = 1) => {
-    B(r.yaw, 0.16, 1.1 * s, 1.1 * s, 0x5e4026, x, 0.55 * s, z, m);
-    B(r.yaw, 0.18, 0.3, 0.3, 0x4a4a4a, x, 0.55 * s, z, m);
-    B(r.yaw, 0.17, 1.12 * s, 0.12, 0x4a3520, x, 0.55 * s, z, m);
-    if (L >= 2) B(r.yaw, 0.17, 0.1, 1.14 * s, 0x3a3a3a, x, 0.55 * s + 0.5 * s, z, m);   // iron rim
-  };
-  const barrelOn = (parent, x, len, thick, color, bandColor, flare = 0) => {
-    B(parent, thick, thick, len, color, x, 0, len / 2 - 0.5, m);
-    for (const z of [-0.3, len * 0.35, len - 0.65]) B(parent, thick + 0.08, thick + 0.08, 0.14, bandColor, x, 0, z, m);
-    if (flare) B(parent, thick + flare, thick + flare, 0.25, bandColor, x, 0, len - 0.55, m);
-    const mz = B(parent, thick + 0.1, thick + 0.1, 0.4, 0xffb040, x, 0, len - 0.25, m, { emissive: 0xff7a00 }); mz.castShadow = false;
-    return mz;
-  };
-  r.muzzles = [];
-  if (A && L >= 4 && L < 5) {   // Siege Mortar: squat barrel on a timber bed, pointing up
-    B(r.yaw, 1.6, 0.5, 1.8, 0x5e4026, 0, 0.35, 0, m);
-    for (const x of [-0.55, 0.55]) B(r.yaw, 0.25, 0.9, 1, 0x6b4a2b, x, 0.9, 0, m);
-    r.barrel = pivot(r.yaw, 0, 1.05, 0); r.recoil = pivot(r.barrel, 0, 0, 0);
-    B(r.recoil, 0.95, 0.95, 1.2, metal, 0, 0, 0.3, m);
-    B(r.recoil, 1.15, 1.15, 0.25, band, 0, 0, 0.85, m);
-    B(r.recoil, 1.05, 1.05, 0.2, band, 0, 0, -0.15, m);
-    r.muzzles.push(B(r.recoil, 1, 1, 0.4, 0xffb040, 0, 0, 1.1, m, { emissive: 0xff7a00 }));
-    for (const [x, z] of [[-0.9, -0.9], [-0.6, -1], [-0.75, -0.75]]) B(r.yaw, 0.32, 0.32, 0.32, iron, x, 0.3, z, m);   // ball pile
-    r.rest = -0.9;
-  } else {
-    const wide = Bp ? (L >= 5 ? 1.1 : L >= 4 ? 0.85 : 0.7) : A ? 0.6 : 0.42;
-    for (const x of [-wide, wide]) B(r.yaw, 0.22, A ? 0.8 : 0.6, A ? 1.8 : 1.5, 0x6b4a2b, x, A ? 0.85 : 0.75, -0.05, m);   // cheeks
-    B(r.yaw, wide * 2 + 0.5, 0.16, 0.16, 0x3a3a3a, 0, 0.55, 0.25, m);                                                   // axle
-    const ws = A ? 1.25 : 1;
-    for (const x of [-(wide + 0.26), wide + 0.26]) wheel(x, 0.25, ws);
-    B(r.yaw, 0.4, 0.18, 1.2, 0x6b4a2b, 0, 0.4, -0.9, m);                                                               // trail
-    r.barrel = pivot(r.yaw, 0, A ? 1.25 : 1.05, 0.05); r.recoil = pivot(r.barrel, 0, 0, 0);
-    if (!A && !Bp) r.muzzles.push(barrelOn(r.recoil, 0, 2.1, 0.44, metal, band));                                      // Lv1 / Lv2
-    else if (A && L === 3) r.muzzles.push(barrelOn(r.recoil, 0, 1.9, 0.78, metal, band, 0.12));                         // Bombard
-    else if (A && L >= 5) {                                                                                              // Great Bombard
-      r.muzzles.push(barrelOn(r.recoil, 0, 2.8, 0.95, 0x6a4a2a, 0xc9a050, 0.3));
-      for (const s of [-1, 1]) { B(r.recoil, 0.18, 0.3, 0.12, 0xe0e0d0, s * 0.35, 0.55, 2.15, m); B(r.recoil, 0.14, 0.14, 0.1, 0xff2020, s * 0.3, 0.75, 2.05, m, { emissive: 0xaa0000 }); }   // dragon teeth + eyes
-      B(r.recoil, 1.15, 0.25, 0.9, 0xc9a050, 0, 0.62, 1.9, m);                                                          // brow
-      for (const s of [-1, 1]) { B(r.body, 0.08, 1.8, 0.9, 0xa3221c, s * 1.55, 1.3, -1.2, m); B(r.body, 0.1, 2.6, 0.1, 0x4a3520, s * 1.55, 1.3, -1.6, m); }   // banners
-    } else if (Bp && L === 3) for (const x of [-0.32, 0.32]) r.muzzles.push(barrelOn(r.recoil, x, 2, 0.38, metal, band));   // Twin
-    else if (Bp && L === 4) for (const x of [-0.5, 0, 0.5]) r.muzzles.push(barrelOn(r.recoil, x, 1.4, 0.36, metal, band, 0.14));   // Grapeshot
-    else if (Bp && L >= 5) {                                                                                             // Thunder Organ
-      B(r.recoil, 2.4, 0.3, 0.8, 0x4a3520, 0, -0.3, 0.1, m);
-      for (let k = 0; k < 5; k++) { const x = -0.9 + k * 0.45; r.muzzles.push(barrelOn(r.recoil, x, 1.7, 0.3, 0x3a3d42, 0x6e7075, 0.12)); }
-      B(r.recoil, 2.4, 0.15, 0.2, 0x6e7075, 0, 0.22, -0.2, m);
-    }
-    r.rest = A && L >= 5 ? -0.08 : -0.12;
+  if (L === 1) return buildFieldCannon(r, m);
+  if (L === 2) return buildBronzeCannon(r, m);
+  if (L === 3 && A) return buildBombard(r, m);
+  if (L === 4 && A) return buildSiegeMortar(r, m);
+  if (L >= 5 && A) return buildGreatBombard(r, m);
+  if (L === 3 && Bp) return buildTwinCannons(r, m);
+  if (L === 4 && Bp) return buildGrapeshotBattery(r, m);
+  if (L >= 5 && Bp) return buildThunderOrgan(r, m);
+  return buildFieldCannon(r, m);
+}
+
+// Spoked Wheel helper for Medieval artillery carriages (8-faceted wheel with felloes and cross/diagonal spokes)
+function addSpokedWheel(parent, x, z, r, tireW, m, OAK, DARK_OAK, IRON, hubCapColor = null) {
+  const wh = pivot(parent, x, r, z);
+  // Hub
+  B(wh, tireW + 0.04, 0.30, 0.30, IRON, 0, 0, 0, m);
+  if (hubCapColor) B(wh, tireW + 0.08, 0.16, 0.16, hubCapColor, 0, 0, 0, m);
+
+  // 4 spokes (0, 90, 45, 135 deg) with mortise stepping to prevent coplanar Z-fighting
+  B(wh, 0.104, r * 2 - 0.16, 0.10, OAK, 0, 0, 0, m);
+  B(wh, 0.094, 0.10, r * 2 - 0.16, OAK, 0, 0, 0, m);
+  const d1 = B(wh, 0.082, r * 2 - 0.18, 0.082, DARK_OAK, 0, 0, 0, m); d1.rotation.x = Math.PI / 4;
+  const d2 = B(wh, 0.076, 0.076, r * 2 - 0.18, DARK_OAK, 0, 0, 0, m); d2.rotation.x = Math.PI / 4;
+
+  // 4 outer rim felloes with iron tire finish
+  const segL = r * 0.90;
+  B(wh, tireW, 0.10, segL, IRON, 0, r - 0.05, 0, m);
+  B(wh, tireW, 0.10, segL, IRON, 0, -(r - 0.05), 0, m);
+  B(wh, tireW, segL, 0.10, IRON, 0, 0, r - 0.05, m);
+  B(wh, tireW, segL, 0.10, IRON, 0, 0, -(r - 0.05), m);
+  return wh;
+}
+
+/** Cannon A3: Bombard - Stubby, massive-bore iron barrel with hoop reinforcing rings. */
+function buildBombard(r, m) {
+  const OAK = 0x4a321e, DARK_OAK = 0x342112, IRON = 0x242528, BAND = 0x36383c, STONE = 0xb4b6ba;
+  B(r.body, 2.8, 0.16, 2.8, 0x6e6252, 0, 0.08, 0, m);
+  for (const s of [-1.25, 1.25]) B(r.body, 2.8, 0.28, 0.28, 0x4a3a2a, 0, 0.22, s, m);
+  r.yaw = pivot(r.body, 0, 0.22, 0);
+
+  const wheelX = 0.95, wheelR = 0.7;
+  for (const sx of [-wheelX, wheelX]) addSpokedWheel(r.yaw, sx, 0, wheelR, 0.22, m, OAK, DARK_OAK, IRON);
+  B(r.yaw, wheelX * 2, 0.22, 0.22, IRON, 0, wheelR, 0, m);
+
+  for (const sx of [-0.55, 0.55]) {
+    B(r.yaw, 0.24, 0.8, 1.6, OAK, sx, wheelR + 0.15, -0.05, m);
+    B(r.yaw, 0.26, 0.14, 1.62, IRON, sx, wheelR + 0.48, -0.05, m);
+    B(r.yaw, 0.28, 0.22, 0.28, BAND, sx, wheelR + 0.45, 0.05, m);
   }
-  r.muzzle = r.muzzles[0];
-  for (const mz of r.muzzles) mz.castShadow = false;
+  const trail = B(r.yaw, 0.5, 0.26, 1.8, OAK, 0, 0.38, -1.05, m);
+  trail.rotation.x = 0.15;
+  B(r.yaw, 0.54, 0.14, 0.42, IRON, 0, 0.14, -1.85, m);
+
+  // Stepped elevation bed
+  B(r.yaw, 0.52, 0.3, 0.65, DARK_OAK, 0, wheelR + 0.15, -0.32, m);
+  B(r.yaw, 0.42, 0.16, 0.45, OAK, 0, wheelR + 0.3, -0.35, m);
+
+  // Short, massive-bore iron barrel with thick welded hoop rings (Mons Meg style)
+  r.barrel = pivot(r.yaw, 0, wheelR + 0.48, 0.05);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 0.3, 0.3, 0.28, BAND, 0, 0, -1.05, m); // cascabel
+  B(r.recoil, 0.72, 0.72, 0.7, IRON, 0, 0, -0.65, m); // massive powder chamber
+  const th = B(r.recoil, 0.14, 0.2, 0.14, 0xb8860b, 0, 0.42, -0.65, m, { emissive: 0xffa030 });
+  th.castShadow = false;
+  r.touchholes = [th];
+  B(r.recoil, 0.85, 0.85, 1.5, IRON, 0, 0, 0.35, m); // huge main bore
+  for (const z of [-0.25, 0.15, 0.55, 0.95]) B(r.recoil, 0.95, 0.95, 0.16, BAND, 0, 0, z, m);
+  B(r.recoil, 1.0, 1.0, 0.22, BAND, 0, 0, 1.15, m);
+  const mz = B(r.recoil, 0.88, 0.88, 0.4, 0xffb040, 0, 0, 1.35, m, { emissive: 0xff7a00 });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  // Huge stone cannonballs
+  B(r.yaw, 0.8, 0.08, 0.8, 0x8a7a58, -1.1, 0.04, -0.9, m);
+  for (const [bx, bz] of [[-1.25, -1.05], [-0.95, -1.05], [-1.1, -0.75]]) B(r.yaw, 0.34, 0.34, 0.34, STONE, bx, 0.22, bz, m);
+  B(r.yaw, 0.34, 0.34, 0.34, STONE, -1.1, 0.48, -0.92, m);
+
+  r.rest = -0.14; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.55, 2.3, m);
+  r.barY = 2.6;
+  return finishStructure(r);
+}
+
+/** Cannon A4: Siege Mortar - High-angle heavy timber firing bed, no front wheels, massive bowl mortar. */
+function buildSiegeMortar(r, m) {
+  const OAK = 0x422d1b, DARK_OAK = 0x2e1e12, IRON = 0x222428, BAND = 0x36383c, BRONZE = 0x9a6828, STONE = 0xb4b6ba;
+  // Sits flat on heavy timber baulks with iron ground anchor spikes
+  B(r.body, 2.8, 0.25, 2.8, 0x6e6252, 0, 0.12, 0, m);
+  for (const [x, z] of [[-1.1, -1.1], [1.1, -1.1], [-1.1, 1.1], [1.1, 1.1]]) B(r.body, 0.2, 0.5, 0.2, IRON, x, 0.35, z, m);
+  r.yaw = pivot(r.body, 0, 0.25, 0);
+
+  // Massive timber bed / ramp carriage
+  B(r.yaw, 2.0, 0.55, 2.2, OAK, 0, 0.4, 0, m);
+  for (const sx of [-0.85, 0.85]) {
+    B(r.yaw, 0.3, 0.9, 2.0, DARK_OAK, sx, 0.75, 0, m);
+    B(r.yaw, 0.32, 0.14, 2.04, IRON, sx, 1.22, 0, m);
+    B(r.yaw, 0.34, 0.26, 0.34, BRONZE, sx, 1.15, 0.05, m);
+  }
+  const ramp = B(r.yaw, 1.2, 0.5, 1.2, DARK_OAK, 0, 0.7, -0.3, m);
+  ramp.rotation.x = 0.45;
+
+  // Squat wide-mouth bowl mortar tilted at 60 deg
+  r.barrel = pivot(r.yaw, 0, 1.15, 0.05);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 1.1, 1.1, 0.8, BRONZE, 0, 0, -0.2, m);
+  const th = B(r.recoil, 0.16, 0.22, 0.16, 0xd4a038, 0, 0.6, -0.2, m, { emissive: 0xffa030 });
+  th.castShadow = false;
+  r.touchholes = [th];
+  B(r.recoil, 1.3, 1.3, 1.2, IRON, 0, 0, 0.65, m);
+  B(r.recoil, 1.45, 1.45, 0.3, BAND, 0, 0, 0.3, m);
+  B(r.recoil, 1.5, 1.5, 0.35, BAND, 0, 0, 1.15, m);
+  const mz = B(r.recoil, 1.35, 1.35, 0.4, 0xffa030, 0, 0, 1.35, m, { emissive: 0xff7000 });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  // Heavy mortar bomb pile in timber trough & powder shovel
+  B(r.yaw, 0.9, 0.2, 0.6, OAK, -1.0, 0.3, -0.85, m);
+  B(r.yaw, 0.42, 0.42, 0.42, IRON, -1.0, 0.55, -0.85, m);
+  B(r.yaw, 0.42, 0.42, 0.42, IRON, -0.65, 0.55, -0.85, m);
+  const shovel = B(r.yaw, 0.08, 0.08, 1.8, 0x8a6a42, 1.05, 0.6, -0.1, m);
+  shovel.rotation.x = 0.2;
+  B(shovel, 0.3, 0.04, 0.35, IRON, 0, 0, 0.85, m);
+
+  r.rest = -0.9; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.6, 2.4, m);
+  r.barY = 2.7;
+  return finishStructure(r);
+}
+
+/** Cannon A5: Great Bombard - Monster dragon-head muzzle, faction banners, 4-wheel carriage. */
+function buildGreatBombard(r, m) {
+  const OAK = 0x3d2714, DARK_OAK = 0x28180c, IRON = 0x222428, BRONZE = 0x8c5e28, GOLD = 0xd4a038, CRIMSON = 0x9e1e1e;
+  B(r.body, 3.2, 0.2, 3.2, 0x585a60, 0, 0.1, 0, m);
+  for (const s of [-1.45, 1.45]) B(r.body, 3.2, 0.35, 0.3, 0x3d2714, 0, 0.25, s, m);
+  r.yaw = pivot(r.body, 0, 0.25, 0);
+
+  // Double-axle 4-wheel carriage with heavy bronze hub studs
+  const wheelX = 1.15;
+  for (const sx of [-wheelX, wheelX]) {
+    for (const sz of [-0.65, 0.65]) addSpokedWheel(r.yaw, sx, sz, 0.72, 0.24, m, OAK, DARK_OAK, IRON, GOLD);
+  }
+  B(r.yaw, wheelX * 2, 0.24, 0.24, IRON, 0, 0.72, -0.65, m);
+  B(r.yaw, wheelX * 2, 0.24, 0.24, IRON, 0, 0.72, 0.65, m);
+
+  for (const sx of [-0.65, 0.65]) {
+    B(r.yaw, 0.26, 0.95, 2.4, OAK, sx, 0.88, 0, m);
+    B(r.yaw, 0.28, 0.16, 2.42, IRON, sx, 1.38, 0, m);
+    B(r.yaw, 0.32, 0.26, 0.32, GOLD, sx, 1.35, 0.15, m);
+  }
+  const trail = B(r.yaw, 0.6, 0.3, 2.2, OAK, 0, 0.45, -1.3, m);
+  trail.rotation.x = 0.14;
+  B(r.yaw, 0.65, 0.16, 0.5, IRON, 0, 0.16, -2.25, m);
+  B(r.yaw, 0.2, 0.2, 0.4, GOLD, 0, 0.4, -2.4, m);
+
+  // Twin Crimson Faction Banners on wrought iron poles
+  for (const sx of [-1.2, 1.2]) {
+    B(r.yaw, 0.1, 2.8, 0.1, IRON, sx, 1.5, -1.3, m);
+    B(r.yaw, 0.12, 0.12, 0.8, GOLD, sx + (sx > 0 ? -0.35 : 0.35), 2.8, -1.3, m);
+    B(r.yaw, 0.06, 1.6, 0.7, CRIMSON, sx + (sx > 0 ? -0.35 : 0.35), 2.0, -1.3, m);
+  }
+
+  // Dragon-head monster cannon
+  r.barrel = pivot(r.yaw, 0, 1.38, 0.15);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 0.4, 0.4, 0.4, GOLD, 0, 0, -1.4, m);
+  B(r.recoil, 0.9, 0.9, 0.9, BRONZE, 0, 0, -0.85, m);
+  const th = B(r.recoil, 0.18, 0.25, 0.18, GOLD, 0, 0.52, -0.85, m, { emissive: 0xffa030 });
+  th.castShadow = false;
+  r.touchholes = [th];
+  B(r.recoil, 0.8, 0.8, 2.8, IRON, 0, 0, 0.9, m);
+  for (const z of [-0.2, 0.6, 1.4, 2.0]) B(r.recoil, 0.92, 0.92, 0.16, GOLD, 0, 0, z, m);
+
+  // Dragon Muzzle Sculpture
+  B(r.recoil, 1.15, 0.3, 0.9, GOLD, 0, 0.55, 2.1, m);
+  for (const s of [-1, 1]) {
+    B(r.recoil, 0.2, 0.32, 0.14, 0xffffff, s * 0.36, 0.5, 2.35, m);
+    B(r.recoil, 0.16, 0.16, 0.12, 0xff1010, s * 0.32, 0.68, 2.2, m, { emissive: 0xcc0000 });
+  }
+  B(r.recoil, 1.05, 1.05, 0.4, BRONZE, 0, 0, 2.45, m);
+  const mz = B(r.recoil, 0.95, 0.95, 0.5, 0xffc050, 0, 0, 2.75, m, { emissive: 0xff8a00 });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  r.rest = -0.08; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.7, 2.6, m);
+  r.barY = 3.0;
+  return finishStructure(r);
+}
+
+/** Cannon B3: Twin Cannons - Dual side-by-side barrels with independent firing recoil. */
+function buildTwinCannons(r, m) {
+  const OAK = 0x4a321e, DARK_OAK = 0x362314, IRON = 0x242528, BAND = 0x383a3e;
+  B(r.body, 2.8, 0.16, 2.8, 0x6e6252, 0, 0.08, 0, m);
+  r.yaw = pivot(r.body, 0, 0.22, 0);
+
+  const wheelX = 1.05, wheelR = 0.72;
+  for (const sx of [-wheelX, wheelX]) addSpokedWheel(r.yaw, sx, 0, wheelR, 0.2, m, OAK, DARK_OAK, IRON);
+  B(r.yaw, wheelX * 2, 0.2, 0.2, IRON, 0, wheelR, 0, m);
+
+  // Triple cheeks (left, center dividing cheek, right)
+  for (const sx of [-0.65, 0, 0.65]) {
+    B(r.yaw, 0.18, 0.72, 1.6, OAK, sx, wheelR + 0.14, -0.05, m);
+    B(r.yaw, 0.20, 0.14, 1.62, IRON, sx, wheelR + 0.44, -0.05, m);
+  }
+  const trail = B(r.yaw, 0.55, 0.22, 1.8, OAK, 0, 0.38, -1.05, m);
+  trail.rotation.x = 0.14;
+  B(r.yaw, 0.58, 0.12, 0.4, IRON, 0, 0.14, -1.85, m);
+
+  r.barrel = pivot(r.yaw, 0, wheelR + 0.44, 0.05);
+  r.recoils = [];
+  r.muzzles = [];
+  r.touchholes = [];
+
+  for (const sx of [-0.34, 0.34]) {
+    const rec = pivot(r.barrel, sx, 0, 0);
+    r.recoils.push(rec);
+    B(rec, 0.2, 0.2, 0.2, BAND, 0, 0, -0.9, m);
+    B(rec, 0.44, 0.44, 0.5, IRON, 0, 0, -0.55, m);
+    const th = B(rec, 0.12, 0.16, 0.12, 0xb8860b, 0, 0.26, -0.55, m, { emissive: 0xffa030 });
+    th.castShadow = false;
+    r.touchholes.push(th);
+    B(rec, 0.38, 0.38, 0.65, IRON, 0, 0, 0.05, m);
+    B(rec, 0.42, 0.42, 0.08, BAND, 0, 0, 0.4, m);
+    B(rec, 0.32, 0.32, 0.9, IRON, 0, 0, 0.85, m);
+    B(rec, 0.38, 0.38, 0.18, BAND, 0, 0, 1.35, m);
+    const mz = B(rec, 0.36, 0.36, 0.35, 0xffc050, 0, 0, 1.55, m, { emissive: 0xff8a00 });
+    mz.castShadow = false;
+    r.muzzles.push(mz);
+  }
+
+  r.rest = -0.12; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.5, 2.3, m);
+  r.barY = 2.5;
+  return finishStructure(r);
+}
+
+/** Cannon B4: Grapeshot Battery - Triple radial fanned blunderbuss barrels, embrasured timber mantlet, canister chest & quilted grapeshot. */
+function buildGrapeshotBattery(r, m) {
+  const OAK = 0x543a24, DARK_OAK = 0x3a2616, IRON = 0x242629, BAND = 0x36383c, BRONZE = 0x9c6a2e, BRASS = 0xd4a840, TIN = 0xb4b8c0;
+
+  // 1. Timber Ground Emplacement Pad
+  B(r.body, 2.8, 0.14, 2.8, 0x6e6252, 0, 0.07, 0, m);
+  for (const s of [-1.2, 1.2]) {
+    B(r.body, 2.8, 0.22, 0.22, 0x483422, 0, 0.18, s, m); // guide timbers
+  }
+
+  // 2. Traversal Turntable Mount
+  r.yaw = pivot(r.body, 0, 0.20, 0);
+
+  // 3. Faceted Spoked Wheels (left and right)
+  const wheelX = 1.05, wheelR = 0.72;
+  for (const sx of [-wheelX, wheelX]) {
+    addSpokedWheel(r.yaw, sx, 0, wheelR, 0.20, m, OAK, DARK_OAK, IRON, BRASS);
+  }
+  // Iron transit axle
+  B(r.yaw, wheelX * 2, 0.20, 0.20, IRON, 0, wheelR, 0, m);
+
+  // 4. Carriage Cheeks (Left and Right) with stepped 3D relief (no coplanar tops)
+  for (const sx of [-0.64, 0.64]) {
+    // Oak cheek: top is at wheelR + 0.44
+    B(r.yaw, 0.18, 0.64, 1.56, OAK, sx, wheelR + 0.12, -0.05, m);
+    // Iron top plate sits on top of oak cheek: bottom at wheelR + 0.44, top at wheelR + 0.50
+    B(r.yaw, 0.20, 0.06, 1.58, IRON, sx, wheelR + 0.47, -0.05, m);
+    // Bronze trunnion cap sits on top of iron plate: bottom at wheelR + 0.48, top at wheelR + 0.58
+    B(r.yaw, 0.22, 0.10, 0.22, BRONZE, sx, wheelR + 0.53, 0.05, m);
+  }
+
+  // Sloping wooden trail beam with parented iron trail shoe (shared rotation, zero angle Z-fight)
+  const trail = pivot(r.yaw, 0, 0.36, -1.05);
+  trail.rotation.x = 0.14;
+  B(trail, 0.46, 0.20, 1.80, OAK, 0, 0, 0, m);
+  B(trail, 0.50, 0.12, 0.36, IRON, 0, -0.08, -0.75, m); // trail shoe parented to trail
+  B(trail, 0.14, 0.14, 0.16, IRON, 0, 0.10, -0.85, m); // towing lunette ring
+
+  // Transverse spreader transom between cheeks (non-overlapping with elevation bed)
+  B(r.yaw, 1.08, 0.12, 0.12, DARK_OAK, 0, wheelR + 0.05, -0.62, m);
+
+  // Elevation screw mechanism beneath breeches
+  B(r.yaw, 0.46, 0.16, 0.36, DARK_OAK, 0, wheelR + 0.10, -0.28, m);
+  B(r.yaw, 0.12, 0.22, 0.12, BRASS, 0, wheelR + 0.27, -0.28, m); // elevation screw post
+  B(r.yaw, 0.32, 0.05, 0.05, BRASS, 0, wheelR + 0.38, -0.28, m); // turning crank
+
+  // 5. Fortified Splinter Mantlet (unified rotation group, zero clipping with barrels or cheeks)
+  const mantlet = pivot(r.yaw, 0, wheelR + 0.40, 0.26);
+  mantlet.rotation.x = -0.12;
+  // Side wings mounted outside the cheeks (x <= -0.67 and x >= +0.67)
+  for (const sx of [-0.80, 0.80]) {
+    B(mantlet, 0.26, 0.80, 0.08, OAK, sx, 0, 0, m);
+    B(mantlet, 0.28, 0.06, 0.10, IRON, sx, 0.43, 0, m); // top iron cap parented to mantlet
+  }
+  // Bottom apron shield below barrel line (width 1.08, non-overlapping with wings)
+  B(mantlet, 1.08, 0.26, 0.08, OAK, 0, -0.22, 0, m);
+  // Top lintel arch above barrel line (width 1.34, spans cleanly between wings)
+  B(mantlet, 1.34, 0.14, 0.08, OAK, 0, 0.36, 0, m);
+  B(mantlet, 1.36, 0.05, 0.10, IRON, 0, 0.44, 0, m); // top iron reinforcing strap
+
+  // 6. Triple Scatter Barrels (Radial Fan Layout)
+  r.barrel = pivot(r.yaw, 0, wheelR + 0.42, 0.05);
+  r.recoils = [];
+  r.muzzles = [];
+  r.touchholes = [];
+
+  const barrelConfigs = [
+    { x: -0.42, rotY: -0.06 },
+    { x:  0.00, rotY:  0.00 },
+    { x:  0.42, rotY:  0.06 },
+  ];
+
+  for (const cfg of barrelConfigs) {
+    const rec = pivot(r.barrel, cfg.x, 0, 0);
+    rec.rotation.y = cfg.rotY;
+    r.recoils.push(rec);
+
+    // Cascabel knob at breech
+    B(rec, 0.16, 0.16, 0.16, BRASS, 0, 0, -0.85, m);
+    // Heavy reinforced powder chamber
+    B(rec, 0.28, 0.28, 0.48, IRON, 0, 0, -0.50, m);
+    // Drilled touchhole with brass flashpan
+    const th = B(rec, 0.10, 0.12, 0.10, BRASS, 0, 0.19, -0.50, m, { emissive: 0xffa030 });
+    th.castShadow = false;
+    r.touchholes.push(th);
+
+    // Tapered forward barrel tube
+    B(rec, 0.22, 0.22, 0.82, IRON, 0, 0, 0.13, m);
+    // Bronze astragal reinforcing ring
+    B(rec, 0.26, 0.26, 0.08, BRONZE, 0, 0, 0.24, m);
+
+    // Flared Blunderbuss Muzzle Assembly
+    B(rec, 0.32, 0.32, 0.20, BRONZE, 0, 0, 0.62, m); // flared bell
+    B(rec, 0.36, 0.36, 0.06, BRASS, 0, 0, 0.73, m);  // polished brass mouth rim
+    B(rec, 0.20, 0.20, 0.04, 0x141518, 0, 0, 0.77, m); // hollow dark bore opening (protrudes 0.01 beyond rim face)
+
+    // Muzzle flash mesh
+    const mz = B(rec, 0.30, 0.30, 0.28, 0xffc050, 0, 0, 0.92, m, { emissive: 0xff8a00 });
+    mz.castShadow = false;
+    r.muzzles.push(mz);
+  }
+
+  // 7. Tactical Grapeshot Field Clutter (no coplanar faces)
+  // Left: Open wooden ammunition chest with tin canister rounds
+  B(r.yaw, 0.52, 0.28, 0.52, DARK_OAK, -1.05, 0.18, -0.85, m);
+  const lid = B(r.yaw, 0.52, 0.05, 0.52, OAK, -1.05, 0.38, -1.02, m);
+  lid.rotation.x = -0.65;
+  // 2 cylindrical tin canister shot rounds inside with wooden sabots
+  for (const [cx, cz] of [[-1.12, -0.88], [-0.96, -0.88]]) {
+    B(r.yaw, 0.14, 0.18, 0.14, TIN, cx, 0.30, cz, m);
+    B(r.yaw, 0.12, 0.04, 0.12, OAK, cx, 0.41, cz, m);
+  }
+
+  // Quilted grapeshot stand beside ammo chest (0.005 clearance between balls and base)
+  B(r.yaw, 0.26, 0.05, 0.26, OAK, -0.70, 0.08, -0.55, m); // wooden base sabot (top at 0.105)
+  for (const [bx, bz] of [[-0.75, -0.60], [-0.65, -0.60], [-0.70, -0.50]]) {
+    B(r.yaw, 0.10, 0.10, 0.10, IRON, bx, 0.16, bz, m); // iron shot (bottom at 0.11, clearance +0.005)
+  }
+  B(r.yaw, 0.10, 0.10, 0.10, IRON, -0.70, 0.24, -0.55, m);
+
+  // Right: Water wash bucket & carriage-mounted rammer/sponge swab
+  B(r.yaw, 0.34, 0.28, 0.34, DARK_OAK, 1.05, 0.18, -0.75, m);
+  const rammer = B(r.yaw, 0.06, 0.06, 1.8, 0x8a6a42, 0.78, wheelR + 0.34, -0.05, m);
+  rammer.rotation.x = 0.14;
+  B(rammer, 0.12, 0.12, 0.22, 0xd0c4a8, 0, 0, 0.85, m);
+
+  r.rest = -0.12; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.55, 2.3, m);
+  r.barY = 2.5;
+  return finishStructure(r);
+}
+
+/** Cannon B5: Thunder Organ - 7-barrel ribauldequin spread across an armored cart with fortified steel pavise mantlet. */
+function buildThunderOrgan(r, m) {
+  const OAK = 0x48321e, DARK_OAK = 0x2e1e12, TIMBER = 0x5a3e26;
+  const IRON = 0x242629, STEEL = 0x4c525a;
+  const BRONZE = 0x9c6a2e, BRASS = 0xd4a840, GUNPOWDER = 0x18191c, TIN = 0xb4b8c0;
+
+  // 1. Timber & Stone Emplacement Pad
+  B(r.body, 3.2, 0.14, 3.2, 0x5e5a54, 0, 0.07, 0, m); // stone/gravel pad
+  // Side timber baulks (length 2.9, inset inside pad length 3.2 to prevent X-plane collision)
+  for (const s of [-1.45, 1.45]) {
+    B(r.body, 2.9, 0.22, 0.24, TIMBER, 0, 0.18, s, m);
+  }
+
+  // 2. Traversal Turntable Mount
+  r.yaw = pivot(r.body, 0, 0.20, 0);
+
+  // 3. Heavy Artillery Spoked Wheels & Transit Axle
+  const wheelX = 1.30, wheelR = 0.75;
+  for (const sx of [-wheelX, wheelX]) {
+    addSpokedWheel(r.yaw, sx, 0, wheelR, 0.24, m, OAK, DARK_OAK, IRON, BRASS);
+  }
+  // Square forged iron transit axle
+  B(r.yaw, wheelX * 2, 0.20, 0.20, IRON, 0, wheelR, 0, m);
+
+  // 4. Heavy Broad Carriage Frame & Cheeks
+  // Outer Cheeks (Left and Right)
+  for (const sx of [-1.12, 1.12]) {
+    B(r.yaw, 0.20, 0.60, 1.76, OAK, sx, wheelR + 0.10, -0.08, m); // oak cheek beam
+    B(r.yaw, 0.22, 0.06, 1.78, IRON, sx, wheelR + 0.43, -0.08, m); // iron top coping strap
+    B(r.yaw, 0.24, 0.10, 0.26, BRONZE, sx, wheelR + 0.51, 0.05, m); // bronze trunnion cap
+  }
+
+  // Sloping Broad Carriage Trail (Unified rotation pivot, zero Z-fighting with trail shoe)
+  const trail = pivot(r.yaw, 0, 0.38, -1.05);
+  trail.rotation.x = 0.14;
+  B(trail, 0.72, 0.22, 1.95, OAK, 0, 0, 0, m);
+  B(trail, 0.76, 0.14, 0.40, IRON, 0, -0.08, -0.80, m); // heavy iron recoil spade shoe
+  B(trail, 0.16, 0.16, 0.18, IRON, 0, 0.10, -0.92, m); // towing lunette ring
+
+  // Transverse spreader transom between cheeks
+  B(r.yaw, 1.96, 0.12, 0.14, DARK_OAK, 0, wheelR + 0.06, -0.66, m);
+
+  // Elevation Screw Mechanism (below firing bed)
+  B(r.yaw, 1.40, 0.14, 0.32, DARK_OAK, 0, wheelR + 0.08, -0.28, m); // screw support bed
+  B(r.yaw, 0.16, 0.24, 0.16, BRASS, 0, wheelR + 0.27, -0.28, m); // heavy threaded screw post
+  B(r.yaw, 0.36, 0.05, 0.36, BRASS, 0, wheelR + 0.36, -0.28, m); // central elevation handwheel
+
+  // 5. Fortified Steel Pavise Mantlet (Shield with open central embrasure for barrels)
+  const mantlet = pivot(r.yaw, 0, wheelR + 0.42, 0.30);
+  mantlet.rotation.x = -0.10;
+  // Side armored wings (flanking the barrel span)
+  for (const sx of [-1.16, 1.16]) {
+    B(mantlet, 0.24, 0.88, 0.10, STEEL, sx, 0.06, 0, m);
+    B(mantlet, 0.26, 0.06, 0.12, IRON, sx, 0.53, 0, m); // top iron cap
+  }
+  // Lower Mantlet Apron (below barrel line, width 2.00 leaves clearance to wings at ±1.04)
+  B(mantlet, 2.00, 0.28, 0.10, STEEL, 0, -0.27, 0, m);
+  B(mantlet, 2.02, 0.05, 0.12, IRON, 0, -0.42, 0, m); // bottom reinforcing strip
+
+  // Upper Mantlet Visor (above barrel line, width 2.00)
+  B(mantlet, 2.00, 0.30, 0.10, STEEL, 0, 0.32, 0, m);
+  B(mantlet, 2.02, 0.05, 0.12, IRON, 0, 0.48, 0, m); // top iron strap
+  // Wide central observation vision slit in upper mantlet
+  B(mantlet, 0.44, 0.05, 0.12, 0x141518, 0, 0.28, 0.01, m);
+
+  // 6. Adjustable Steel Firing Rack
+  r.barrel = pivot(r.yaw, 0, wheelR + 0.42, 0.05);
+  r.recoils = [];
+  r.muzzles = [];
+  r.touchholes = [];
+
+  // Firing Bed (cradle sitting underneath the barrels, bottom at -0.22, top at -0.12)
+  B(r.barrel, 2.22, 0.10, 0.80, STEEL, 0, -0.17, -0.20, m);
+  // Heavy side cheeks on rack (flanking barrel 0 and barrel 6 at X = ±1.11)
+  for (const sx of [-1.11, 1.11]) {
+    B(r.barrel, 0.06, 0.24, 0.82, IRON, sx, -0.06, -0.20, m);
+  }
+  // Front transverse clamping strap over barrels (bottom at +0.13, top at +0.18)
+  B(r.barrel, 2.24, 0.05, 0.08, IRON, 0, 0.155, 0.10, m);
+
+  // 7. Seven Independent Recoil Barrels
+  for (let k = 0; k < 7; k++) {
+    const x = -0.96 + k * 0.32;
+    const rec = pivot(r.barrel, x, 0, 0);
+    r.recoils.push(rec);
+
+    // Cascabel knob at rear
+    B(rec, 0.14, 0.14, 0.14, BRONZE, 0, 0, -0.66, m);
+
+    // Octagonal powder chamber / breech (Y from -0.11 to +0.11, Z from -0.59 to -0.13)
+    B(rec, 0.22, 0.22, 0.46, IRON, 0, 0, -0.36, m);
+
+    // Drilled touchhole with spark emissive mesh (at Z = -0.32)
+    const th = B(rec, 0.08, 0.06, 0.08, BRASS, 0, 0.14, -0.32, m, { emissive: 0xffa030 });
+    th.castShadow = false;
+    r.touchholes.push(th);
+
+    // Breech astragal ring
+    B(rec, 0.24, 0.24, 0.06, BRONZE, 0, 0, -0.10, m);
+
+    // Tapered long iron barrel tube (Y from -0.09 to +0.09, length 1.22)
+    B(rec, 0.18, 0.18, 1.22, STEEL, 0, 0, 0.54, m);
+
+    // Mid-barrel reinforcing ring
+    B(rec, 0.22, 0.22, 0.06, BRONZE, 0, 0, 0.48, m);
+
+    // Polished brass muzzle mouth collar
+    B(rec, 0.22, 0.22, 0.08, BRASS, 0, 0, 1.18, m);
+
+    // Hollow dark bore opening (protrudes 0.01 beyond brass collar)
+    B(rec, 0.14, 0.14, 0.04, 0x141518, 0, 0, 1.23, m);
+
+    // Muzzle flash mesh
+    const mz = B(rec, 0.24, 0.24, 0.30, 0xffc050, 0, 0, 1.40, m, { emissive: 0xff8a00 });
+    mz.castShadow = false;
+    r.muzzles.push(mz);
+  }
+
+  // 8. Continuous Powder Train Ignition Trough across all 7 breeches (at Z = -0.46, clear of touchholes at -0.32)
+  // Trough base plate seated cleanly on top of breeches (center Y = 0.130, height 0.030, bottom at 0.115, top at 0.145)
+  B(r.barrel, 2.04, 0.030, 0.10, BRASS, 0, 0.130, -0.46, m);
+  // Front and rear raised brass lips forming genuine trough channel
+  B(r.barrel, 2.08, 0.034, 0.02, BRASS, 0, 0.155, -0.50, m);
+  B(r.barrel, 2.08, 0.034, 0.02, BRASS, 0, 0.155, -0.42, m);
+  // Dark black gunpowder line in trough
+  B(r.barrel, 2.00, 0.014, 0.05, GUNPOWDER, 0, 0.148, -0.46, m);
+
+  // 9. Authentic Siege Artillery Field Clutter
+  // Left: Open wooden ammunition chest with canister shot round and powder cartridge
+  B(r.yaw, 0.52, 0.28, 0.48, DARK_OAK, -1.20, 0.18, -0.90, m);
+  const chestLid = B(r.yaw, 0.56, 0.04, 0.48, OAK, -1.20, 0.37, -1.08, m);
+  chestLid.rotation.x = -0.65;
+  // Tin canister round with oak sabot inside chest
+  B(r.yaw, 0.12, 0.18, 0.12, TIN, -1.20, 0.30, -0.88, m);
+  B(r.yaw, 0.10, 0.04, 0.10, OAK, -1.20, 0.40, -0.88, m);
+  // Paper powder charge bundle
+  B(r.yaw, 0.14, 0.10, 0.14, 0xc4b492, -1.20, 0.26, -0.74, m);
+
+  // Right: Spiked black powder keg behind wheel
+  B(r.yaw, 0.36, 0.42, 0.36, OAK, 1.20, 0.25, -1.35, m);
+  B(r.yaw, 0.38, 0.10, 0.38, IRON, 1.20, 0.25, -1.35, m); // heavy forged iron girdle band
+  B(r.yaw, 0.08, 0.04, 0.08, 0xaa2222, 1.20, 0.48, -1.35, m); // red sealing bung
+
+  // Gunner's linstock staff with glowing slow-match cord
+  const linstock = B(r.yaw, 0.06, 1.40, 0.06, 0x8a6a42, 1.22, 0.74, -0.75, m);
+  linstock.rotation.z = -0.10;
+  B(linstock, 0.14, 0.12, 0.09, IRON, 0, 0.68, 0, m); // serpent fork
+  const ember = B(linstock, 0.08, 0.08, 0.08, 0xff3300, 0.04, 0.74, 0, m, { emissive: 0xff2200 });
+  ember.castShadow = false;
+
+  r.rest = -0.10;
   r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, half + 0.2, 2.2, m);
-  r.barY = A && L >= 5 ? 2.9 : 2.3;
-  r.muzzles.forEach((mz) => (mz.visible = false));
+  r.scaffold = scaffold(r.body, 1.65, 2.4, m);
+  r.barY = 2.6;
+  return finishStructure(r);
+}
+
+/** Cannon Lv 1: Light 2-wheel wooden cart with single tapered iron barrel and field clutter. */
+function buildFieldCannon(r, m) {
+  const OAK = 0x5a3e26, DARK_OAK = 0x422d1b, IRON = 0x2b2b2e, BAND = 0x383a3e, HEMP = 0x8a7a58;
+  // 1. Emplacement / Timber Ground Pad (within 3x3 footprint)
+  B(r.body, 2.6, 0.12, 2.6, 0x6e6252, 0, 0.06, 0, m);
+  for (const s of [-1.15, 1.15]) {
+    B(r.body, 2.6, 0.22, 0.25, 0x5a4832, 0, 0.17, s, m); // timber guide rails
+  }
+  
+  // 2. Traversal Turntable on the deck
+  r.yaw = pivot(r.body, 0, 0.18, 0);
+
+  // 3. Faceted Spoked Wheels (left and right)
+  const wheelX = 0.85;
+  const wheelR = 0.65;
+  for (const sx of [-wheelX, wheelX]) {
+    // Wheel hub
+    B(r.yaw, 0.22, 0.3, 0.3, IRON, sx, wheelR, 0, m);
+    B(r.yaw, 0.26, 0.14, 0.14, 0x1e1e20, sx, wheelR, 0, m); // linchpin
+    // Cross Spokes
+    B(r.yaw, 0.14, wheelR * 2 - 0.12, 0.14, OAK, sx, wheelR, 0, m);
+    B(r.yaw, 0.14, 0.14, wheelR * 2 - 0.12, OAK, sx, wheelR, 0, m);
+    // Outer wooden rim felloes
+    B(r.yaw, 0.16, wheelR * 2, 0.16, DARK_OAK, sx, wheelR, 0, m);
+    B(r.yaw, 0.16, 0.16, wheelR * 2, DARK_OAK, sx, wheelR, 0, m);
+    // Iron rim tire
+    B(r.yaw, 0.18, wheelR * 2 + 0.04, 0.08, IRON, sx, wheelR, 0, m);
+    B(r.yaw, 0.18, 0.08, wheelR * 2 + 0.04, IRON, sx, wheelR, 0, m);
+  }
+
+  // 4. Carriage: Cheeks, Axle, and Trail
+  B(r.yaw, wheelX * 2, 0.18, 0.18, IRON, 0, wheelR, 0, m); // axle
+  for (const sx of [-0.48, 0.48]) {
+    B(r.yaw, 0.18, 0.65, 1.4, OAK, sx, wheelR + 0.12, -0.05, m);
+    B(r.yaw, 0.20, 0.12, 1.42, IRON, sx, wheelR + 0.4, -0.05, m); // iron top strapping
+    // Trunnion caps
+    B(r.yaw, 0.22, 0.18, 0.22, BAND, sx, wheelR + 0.38, 0.05, m);
+  }
+  // Central Trail Beam sloping to the ground
+  const trail = B(r.yaw, 0.38, 0.22, 1.6, OAK, 0, 0.36, -0.95, m);
+  trail.rotation.x = 0.15;
+  B(r.yaw, 0.42, 0.1, 0.35, IRON, 0, 0.14, -1.65, m); // iron trail shoe digging into dirt
+  // Transverse spreader bolts
+  B(r.yaw, 0.82, 0.1, 0.1, IRON, 0, wheelR + 0.05, -0.5, m);
+
+  // 5. Elevation Quoin (stepped wedge under barrel)
+  B(r.yaw, 0.45, 0.22, 0.55, DARK_OAK, 0, wheelR + 0.12, -0.3, m);
+  B(r.yaw, 0.35, 0.12, 0.35, OAK, 0, wheelR + 0.24, -0.35, m);
+
+  // 6. Barrel Assembly mounted on recoil pivot
+  r.barrel = pivot(r.yaw, 0, wheelR + 0.42, 0.05);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  // Cascabel knob at rear
+  B(r.recoil, 0.22, 0.22, 0.22, BAND, 0, 0, -0.9, m);
+  // Breech / Vent field
+  B(r.recoil, 0.52, 0.52, 0.55, IRON, 0, 0, -0.55, m);
+  // Touchhole / Vent on top
+  const th = B(r.recoil, 0.12, 0.18, 0.12, 0xb8860b, 0, 0.28, -0.55, m, { emissive: 0xffa030 });
+  th.castShadow = false;
+  r.touchholes = [th];
+  // First reinforce
+  B(r.recoil, 0.46, 0.46, 0.7, IRON, 0, 0, 0.05, m);
+  // Astragal ring
+  B(r.recoil, 0.5, 0.5, 0.08, BAND, 0, 0, 0.42, m);
+  // Second reinforce / Chase (tapered forward)
+  B(r.recoil, 0.4, 0.4, 0.9, IRON, 0, 0, 0.85, m);
+  // Muzzle swell & astragal
+  B(r.recoil, 0.46, 0.46, 0.18, BAND, 0, 0, 1.35, m);
+  // Muzzle flash plane inside bore
+  const mz = B(r.recoil, 0.45, 0.45, 0.4, 0xffc050, 0, 0, 1.55, m, { emissive: 0xff8a00 });
+  mz.castShadow = false;
+  r.muzzle = mz;
+  r.muzzles = [mz];
+
+  // 7. Field Clutter (within footprint)
+  B(r.yaw, 0.55, 0.08, 0.55, HEMP, -0.95, 0.04, -0.85, m);
+  B(r.yaw, 0.24, 0.24, 0.24, 0x222226, -1.05, 0.16, -0.95, m);
+  B(r.yaw, 0.24, 0.24, 0.24, 0x222226, -0.85, 0.16, -0.95, m);
+  B(r.yaw, 0.24, 0.24, 0.24, 0x222226, -0.95, 0.32, -0.95, m);
+  B(r.yaw, 0.32, 0.38, 0.32, OAK, 0.95, 0.19, -0.75, m);
+  B(r.yaw, 0.34, 0.06, 0.34, IRON, 0.95, 0.1, -0.75, m);
+  B(r.yaw, 0.34, 0.06, 0.34, IRON, 0.95, 0.32, -0.75, m);
+  const ram = B(r.yaw, 0.06, 0.06, 1.7, 0x8a6a42, 0.62, wheelR + 0.3, -0.1, m);
+  ram.rotation.x = 0.1;
+  B(ram, 0.14, 0.14, 0.28, 0xd0c4a8, 0, 0, 0.8, m);
+
+  r.rest = -0.12;
+  r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.4, 2.2, m);
+  r.barY = 2.4;
+  return finishStructure(r);
+}
+
+/** Cannon Lv 2: Reinforced iron-banded oak chassis with cast bronze barrel and extra field clutter. */
+function buildBronzeCannon(r, m) {
+  const OAK = 0x4a321e, DARK_OAK = 0x362314, IRON = 0x242528, BRONZE = 0xa87428, GOLD = 0xd4a038, HEMP = 0x8a7a58;
+  // 1. Reinforced stone/timber platform with iron angle plates
+  B(r.body, 2.8, 0.16, 2.8, 0x6e6252, 0, 0.08, 0, m);
+  for (const s of [-1.25, 1.25]) {
+    B(r.body, 2.8, 0.28, 0.28, 0x4a3a2a, 0, 0.22, s, m);
+    B(r.body, 2.82, 0.06, 0.3, IRON, 0, 0.38, s, m); // iron coping
+  }
+  
+  // 2. Traversal Turntable
+  r.yaw = pivot(r.body, 0, 0.22, 0);
+
+  // 3. Faceted Spoked Wheels with bronze hubcaps & reinforced iron tires
+  const wheelX = 0.95;
+  const wheelR = 0.72;
+  for (const sx of [-wheelX, wheelX]) {
+    B(r.yaw, 0.24, 0.34, 0.34, IRON, sx, wheelR, 0, m);
+    B(r.yaw, 0.28, 0.18, 0.18, GOLD, sx, wheelR, 0, m); // polished bronze/brass hubcap
+    B(r.yaw, 0.14, wheelR * 2 - 0.14, 0.14, OAK, sx, wheelR, 0, m);
+    B(r.yaw, 0.14, 0.14, wheelR * 2 - 0.14, OAK, sx, wheelR, 0, m);
+    B(r.yaw, 0.18, wheelR * 2, 0.18, DARK_OAK, sx, wheelR, 0, m);
+    B(r.yaw, 0.18, 0.18, wheelR * 2, DARK_OAK, sx, wheelR, 0, m);
+    B(r.yaw, 0.20, wheelR * 2 + 0.06, 0.10, IRON, sx, wheelR, 0, m);
+    B(r.yaw, 0.20, 0.10, wheelR * 2 + 0.06, IRON, sx, wheelR, 0, m);
+  }
+
+  // 4. Heavy banded oak chassis
+  B(r.yaw, wheelX * 2, 0.20, 0.20, IRON, 0, wheelR, 0, m); // axle
+  for (const sx of [-0.52, 0.52]) {
+    B(r.yaw, 0.20, 0.72, 1.55, OAK, sx, wheelR + 0.14, -0.05, m);
+    B(r.yaw, 0.22, 0.14, 1.57, IRON, sx, wheelR + 0.44, -0.05, m); // top iron strap
+    B(r.yaw, 0.24, 0.20, 0.24, BRONZE, sx, wheelR + 0.42, 0.05, m);
+  }
+  const trail = B(r.yaw, 0.44, 0.24, 1.8, OAK, 0, 0.38, -1.05, m);
+  trail.rotation.x = 0.14;
+  B(r.yaw, 0.48, 0.12, 0.42, IRON, 0, 0.14, -1.85, m); // heavy spade skid
+  B(r.yaw, 0.14, 0.14, 0.35, BRONZE, 0, 0.32, -1.95, m); // bronze towing pintle ring
+
+  // 5. Screw elevation mechanism with brass quoin & crank
+  B(r.yaw, 0.48, 0.24, 0.6, DARK_OAK, 0, wheelR + 0.14, -0.32, m);
+  B(r.yaw, 0.12, 0.35, 0.12, BRONZE, 0, wheelR + 0.28, -0.32, m); // elevating screw
+  B(r.yaw, 0.32, 0.08, 0.08, GOLD, 0, wheelR + 0.42, -0.42, m); // adjustment crank
+
+  // 6. Polished Cast Bronze Barrel (stepped, ornate rings, cascabel button)
+  r.barrel = pivot(r.yaw, 0, wheelR + 0.46, 0.05);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 0.26, 0.26, 0.26, GOLD, 0, 0, -1.0, m);
+  B(r.recoil, 0.58, 0.58, 0.6, BRONZE, 0, 0, -0.6, m);
+  const th = B(r.recoil, 0.14, 0.20, 0.14, GOLD, 0, 0.32, -0.6, m, { emissive: 0xffa030 });
+  th.castShadow = false;
+  r.touchholes = [th];
+  B(r.recoil, 0.62, 0.62, 0.10, GOLD, 0, 0, -0.28, m);
+  B(r.recoil, 0.50, 0.50, 0.75, BRONZE, 0, 0, 0.1, m);
+  B(r.recoil, 1.25, 0.22, 0.22, BRONZE, 0, 0, 0.05, m);
+  B(r.recoil, 0.54, 0.54, 0.10, GOLD, 0, 0, 0.5, m);
+  B(r.recoil, 0.44, 0.44, 1.0, BRONZE, 0, 0, 1.0, m);
+  B(r.recoil, 0.54, 0.54, 0.22, GOLD, 0, 0, 1.55, m);
+  const mz = B(r.recoil, 0.52, 0.52, 0.45, 0xffd060, 0, 0, 1.8, m, { emissive: 0xff9000 });
+  mz.castShadow = false;
+  r.muzzle = mz;
+  r.muzzles = [mz];
+
+  // 7. Field Clutter (Lv 2 additions: powder keg, stacked balls, dual swabs)
+  B(r.yaw, 0.65, 0.08, 0.65, HEMP, -1.05, 0.04, -0.9, m);
+  for (const [bx, bz] of [[-1.18, -1.02], [-0.92, -1.02], [-1.05, -0.78]]) {
+    B(r.yaw, 0.24, 0.24, 0.24, 0x1e2024, bx, 0.16, bz, m);
+  }
+  B(r.yaw, 0.24, 0.24, 0.24, 0x1e2024, -1.05, 0.32, -0.92, m);
+  B(r.yaw, 0.38, 0.48, 0.38, 0x5a3d24, 1.05, 0.24, -0.85, m);
+  B(r.yaw, 0.40, 0.06, 0.40, IRON, 1.05, 0.10, -0.85, m);
+  B(r.yaw, 0.40, 0.06, 0.40, IRON, 1.05, 0.38, -0.85, m);
+  B(r.yaw, 0.12, 0.06, 0.12, 0x8a2c20, 1.05, 0.49, -0.85, m);
+  const ram = B(r.yaw, 0.06, 0.06, 1.8, 0x8a6a42, 0.68, wheelR + 0.32, -0.12, m);
+  ram.rotation.x = 0.12;
+  B(ram, 0.14, 0.14, 0.3, 0xd0c4a8, 0, 0, 0.85, m);
+  const worm = B(r.yaw, 0.06, 0.06, 1.8, 0x8a6a42, -0.68, wheelR + 0.32, -0.12, m);
+  worm.rotation.x = 0.12;
+  B(worm, 0.12, 0.12, 0.25, IRON, 0, 0, 0.85, m);
+
+  r.rest = -0.12;
+  r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.5, 2.3, m);
+  r.barY = 2.5;
   return finishStructure(r);
 }
 
 // Howitzer: Lv1 Field, Lv2 Heavy, A3 Long Tom, A4 Guided Shells, A5 Railgun, B3 Autoloader, B4 MLRS, B5 Thermobaric.
 export function buildHowitzer(level = 1, path = null) {
   const r = structureRig(), m = r.mats;
+  r.rigType = 'howitzer';
   const L = level, A = L >= 3 && path === 'a', Bp = L >= 3 && path === 'b';
-  const OL = 0x5b6b3a, DK = 0x46552c, ST = 0x4a4e54;
-  const pad = L >= 2 ? 3.4 : 3;
-  B(r.body, pad, 0.2, pad, 0x9a9da2, 0, 0.1, 0, m);
-  for (let k = -1; k <= 1; k++) {
-    const e = pad / 2 - 0.2;
-    B(r.body, 0.9, 0.35, 0.5, 0xa8956a, k * 0.95, 0.37, -e, m); B(r.body, 0.5, 0.35, 0.9, 0xa8956a, -e, 0.37, k * 0.95, m); B(r.body, 0.5, 0.35, 0.9, 0xa8956a, e, 0.37, k * 0.95, m);
+  if (L === 1) return buildFieldHowitzer(r, m);
+  if (L === 2) return buildHeavyHowitzer(r, m);
+  if (L === 3 && A) return buildLongTom(r, m);
+  if (L === 4 && A) return buildGuidedShells(r, m);
+  if (L >= 5 && A) return buildRailgun(r, m);
+  if (L === 3 && Bp) return buildAutoloader(r, m);
+  if (L === 4 && Bp) return buildMLRS(r, m);
+  if (L >= 5 && Bp) return buildThermobaric(r, m);
+  return buildFieldHowitzer(r, m);
+}
+
+/** Howitzer A3: Long Tom - Ultra-long 4.4m barrel, counterweight stanchions, traverse gear, and periscope. */
+function buildLongTom(r, m) {
+  const OLIVE = 0x3d4b30, DARK_OLIVE = 0x2a3520, STEEL = 0x34373d, GUNMETAL = 0x1e2024, CHROME = 0x9aa2ac, BRASS = 0xc9a050;
+  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
+  r.yaw = pivot(r.body, 0, 0.16, 0);
+  B(r.yaw, 2.4, 0.16, 2.4, GUNMETAL, 0, 0.08, 0, m);
+  B(r.yaw, 2.5, 0.06, 2.5, STEEL, 0, 0.16, 0, m);
+
+  // Split-trail legs with wide spade outriggers
+  for (const s of [-1, 1]) {
+    const leg = B(r.yaw, 0.22, 0.2, 2.1, DARK_OLIVE, s * 0.55, 0.34, -1.05, m);
+    leg.rotation.y = s * 0.32;
+    B(r.yaw, 0.44, 0.24, 0.32, STEEL, s * 0.92, 0.18, -2.0, m);
   }
-  r.yaw = pivot(r.body, 0, 0.2, 0);
-  r.muzzles = [];
-  const flash = (parent, x, y, z, s = 0.6) => { const f = B(parent, s, s, s, 0xffc060, x, y, z, m, { emissive: 0xff8a00 }); r.muzzles.push(f); return f; };
-  if (Bp && L >= 4) {   // MLRS / Thermobaric: launcher vehicle with a rocket pod
-    const thermo = L >= 5;
-    B(r.yaw, 1.7, 0.5, 3.2, thermo ? 0x3a3d42 : OL, 0, 0.55, -0.2, m);                               // chassis
-    if (thermo) for (const s of [-1, 1]) B(r.yaw, 0.35, 0.5, 3.3, 0x222428, s * 0.95, 0.35, -0.2, m);   // tracks
-    else for (const z of [-1.3, -0.3, 0.8]) for (const s of [-1, 1]) B(r.yaw, 0.3, 0.6, 0.6, 0x222428, s * 0.9, 0.3, z, m);
-    B(r.yaw, 1.5, 0.8, 0.9, thermo ? 0x3a3d42 : DK, 0, 1.15, 1.1, m);                                    // cab
-    B(r.yaw, 1.3, 0.3, 0.1, 0x4fa8e0, 0, 1.3, 1.56, m, { emissive: 0x0b2a44 });
-    r.barrel = pivot(r.yaw, 0, 1.15, -0.6); r.recoil = pivot(r.barrel, 0, 0, 0);
-    const cols = thermo ? 2 : 3, rows = 2, tube = thermo ? 0.55 : 0.36;
-    B(r.recoil, cols * (tube + 0.08) + 0.2, rows * (tube + 0.08) + 0.2, 2, thermo ? 0x6a6e74 : OL, 0, 0.35, 0.2, m);
-    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
-      const x = (i - (cols - 1) / 2) * (tube + 0.08), y = 0.35 + (j - 0.5) * (tube + 0.08);
-      B(r.recoil, tube, tube, 0.1, 0x1a1a1e, x, y, 1.22, m);
-      B(r.recoil, tube * 0.6, tube * 0.6, 0.12, thermo ? 0xd03020 : 0xd8d8d8, x, y, 1.18, m);
-    }
-    if (thermo) for (let k = 0; k < 5; k++) B(r.recoil, 0.25, 0.08, 2.02, k % 2 ? 0x1a1a1a : 0xf2c94c, -0.55 + k * 0.27, 0.35 + (rows * 0.63 + 0.2) / 2, 0.2, m);   // hazard stripes
-    flash(r.recoil, 0, 0.35, 1.45, 0.9);
-    r.rest = -0.5;
-  } else if (A && L >= 5) {   // Railgun: twin rails with glowing coils on a turntable
-    B(r.yaw, 2.6, 0.3, 2.6, 0x3a3d42, 0, 0.15, 0, m);
-    B(r.yaw, 1.4, 0.9, 1.6, 0x2a2d32, 0, 0.75, -0.3, m);                                                // capacitor housing
-    for (const s of [-1, 1]) B(r.yaw, 0.35, 0.6, 1.2, 0x34373c, s * 1, 0.6, -0.6, m);
-    r.barrel = pivot(r.yaw, 0, 1.25, 0.2); r.recoil = pivot(r.barrel, 0, 0, 0);
-    for (const s of [-1, 1]) B(r.recoil, 0.18, 0.4, 4.6, 0x8a8f96, s * 0.22, 0, 2, m);
-    for (let k = 0; k < 6; k++) B(r.recoil, 0.75, 0.75, 0.16, 0x1e2024, 0, 0, 0.3 + k * 0.7, m);
-    for (let k = 0; k < 6; k++) B(r.recoil, 0.6, 0.12, 0.18, 0x40e8ff, 0, 0.36, 0.3 + k * 0.7, m, { emissive: 0x0090c0 });
-    flash(r.recoil, 0, 0, 4.4, 0.7).material.color.setHex(0xa0f0ff);
-    r.rest = -0.04;
-  } else {   // gun on split trails (Lv1, Lv2, Long Tom, Guided, Autoloader)
-    const long = A ? 4.4 : L >= 2 ? 3.4 : 2.9;
-    if (A) { B(r.yaw, 2.4, 0.2, 2.4, 0x5a5e64, 0, 0.1, 0, m); B(r.yaw, 0.8, 0.5, 0.8, ST, 0, 0.45, -1.5, m); }   // turntable + counterweight
-    else for (const s of [-1, 1]) { const leg = B(r.yaw, 0.22, 0.2, 1.7, DK, s * 0.45, 0.35, -0.85, m); leg.rotation.y = s * 0.32; B(r.yaw, 0.3, 0.12, 0.3, ST, s * 0.75, 0.25, -1.6, m); }
-    for (const s of [-1, 1]) { B(r.yaw, 0.28, 0.9, 0.9, 0x222428, s * 0.82, 0.45, 0.15, m); B(r.yaw, 0.3, 0.3, 0.3, OL, s * 0.82, 0.45, 0.15, m); }
-    B(r.yaw, 1.4, 0.3, 0.6, OL, 0, 0.75, 0.1, m);
-    const sh = B(r.yaw, L >= 2 ? 2.1 : 1.9, L >= 2 ? 1.15 : 0.95, L >= 2 ? 0.16 : 0.1, OL, 0, 1.25, 0.55, m); sh.rotation.x = -0.12;
-    if (L >= 2) for (const s of [-1, 1]) B(r.yaw, 0.5, 0.4, 0.06, DK, s * 0.6, 1.1, 0.64, m);                  // armor plates
-    B(r.yaw, 0.6, 0.25, 0.12, DK, 0, 1.55, 0.6, m);
-    r.barrel = pivot(r.yaw, 0, 1.15, 0.15); r.recoil = pivot(r.barrel, 0, 0, 0);
-    B(r.recoil, 0.5, 0.45, 0.9, DK, 0, 0, -0.2, m);
-    B(r.recoil, 0.26 + (L >= 2 ? 0.04 : 0), 0.26 + (L >= 2 ? 0.04 : 0), long, OL, 0, 0, long / 2 - 0.05, m);
-    B(r.recoil, 0.18, 0.18, 1.3, ST, 0, 0.25, 0.55, m);
-    B(r.recoil, 0.42, 0.34, 0.36, ST, 0, 0, long, m);
-    flash(r.recoil, 0, 0, long + 0.3);
-    if (A && L >= 4) {   // Guided Shells: radar mast + fire-control box
-      const mast = pivot(r.yaw, -1.1, 0.2, -0.6);
-      B(mast, 0.15, 2.2, 0.15, ST, 0, 1.1, 0, m);
-      const dish = B(mast, 0.2, 0.9, 1.4, 0xd8dce2, 0.1, 2.3, 0, m); dish.rotation.z = 0.3;
-      B(r.yaw, 0.7, 0.6, 0.5, 0x2a2d32, 1.05, 0.5, -0.8, m);
-      B(r.yaw, 0.5, 0.3, 0.06, 0x5ce36f, 1.05, 0.6, -0.54, m, { emissive: 0x1a8a2a });
-      r.radar = mast;
-    }
-    if (Bp && L === 3) {   // Autoloader: ammo carousel beside the breech
-      const drum = pivot(r.yaw, 0.75, 1.0, -0.4);
-      B(drum, 0.7, 0.7, 0.7, ST, 0, 0, 0, m);
-      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; B(drum, 0.14, 0.14, 0.8, 0xc9a050, Math.cos(a) * 0.3, Math.sin(a) * 0.3, 0, m); }
-      r.radar = drum;   // spins like the radar (Unit.animate)
-    }
-    r.rest = A ? -0.3 : -0.45;
+  // Heavy road wheels
+  B(r.yaw, 2.1, 0.18, 0.18, GUNMETAL, 0, 0.45, 0.1, m);
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.24, 0.9, 0.9, 0x1c1e22, s * 1.1, 0.45, 0.1, m);
+    B(r.yaw, 0.26, 0.45, 0.45, STEEL, s * 1.1, 0.45, 0.1, m);
   }
-  r.muzzle = r.muzzles[0];
-  for (const mz of r.muzzles) mz.castShadow = false;
+
+  // Turntable stanchions & Counterweight block
+  for (const s of [-1, 1]) B(r.yaw, 0.26, 0.9, 0.6, GUNMETAL, s * 0.55, 0.7, 0, m);
+  B(r.yaw, 1.2, 0.6, 1.1, DARK_OLIVE, 0, 0.55, -1.2, m);
+  // Traverse gear & periscope
+  B(r.yaw, 0.16, 0.28, 0.28, STEEL, 0.65, 0.8, 0.1, m);
+  B(r.yaw, 0.18, 0.4, 0.18, GUNMETAL, -0.65, 1.1, 0.15, m);
+  B(r.yaw, 0.14, 0.08, 0.08, 0x4fa8e0, -0.65, 1.25, 0.24, m, { emissive: 0x0b2a44 });
+
+  r.barrel = pivot(r.yaw, 0, 1.15, 0.1);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 0.6, 0.56, 1.0, GUNMETAL, 0, 0, -0.4, m);
+  B(r.recoil, 0.42, 0.24, 2.0, STEEL, 0, 0.36, 0.8, m);
+  B(r.recoil, 0.32, 0.18, 0.8, CHROME, 0, 0.36, 1.9, m);
+  B(r.recoil, 0.32, 0.32, 4.4, OLIVE, 0, 0, 2.2, m);
+  B(r.recoil, 0.48, 0.38, 0.6, STEEL, 0, 0, 4.4, m);
+  const mz = B(r.recoil, 0.65, 0.65, 0.65, 0xffc860, 0, 0, 4.75, m, { emissive: 0xff8a00 });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  // Spent brass casing on deck
+  B(r.yaw, 0.14, 0.14, 0.55, BRASS, 0.35, 0.24, -0.7, m);
+
+  r.rest = -0.3; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
+  r.barY = 2.6;
+  return finishStructure(r);
+}
+
+/** Howitzer A4: Guided Shells - Radar mast + rotating dish, ballistic computer, and optical laser sensor. */
+function buildGuidedShells(r, m) {
+  const OLIVE = 0x3d4b30, DARK_OLIVE = 0x2a3520, STEEL = 0x34373d, GUNMETAL = 0x1e2024;
+  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
+  r.yaw = pivot(r.body, 0, 0.16, 0);
+  B(r.yaw, 2.4, 0.16, 2.4, GUNMETAL, 0, 0.08, 0, m);
+
+  for (const s of [-1, 1]) {
+    const leg = B(r.yaw, 0.24, 0.22, 1.9, OLIVE, s * 0.5, 0.32, -0.9, m);
+    leg.rotation.y = s * 0.3;
+    B(r.yaw, 0.42, 0.24, 0.3, STEEL, s * 0.82, 0.16, -1.8, m);
+  }
+  B(r.yaw, 2.0, 0.18, 0.18, GUNMETAL, 0, 0.44, 0.1, m);
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.24, 0.9, 0.9, 0x1c1e22, s * 1.05, 0.44, 0.1, m);
+    B(r.yaw, 0.26, 0.45, 0.45, STEEL, s * 1.05, 0.44, 0.1, m);
+  }
+
+  // Splinter shield with optic laser sensor box
+  const sh = B(r.yaw, 2.0, 1.1, 0.14, OLIVE, 0, 1.15, 0.5, m);
+  sh.rotation.x = -0.14;
+  B(r.yaw, 0.3, 0.2, 0.2, GUNMETAL, 0.55, 1.35, 0.55, m);
+  B(r.yaw, 0.14, 0.14, 0.06, 0xff2020, 0.55, 1.35, 0.65, m, { emissive: 0xaa0000 });
+
+  // Rotating fire-control radar mast + dish
+  const mast = pivot(r.yaw, -1.05, 0.2, -0.7);
+  B(mast, 0.14, 2.4, 0.14, STEEL, 0, 1.2, 0, m);
+  const dish = B(mast, 0.18, 0.9, 1.3, 0xd8dce2, 0.1, 2.4, 0, m);
+  dish.rotation.z = 0.28;
+  r.radar = mast;
+
+  // Ballistic computer cabinet
+  B(r.yaw, 0.7, 0.7, 0.5, 0x22252a, 1.05, 0.55, -0.7, m);
+  B(r.yaw, 0.5, 0.35, 0.06, 0x4fa8e0, 1.05, 0.65, -0.44, m, { emissive: 0x0b2a44 });
+  B(r.yaw, 0.12, 0.12, 0.06, 0x3ae35f, 1.05, 0.35, -0.44, m, { emissive: 0x168a28 });
+
+  r.barrel = pivot(r.yaw, 0, 1.15, 0.1);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 0.58, 0.52, 0.95, GUNMETAL, 0, 0, -0.35, m);
+  B(r.recoil, 0.38, 0.24, 1.8, STEEL, 0, 0.34, 0.7, m);
+  B(r.recoil, 0.32, 0.32, 4.0, OLIVE, 0, 0, 2.0, m);
+  // Velocity radar measurement coils on muzzle
+  B(r.recoil, 0.44, 0.44, 0.25, 0x2a2d32, 0, 0, 3.5, m);
+  B(r.recoil, 0.46, 0.36, 0.55, STEEL, 0, 0, 4.05, m);
+  const mz = B(r.recoil, 0.65, 0.65, 0.65, 0xffc860, 0, 0, 4.35, m, { emissive: 0xff8a00 });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  r.rest = -0.3; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
+  r.barY = 2.6;
+  return finishStructure(r);
+}
+
+/** Howitzer A5: Railgun - Twin magnetic rails, capacitor banks, power cables, and glowing capacitive coils. */
+function buildRailgun(r, m) {
+  const DK = 0x22252a, STEEL = 0x34373d, CYAN = 0x40e8ff, GLOW_CYAN = 0x0090c0;
+  B(r.body, 3.4, 0.18, 3.4, 0x82868c, 0, 0.09, 0, m);
+  r.yaw = pivot(r.body, 0, 0.18, 0);
+
+  // Turntable and heavy capacitor housing
+  B(r.yaw, 2.6, 0.3, 2.6, STEEL, 0, 0.15, 0, m);
+  B(r.yaw, 1.6, 1.0, 1.8, DK, 0, 0.8, -0.4, m);
+  for (const s of [-0.4, 0.4]) B(r.yaw, 0.15, 0.5, 0.04, CYAN, s, 0.85, 0.52, m, { emissive: GLOW_CYAN });
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.4, 0.7, 1.4, 0x2a2d32, s * 1.1, 0.65, -0.7, m);
+    B(r.yaw, 0.12, 0.12, 1.2, 0x181a1e, s * 0.85, 0.4, 0.2, m);
+  }
+
+  r.barrel = pivot(r.yaw, 0, 1.3, 0.2);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  for (const s of [-1, 1]) B(r.recoil, 0.2, 0.45, 4.8, 0x8a8f96, s * 0.24, 0, 2.1, m);
+  const glowCoils = [];
+  for (let k = 0; k < 6; k++) {
+    B(r.recoil, 0.82, 0.82, 0.18, 0x1e2024, 0, 0, 0.3 + k * 0.75, m);
+    const coil = B(r.recoil, 0.65, 0.14, 0.2, CYAN, 0, 0.4, 0.3 + k * 0.75, m, { emissive: GLOW_CYAN });
+    coil.castShadow = false;
+    glowCoils.push(coil);
+  }
+  r.glow = glowCoils;
+
+  const mz = B(r.recoil, 0.8, 0.8, 0.8, 0xa0f0ff, 0, 0, 4.6, m, { emissive: 0x60d0ff });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  r.rest = -0.04; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.7, 2.6, m);
+  r.barY = 2.8;
+  return finishStructure(r);
+}
+
+/** Howitzer B3: Autoloader - Revolving 6-round ammo drum magazine beside breech. */
+function buildAutoloader(r, m) {
+  const OLIVE = 0x3d4b30, STEEL = 0x34373d, GUNMETAL = 0x1e2024, BRASS = 0xc9a050;
+  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
+  r.yaw = pivot(r.body, 0, 0.16, 0);
+
+  for (const s of [-1, 1]) {
+    const leg = B(r.yaw, 0.24, 0.22, 1.9, OLIVE, s * 0.5, 0.32, -0.9, m);
+    leg.rotation.y = s * 0.3;
+    B(r.yaw, 0.42, 0.24, 0.3, STEEL, s * 0.82, 0.16, -1.8, m);
+  }
+  B(r.yaw, 1.9, 0.16, 0.16, GUNMETAL, 0, 0.42, 0.1, m);
+  for (const s of [-1, 1]) B(r.yaw, 0.24, 0.9, 0.9, 0x1c1e22, s * 1.05, 0.42, 0.1, m);
+
+  // Side-mounted revolving cylinder drum (6 rounds)
+  const drum = pivot(r.yaw, 0.82, 1.1, -0.35);
+  B(drum, 0.75, 0.75, 0.75, STEEL, 0, 0, 0, m);
+  for (let k = 0; k < 6; k++) {
+    const a = k / 6 * Math.PI * 2;
+    B(drum, 0.15, 0.15, 0.85, BRASS, Math.cos(a) * 0.32, Math.sin(a) * 0.32, 0, m);
+  }
+  r.drum = drum;
+  r.radar = drum;
+
+  r.barrel = pivot(r.yaw, 0, 1.15, 0.15);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 0.54, 0.5, 0.9, GUNMETAL, 0, 0, -0.25, m);
+  B(r.recoil, 0.36, 0.24, 1.6, STEEL, 0, 0.3, 0.6, m);
+  B(r.recoil, 0.3, 0.3, 3.4, OLIVE, 0, 0, 1.7, m);
+  B(r.recoil, 0.45, 0.35, 0.5, STEEL, 0, 0, 3.4, m);
+  const mz = B(r.recoil, 0.6, 0.6, 0.6, 0xffc860, 0, 0, 3.7, m, { emissive: 0xff8a00 });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  r.rest = -0.45; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
+  r.barY = 2.6;
+  return finishStructure(r);
+}
+
+/** Howitzer B4: MLRS - 6-wheel mobile artillery truck chassis with 6-tube rocket pod and rear back-blast. */
+function buildMLRS(r, m) {
+  const OLIVE = 0x485834, DK = 0x303c22;
+  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
+  r.yaw = pivot(r.body, 0, 0.16, 0);
+
+  // Heavy 6-wheel chassis
+  B(r.yaw, 1.8, 0.55, 3.3, OLIVE, 0, 0.55, -0.2, m);
+  for (const z of [-1.3, -0.3, 0.8]) {
+    for (const s of [-1, 1]) B(r.yaw, 0.3, 0.65, 0.65, 0x222428, s * 0.95, 0.32, z, m);
+  }
+  // Armored cab with tinted windows
+  B(r.yaw, 1.6, 0.85, 1.0, DK, 0, 1.25, 1.15, m);
+  B(r.yaw, 1.4, 0.32, 0.1, 0x4fa8e0, 0, 1.4, 1.66, m, { emissive: 0x0b2a44 });
+
+  // Boxed 6-tube rocket pod assembly (3x2)
+  r.barrel = pivot(r.yaw, 0, 1.25, -0.6);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 1.5, 1.05, 2.2, OLIVE, 0, 0.35, 0.2, m);
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 2; j++) {
+      const x = (i - 1) * 0.45, y = 0.35 + (j - 0.5) * 0.45;
+      B(r.recoil, 0.38, 0.38, 0.1, 0x1a1a1e, x, y, 1.32, m);
+      B(r.recoil, 0.24, 0.24, 0.12, 0xd8d8d8, x, y, 1.28, m);
+    }
+  }
+  const mz = B(r.recoil, 1.4, 0.9, 0.5, 0xffb040, 0, 0.35, 1.55, m, { emissive: 0xff7a00 });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  // Rear back-blast exhaust vent
+  const ex = B(r.recoil, 1.4, 0.9, 0.5, 0xff7020, 0, 0.35, -1.15, m, { emissive: 0xdd4000 });
+  ex.castShadow = false;
+  r.exhaust = ex;
+
+  r.rest = -0.5; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
+  r.barY = 2.9;
+  return finishStructure(r);
+}
+
+/** Howitzer B5: Thermobaric - Heavy tracked vehicle chassis with quad thermobaric missile pod and hazard chevrons. */
+function buildThermobaric(r, m) {
+  const DK = 0x2e3034, STEEL = 0x42464c, HAZARD_Y = 0xf2c94c, HAZARD_B = 0x1a1a1a, RED = 0xd03020;
+  B(r.body, 3.4, 0.18, 3.4, 0x82868c, 0, 0.09, 0, m);
+  r.yaw = pivot(r.body, 0, 0.18, 0);
+
+  // Heavy tracked chassis
+  B(r.yaw, 1.9, 0.6, 3.4, DK, 0, 0.6, -0.2, m);
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.4, 0.55, 3.5, 0x202226, s * 1.05, 0.38, -0.2, m);
+    for (let z = -1.4; z <= 1.4; z += 0.7) B(r.yaw, 0.44, 0.35, 0.35, STEEL, s * 1.05, 0.38, z, m);
+  }
+  // Heavy armored cab with blast deflection shield
+  B(r.yaw, 1.7, 0.9, 1.1, 0x24262a, 0, 1.35, 1.15, m);
+  B(r.yaw, 1.4, 0.32, 0.1, 0x4fa8e0, 0, 1.5, 1.72, m, { emissive: 0x0b2a44 });
+
+  // Armored quad-missile silo pod (2x2 massive tubes)
+  r.barrel = pivot(r.yaw, 0, 1.35, -0.6);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 1.7, 1.25, 2.3, DK, 0, 0.4, 0.2, m);
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      const x = (i - 0.5) * 0.72, y = 0.4 + (j - 0.5) * 0.72;
+      B(r.recoil, 0.6, 0.6, 0.12, 0x161618, x, y, 1.36, m);
+      B(r.recoil, 0.42, 0.42, 0.15, RED, x, y, 1.32, m);
+    }
+  }
+  // Black and yellow hazard chevron stripes across launcher face
+  for (let k = 0; k < 6; k++) {
+    B(r.recoil, 0.28, 0.08, 2.32, k % 2 ? HAZARD_B : HAZARD_Y, -0.7 + k * 0.28, 0.4 + 0.68, 0.2, m);
+  }
+  const mz = B(r.recoil, 1.6, 1.1, 0.6, 0xffa030, 0, 0.4, 1.65, m, { emissive: 0xff6000 });
+  mz.castShadow = false;
+  r.muzzle = mz; r.muzzles = [mz];
+
+  // Heavy rear flame exhaust
+  const ex = B(r.recoil, 1.6, 1.1, 0.6, 0xff5010, 0, 0.4, -1.2, m, { emissive: 0xee3000 });
+  ex.castShadow = false;
+  r.exhaust = ex;
+
+  r.rest = -0.5; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.7, 2.6, m);
+  r.barY = 3.0;
+  return finishStructure(r);
+}
+
+/** Howitzer Lv 1: Field Howitzer with split-trail carriage, spade outriggers, hydraulic recuperator, and ammo box. */
+function buildFieldHowitzer(r, m) {
+  const OLIVE = 0x425232, DARK_OLIVE = 0x303d24, STEEL = 0x383c44, GUNMETAL = 0x222428, SAND = 0xa8956a, CHROME = 0x88929e;
+  // 1. Concrete Firing Pad (within 3x3 footprint)
+  B(r.body, 2.8, 0.14, 2.8, 0x8a8e94, 0, 0.07, 0, m);
+  for (const [bx, bz] of [[-1.1, -1.1], [1.1, -1.1], [-1.1, 1.1], [1.1, 1.1]]) {
+    B(r.body, 0.65, 0.28, 0.45, SAND, bx, 0.21, bz, m);
+  }
+
+  // 2. Turntable Mount
+  r.yaw = pivot(r.body, 0, 0.14, 0);
+  B(r.yaw, 1.6, 0.14, 1.6, GUNMETAL, 0, 0.07, 0, m);
+
+  // 3. Split-trail tubular legs with triangular ground spades
+  for (const s of [-1, 1]) {
+    const leg = B(r.yaw, 0.18, 0.18, 1.8, DARK_OLIVE, s * 0.45, 0.32, -0.9, m);
+    leg.rotation.y = s * 0.28;
+    B(r.yaw, 0.38, 0.22, 0.28, STEEL, s * 0.78, 0.16, -1.75, m);
+  }
+
+  // 4. Wheels on transit axle
+  B(r.yaw, 1.9, 0.16, 0.16, GUNMETAL, 0, 0.42, 0.1, m);
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.22, 0.85, 0.85, 0x1c1e22, s * 0.98, 0.42, 0.1, m);
+    B(r.yaw, 0.24, 0.42, 0.42, STEEL, s * 0.98, 0.42, 0.1, m);
+  }
+
+  // 5. Trunnion stanchions & Angled Armor Splinter Shield
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.18, 0.75, 0.45, GUNMETAL, s * 0.42, 0.65, 0.1, m);
+  }
+  const sh = B(r.yaw, 1.85, 1.0, 0.12, OLIVE, 0, 1.05, 0.48, m);
+  sh.rotation.x = -0.15;
+  B(r.yaw, 0.22, 0.12, 0.16, GUNMETAL, -0.42, 1.25, 0.52, m);
+  B(r.yaw, 0.18, 0.06, 0.08, 0x4fa8e0, -0.42, 1.25, 0.58, m, { emissive: 0x0b2a44 });
+  B(r.yaw, 0.16, 0.28, 0.28, GUNMETAL, 0.46, 0.75, 0.18, m);
+
+  // 6. Barrel, Recuperator & Muzzle Assembly on recoil pivot
+  r.barrel = pivot(r.yaw, 0, 0.95, 0.1);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 0.48, 0.44, 0.7, GUNMETAL, 0, 0, -0.25, m);
+  B(r.recoil, 0.38, 0.22, 1.4, STEEL, 0, 0.24, 0.5, m);
+  B(r.recoil, 0.32, 0.16, 0.6, CHROME, 0, 0.24, 1.3, m);
+  B(r.recoil, 0.26, 0.26, 2.7, OLIVE, 0, 0, 1.2, m);
+  B(r.recoil, 0.42, 0.34, 0.45, STEEL, 0, 0, 2.65, m);
+  const mz = B(r.recoil, 0.55, 0.55, 0.55, 0xffc860, 0, 0, 2.95, m, { emissive: 0xff8a00 });
+  mz.castShadow = false;
+  r.muzzle = mz;
+  r.muzzles = [mz];
+
+  // 7. Field Clutter: Open ammo box with ready shell
+  B(r.yaw, 0.45, 0.25, 0.6, DARK_OLIVE, -0.75, 0.22, -0.45, m);
+  B(r.yaw, 0.12, 0.12, 0.45, 0xc9a050, -0.75, 0.32, -0.45, m);
+
+  r.rest = -0.45;
   r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, pad / 2 + 0.05, 2.4, m);
-  r.barY = Bp && L >= 4 ? 2.9 : A && L >= 5 ? 2.4 : 2.6;
-  r.muzzles.forEach((mz) => (mz.visible = false));
+  r.scaffold = scaffold(r.body, 1.45, 2.3, m);
+  r.barY = 2.4;
+  return finishStructure(r);
+}
+
+/** Howitzer Lv 2: Heavy Howitzer with reinforced shield wings, dual hydraulic buffers, and ready shell rack. */
+function buildHeavyHowitzer(r, m) {
+  const OLIVE = 0x3d4b30, DARK_OLIVE = 0x2a3520, STEEL = 0x34373d, GUNMETAL = 0x1e2024, SAND = 0xa8956a, CHROME = 0x9aa2ac, BRASS = 0xc9a050;
+  // 1. Reinforced concrete pad with corner sandbag bastions
+  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
+  for (let k = -1; k <= 1; k += 2) {
+    B(r.body, 0.8, 0.4, 0.5, SAND, k * 1.25, 0.28, -1.25, m);
+    B(r.body, 0.5, 0.4, 0.8, SAND, -1.25, 0.28, k * 1.25, m);
+    B(r.body, 0.5, 0.4, 0.8, SAND, 1.25, 0.28, k * 1.25, m);
+  }
+
+  // 2. Heavy Turntable Bearing Ring
+  r.yaw = pivot(r.body, 0, 0.16, 0);
+  B(r.yaw, 1.9, 0.16, 1.9, GUNMETAL, 0, 0.08, 0, m);
+  B(r.yaw, 2.0, 0.06, 2.0, STEEL, 0, 0.16, 0, m);
+
+  // 3. Heavy Box-Girder Split Trail with Serrated Outrigger Spades
+  for (const s of [-1, 1]) {
+    const leg = B(r.yaw, 0.24, 0.22, 2.0, DARK_OLIVE, s * 0.52, 0.34, -0.95, m);
+    leg.rotation.y = s * 0.32;
+    B(r.yaw, 0.46, 0.26, 0.34, STEEL, s * 0.88, 0.18, -1.9, m);
+    B(r.yaw, 0.12, 0.42, 0.12, GUNMETAL, s * 0.88, 0.28, -1.9, m);
+  }
+
+  // 4. Heavy military run-flat wheels with lug hubs
+  B(r.yaw, 2.1, 0.18, 0.18, GUNMETAL, 0, 0.46, 0.1, m);
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.26, 0.95, 0.95, 0x181a1d, s * 1.1, 0.46, 0.1, m);
+    B(r.yaw, 0.28, 0.48, 0.48, STEEL, s * 1.1, 0.46, 0.1, m);
+    B(r.yaw, 0.30, 0.20, 0.20, DARK_OLIVE, s * 1.1, 0.46, 0.1, m);
+  }
+
+  // 5. Heavy Armored Crew Splinter Shield with Side Wing Mantlets
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.22, 0.85, 0.5, GUNMETAL, s * 0.45, 0.72, 0.1, m);
+  }
+  const sh = B(r.yaw, 2.1, 1.15, 0.16, OLIVE, 0, 1.2, 0.55, m);
+  sh.rotation.x = -0.14;
+  for (const s of [-1, 1]) {
+    const wing = B(r.yaw, 0.48, 0.95, 0.12, DARK_OLIVE, s * 1.22, 1.15, 0.45, m);
+    wing.rotation.y = -s * 0.45;
+  }
+  B(r.yaw, 0.26, 0.16, 0.2, GUNMETAL, -0.5, 1.38, 0.58, m);
+  B(r.yaw, 0.20, 0.08, 0.08, 0x4fa8e0, -0.5, 1.38, 0.66, m, { emissive: 0x0b2a44 });
+  B(r.yaw, 0.38, 0.32, 0.18, 0x22252a, 0.55, 0.9, 0.25, m);
+  B(r.yaw, 0.28, 0.18, 0.04, 0x3ae35f, 0.55, 0.92, 0.35, m, { emissive: 0x168a28 });
+
+  // 6. Heavy Barrel, Dual-Cylinder Recuperator & Double-Baffle Muzzle Brake
+  r.barrel = pivot(r.yaw, 0, 1.05, 0.15);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  r.recoils = [r.recoil];
+
+  B(r.recoil, 0.56, 0.52, 0.85, GUNMETAL, 0, 0, -0.28, m);
+  B(r.recoil, 0.38, 0.24, 1.6, STEEL, 0, 0.32, 0.6, m);
+  B(r.recoil, 0.30, 0.18, 0.7, CHROME, 0, 0.32, 1.5, m);
+  B(r.recoil, 0.34, 0.20, 1.4, STEEL, 0, -0.30, 0.5, m);
+  B(r.recoil, 0.34, 0.34, 1.2, DARK_OLIVE, 0, 0, 0.5, m);
+  B(r.recoil, 0.30, 0.30, 2.6, OLIVE, 0, 0, 1.8, m);
+  B(r.recoil, 0.50, 0.38, 0.55, STEEL, 0, 0, 3.2, m);
+  const mz = B(r.recoil, 0.65, 0.65, 0.65, 0xffc860, 0, 0, 3.55, m, { emissive: 0xff8a00 });
+  mz.castShadow = false;
+  r.muzzle = mz;
+  r.muzzles = [mz];
+
+  // 7. Tactical Ready-Use Shell Carrier with 2 brass shells
+  B(r.yaw, 0.35, 0.45, 0.7, DARK_OLIVE, -0.85, 0.32, -0.4, m);
+  for (const z of [-0.55, -0.25]) {
+    B(r.yaw, 0.14, 0.14, 0.5, BRASS, -0.85, 0.46, z, m);
+    B(r.yaw, 0.12, 0.12, 0.15, STEEL, -0.85, 0.46, z + 0.26, m);
+  }
+
+  r.rest = -0.45;
+  r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
+  r.barY = 2.6;
   return finishStructure(r);
 }
 
@@ -1158,15 +2187,38 @@ export function buildBullet() {
 
 // ======================= STRUCTURES & PROPS =======================
 
+/**
+ * Creates an animated faction flag with the cloth banner and emblem/stripe grouped together
+ * and pivoted directly at the flagpole, so they flap in lockstep without separating.
+ */
+function addFactionFlag(g, poleX, poleY, poleZ, poleH, flagW, flagH, color, stripeColor = 0xffffff, poleColor = 0xcccccc) {
+  B(g, 0.14, poleH, 0.14, poleColor, poleX, poleY + poleH / 2, poleZ, null);
+  B(g, 0.22, 0.22, 0.22, 0xe0b040, poleX, poleY + poleH + 0.08, poleZ, null);
+
+  const flagGroup = new THREE.Group();
+  const topY = poleY + poleH - 0.2;
+  flagGroup.position.set(poleX, topY - flagH / 2, poleZ);
+
+  B(flagGroup, 0.06, flagH, flagW, color, 0, 0, flagW / 2, null);
+  if (stripeColor !== null) {
+    B(flagGroup, 0.08, flagH * 0.3, flagW, stripeColor, 0, 0, flagW / 2, null);
+  }
+
+  g.add(flagGroup);
+  g.userData.flag = flagGroup;
+  return flagGroup;
+}
+
 // Castle tiers (Grow Castle-style growth). Level 3 is the classic castle the lane map uses.
 export const CASTLE_TIERS = [
-  { name: 'Wooden Fort', desc: 'Small stone keep behind a wooden palisade.' },
-  { name: 'Stone Keep', desc: 'Full-size keep with two gate towers.' },
-  { name: 'Castle', desc: 'Four corner towers and full battlements.' },
-  { name: 'Fortress', desc: 'Adds a central donjon (watchtower) and gilded spires.' },
-  { name: 'Citadel', desc: 'Taller towers, braziers at the gate and royal banners.' },
+  { name: 'Wooden Fort', desc: 'Frontier log blockhouse and timber palisade with a raised archer watch.' },
+  { name: 'Stone Keep', desc: 'Fortified stone masonry keep with timber hoardings and battlements (no towers).' },
+  { name: 'Castle', desc: 'Four fortified corner towers with red conical spires and crenellated battlements.' },
+  { name: 'Fortress', desc: 'Concentric citadel with massive central Great Donjon and heraldic shields.' },
+  { name: 'Royal Citadel', desc: 'Soaring imperial spires with gold trim, grand braziers, and royal banners.' },
 ];
 const TOWER_SPOTS = [[-4.5, -6], [-4.5, 6], [4.5, -6], [4.5, 6]];
+
 /**
  * Where wall troops stand at each castle level (local coords, gate faces +x). Front-wall troops stand on
  * the roof behind the battlements, in the gaps between the merlons (merlons sit at z = 0, ±2, ±4).
@@ -1174,303 +2226,786 @@ const TOWER_SPOTS = [[-4.5, -6], [-4.5, 6], [4.5, -6], [4.5, 6]];
  */
 export function castleSlots(level = 3) {
   const L = Math.max(1, Math.min(CASTLE_TIERS.length, level));
-  if (L === 1) return [{ x: 1.9, y: 7, z: 0 }];
-  const wall = (L === 2 ? [-1, 1] : [-1, 1, -3, 3]).map((z) => ({ x: 3.4, y: 9, z }));
+  if (L === 1) return [{ x: 1.9, y: 7.0, z: 0 }];
+  if (L === 2) return [-1.2, 1.2].map((z) => ({ x: 3.2, y: 8.5, z }));
+  const wall = [-1.1, 1.1, -3.3, 3.3].map((z) => ({ x: 3.4, y: 9.0, z }));
   const th = L >= 5 ? 16 : 13;
-  if (L >= 4) wall.push({ x: 4.5, y: th, z: -6 }, { x: 4.5, y: th, z: 6 });
-  if (L >= 5) wall.push({ x: -1.5, y: 17, z: -1.2 }, { x: -1.5, y: 17, z: 1.2 });
+  if (L >= 4) wall.push({ x: 4.5, y: th, z: -6.0 }, { x: 4.5, y: th, z: 6.0 });
+  if (L >= 5) wall.push({ x: -1.5, y: 17.0, z: -1.2 }, { x: -1.5, y: 17.0, z: 1.2 });
   return wall;
 }
 
 export function buildCastle(level = 3) {
   const L = Math.max(1, Math.min(CASTLE_TIERS.length, level));
   const g = new THREE.Group();
-  const stone = [0x8d8f93, 0x7f8186, 0x9a9ca0, 0x74767b];
+  if (L === 1) {
+    buildWoodenFort(g);
+    return g;
+  }
+  if (L === 2) {
+    buildStoneKeep(g);
+    return g;
+  }
+
+  const stone = [0x8c8e93, 0x7c7e84, 0x989aa0, 0x72747a];
   const pick = (i) => stone[i % stone.length];
   const GOLD = 0xe0b040;
-  // main keep: half sizes + height
-  const [hx, hz, kh] = L === 1 ? [3, 4, 7] : [4.5, 6, 9];
-  B(g, hx * 2, kh, hz * 2, 0x86888d, 0, kh / 2, 0, null);
-  // corner towers
-  const th = L >= 5 ? 16 : 13;
-  const towers = L === 1 ? [] : L === 2 ? TOWER_SPOTS.slice(2) : TOWER_SPOTS;
-  towers.forEach(([x, z], i) => {
-    B(g, 3.2, th, 3.2, pick(i), x, th / 2, z, null);
-    for (let a = 0; a < 4; a++) {
-      const ox = [-1.2, 1.2][a % 2], oz = [-1.2, 1.2][a >> 1];
-      B(g, 0.9, 0.9, 0.9, 0x7a7c80, x + ox, th + 0.45, z + oz, null);
-    }
-    B(g, 3.6, 0.4, 3.6, 0x6e7075, x, th - 0.8, z, null);
-    // Fortress+: front towers lose their roofs so wall troops can stand on them
-    if (L >= 4 && x > 0) return;
-    // pointed roof (stacked)
-    B(g, 2.4, 1, 2.4, 0x6b2a24, x, th + 1.4, z, null);
-    B(g, 1.6, 1, 1.6, 0x7d3129, x, th + 2.4, z, null);
-    B(g, 0.8, 1, 0.8, 0x8e3a30, x, th + 3.4, z, null);
-    if (L >= 4) B(g, 0.3, 0.9, 0.3, GOLD, x, th + 4.35, z, null, { emissive: 0x3a2800 });
-  });
-  // wall crenellations
-  // (the small Wooden Fort keep leaves a gap in the middle for its one wall troop)
-  for (const z of L === 1 ? [-3, -1.2, 1.2, 3] : [-4, -2, 0, 2, 4]) {
-    B(g, 0.9, 0.9, 0.9, 0x7a7c80, hx - 0.4, kh + 0.45, z, null);
-    B(g, 0.9, 0.9, 0.9, 0x7a7c80, -(hx - 0.4), kh + 0.45, z, null);
-  }
-  for (let x = -(hx - 2); x <= hx - 2 + 1e-6; x += hx - 2) {
-    B(g, 0.9, 0.9, 0.9, 0x7a7c80, x, kh + 0.45, hz - 0.4, null);
-    B(g, 0.9, 0.9, 0.9, 0x7a7c80, x, kh + 0.45, -(hz - 0.4), null);
-  }
-  // brick accents
-  if (L >= 2) {
-    for (let i = 0; i < 70; i++) {
-      const face = i % 3;
-      const y = 0.6 + ((i * 37) % 80) / 10;
-      if (face === 0) B(g, 0.15, 0.5, 1, pick(i + 1), 4.55, y, -5 + ((i * 53) % 100) / 10, null);
-      else if (face === 1) B(g, 1, 0.5, 0.15, pick(i + 2), -4 + ((i * 29) % 80) / 10, y, 6.05, null);
-      else B(g, 1, 0.5, 0.15, pick(i + 3), -4 + ((i * 41) % 80) / 10, y, -6.05, null);
-    }
-  }
-  // Wooden Fort: palisade of sharpened logs around the keep, open at the gate
-  if (L === 1) {
-    const log = [0x6b4a2b, 0x5e4026, 0x7a5532];
-    let k = 0;
-    const post = (x, z) => {
-      const h = 2.4 + ((k * 7) % 5) / 10;
-      B(g, 0.5, h, 0.5, log[k++ % 3], x, h / 2, z, null);
-      B(g, 0.3, 0.35, 0.3, 0x8a6a42, x, h + 0.17, z, null);
-    };
-    for (let z = -5.2; z <= 5.21; z += 0.6) if (Math.abs(z) > 2) post(hx + 1.6, z);
-    for (let x = -4; x <= hx + 1.01; x += 0.6) { post(x, -5.5); post(x, 5.5); }
-    for (const z of [-2, 2]) B(g, 0.6, 3.6, 0.6, 0x4a3520, hx + 1.6, 1.8, z, null);   // gate posts
-  }
-  // Fortress+: central donjon (flat top, troops stand on it at Citadel)
-  const dh = L >= 5 ? 17 : 15;
-  if (L >= 4) {
-    B(g, 5, dh, 5, 0x7f8186, -1.5, dh / 2, 0, null);
-    B(g, 5.6, 0.4, 5.6, 0x6e7075, -1.5, dh - 0.8, 0, null);
-    for (const [ox, oz] of [[-2, -2], [-2, 2], [2, -2], [2, 2], [-2, 0], [2, 0], [0, -2], [0, 2]]) B(g, 0.8, 0.8, 0.8, 0x7a7c80, -1.5 + ox, dh + 0.4, oz, null);
-    for (const y of [kh + 1.5, kh + 3.5]) for (const z of [-2.52, 2.52]) B(g, 0.6, 0.9, 0.1, 0x1a1a22, -1.5, y, z, null);   // arrow slits
-  }
-  // gate facing +x
-  B(g, 0.3, 4.4, 3.4, 0x2a1d12, hx + 0.05, 2.2, 0, null);
-  for (let z = -1.2; z <= 1.2; z += 0.6) B(g, 0.2, 4.2, 0.12, 0x3a3a3a, hx + 0.25, 2.1, z, null);
-  B(g, 0.4, 0.6, 4.2, 0x6e7075, hx + 0.1, 4.6, 0, null);
-  // banners
-  if (L >= 2) {
-    for (const z of [-2.6, 2.6]) {
-      B(g, 0.1, 3.2, 1.4, 0xa3221c, 4.6, 6.5, z, null);
-      B(g, 0.12, 0.8, 0.6, GOLD, 4.62, 6.8, z, null);
-    }
-  }
-  if (L >= 5) {   // royal banners hanging from the gate towers
-    for (const z of [-6, 6]) {
-      B(g, 0.1, 5, 1.8, 0x7a1a8a, 6.15, th - 4, z, null);
-      B(g, 0.12, 1, 0.8, GOLD, 6.17, th - 3.4, z, null);
-      B(g, 0.12, 0.2, 1.8, GOLD, 6.17, th - 6.4, z, null);
-    }
-  }
-  // flag on top (on the donjon from Fortress up)
-  const fx = L >= 4 ? -1.5 : 0, fy = L >= 4 ? dh : kh;
-  B(g, 0.15, 4, 0.15, 0x4a3520, fx, fy + 2, 0, null);
-  const flag = B(g, 0.1, 1.2, 2, 0xa3221c, fx, fy + 3.3, 1.05, null);
-  g.userData.flag = flag;
-  // torches (emissive, flicker)
+  const RED_ROOF = 0x8a2c24;
+  const PURPLE_ROOF = 0x6a167d;
+  const DARK_WOOD = 0x4a3520;
   const torches = [];
-  for (const z of [-2, 2]) {
-    B(g, 0.2, 0.6, 0.2, 0x4a3520, hx + 0.25, 3.6, z * 1.1, null);
-    const fl = B(g, 0.3, 0.3, 0.3, 0xffa030, hx + 0.25, 4.05, z * 1.1, null, { emissive: 0xff7a00 });
-    fl.castShadow = false; torches.push(fl);
+
+  // Foundation stone plinth with flared corners
+  B(g, 9.8, 0.5, 12.8, 0x5c5e64, 0, 0.25, 0, null);
+  // Main stone keep
+  const kh = 9.0;
+  B(g, 9.0, kh, 12.0, 0x84868c, 0, kh / 2, 0, null);
+
+  // Corbelled machicolation cornice below battlements
+  B(g, 9.6, 0.45, 12.6, 0x64666c, 0, kh - 0.7, 0, null);
+
+  // 4 Grand Corner Towers (Levels 3, 4, 5)
+  const th = L >= 5 ? 16.0 : 13.0;
+  TOWER_SPOTS.forEach(([x, z], i) => {
+    B(g, 3.4, th, 3.4, pick(i), x, th / 2, z, null);
+    B(g, 3.8, 0.45, 3.8, 0x5e6066, x, th - 0.7, z, null);
+    for (const ox of [-1.3, 1.3]) {
+      for (const oz of [-1.3, 1.3]) {
+        B(g, 0.85, 0.85, 0.85, 0x72747a, x + ox, th + 0.42, z + oz, null);
+      }
+    }
+
+    // Fortress+ (L >= 4): front towers lose roofs for open archery/artillery fighting platforms
+    if (L >= 4 && x > 0) return;
+
+    const roofCol = (L >= 5 && x < 0) ? PURPLE_ROOF : RED_ROOF;
+    B(g, 2.6, 1.1, 2.6, roofCol, x, th + 1.45, z, null);
+    B(g, 1.8, 1.1, 1.8, roofCol + 0x080808, x, th + 2.55, z, null);
+    B(g, 1.0, 1.1, 1.0, roofCol + 0x101010, x, th + 3.65, z, null);
+    if (L >= 4) {
+      B(g, 0.3, 1.0, 0.3, GOLD, x, th + 4.65, z, null, { emissive: 0x3a2800 });
+    }
+  });
+
+  // Battlements & parapet along the front (+x):
+  // Wooden chemin de ronde (patrol walkway) sitting slightly above keep roof (y = kh + 0.04)
+  B(g, 1.8, 0.08, 11.2, 0x583a1e, 3.2, kh + 0.04, 0, null);
+  // Merlons along front wall edge (x = 4.1)
+  for (const z of [-4.4, -2.2, 0, 2.2, 4.4]) {
+    B(g, 0.55, 0.9, 1.1, 0x76787e, 4.1, kh + 0.45, z, null);
   }
-  if (L >= 5) {   // big braziers either side of the gate
-    for (const z of [-3.6, 3.6]) {
-      B(g, 0.4, 1.6, 0.4, 0x3a3a3a, hx + 1.2, 0.8, z, null);
-      B(g, 1, 0.4, 1, 0x4a4a4a, hx + 1.2, 1.8, z, null);
-      const fl = B(g, 0.7, 0.7, 0.7, 0xffb040, hx + 1.2, 2.35, z, null, { emissive: 0xff7a00 });
-      fl.castShadow = false; torches.push(fl);
+  // Side & rear parapet merlons
+  for (const x of [-3.5, 0, 3.5]) {
+    B(g, 0.9, 0.9, 0.55, 0x76787e, x, kh + 0.45, 5.7, null);
+    B(g, 0.9, 0.9, 0.55, 0x76787e, x, kh + 0.45, -5.7, null);
+  }
+
+  // Stone Quoins and Masonry Accents on outer corners
+  for (let k = 0; k < 30; k++) {
+    const y = 1.0 + ((k * 31) % 75) / 10;
+    const side = k % 2 === 0 ? 1 : -1;
+    B(g, 0.14, 0.5, 0.8, pick(k + 1), 4.56, y, side * (4.0 + ((k * 13) % 18) / 10), null);
+  }
+
+  // Fortified Arched Gatehouse (+x) - Clean 3D separation without coplanar z-fighting
+  // Side stone arch pillars
+  B(g, 0.6, 5.0, 0.6, 0x62646a, 4.8, 2.5, -2.1, null);
+  B(g, 0.6, 5.0, 0.6, 0x62646a, 4.8, 2.5, 2.1, null);
+  // Heavy stone lintel above portal
+  B(g, 0.7, 0.8, 4.8, 0x585a60, 4.8, 5.2, 0, null);
+
+  // Recessed oak gate doors
+  B(g, 0.14, 4.2, 3.4, 0x3d2714, 4.56, 2.1, 0, null);
+  for (const y of [1.2, 2.5, 3.8]) {
+    B(g, 0.16, 0.14, 3.4, 0x222426, 4.58, y, 0, null);
+  }
+  // Iron Portcullis with vertical bars & spike tips
+  for (let z = -1.2; z <= 1.21; z += 0.48) {
+    B(g, 0.12, 4.3, 0.12, 0x2a2c30, 4.75, 2.15, z, null);
+    B(g, 0.16, 0.25, 0.16, 0x1e2022, 4.75, 0.15, z, null);
+  }
+
+  // Torches flanking the gate (wall sconces)
+  for (const sz of [-2.8, 2.8]) {
+    B(g, 0.25, 0.65, 0.25, DARK_WOOD, 4.9, 3.6, sz, null);
+    B(g, 0.35, 0.15, 0.35, 0x2a2c30, 4.9, 3.95, sz, null);
+    const fl = B(g, 0.35, 0.35, 0.35, 0xffa030, 4.9, 4.25, sz, null, { emissive: 0xff7a00 });
+    fl.castShadow = false;
+    torches.push(fl);
+  }
+
+  // Crimson Faction Banners flanking the gate
+  for (const sz of [-2.8, 2.8]) {
+    B(g, 0.06, 3.4, 1.4, 0xa3221c, 4.92, 6.5, sz, null);
+    B(g, 0.08, 0.85, 0.7, GOLD, 4.94, 6.8, sz, null);
+  }
+
+  // =========================================================================
+  // LEVEL 4 & 5: FORTRESS & CITADEL
+  // =========================================================================
+  const dh = L >= 5 ? 17.5 : 15.5;
+  if (L >= 4) {
+    B(g, 5.4, dh, 5.4, 0x7c7e84, -1.5, dh / 2, 0, null);
+    B(g, 5.9, 0.5, 5.9, 0x606268, -1.5, dh - 0.7, 0, null);
+    for (const [ox, oz] of [[-2.2, -2.2], [-2.2, 2.2], [2.2, -2.2], [2.2, 2.2], [-2.2, 0], [2.2, 0], [0, -2.2], [0, 2.2]]) {
+      B(g, 0.8, 0.85, 0.8, 0x72747a, -1.5 + ox, dh + 0.42, oz, null);
+    }
+    for (const y of [kh + 1.8, kh + 4.2]) {
+      for (const z of [-2.72, 2.72]) {
+        B(g, 0.5, 1.0, 0.08, 0x181a1e, -1.5, y, z, null);
+      }
+    }
+    const shieldCols = [0xa3221c, 0xe0b040, 0x254e8c];
+    for (let k = 0; k < 4; k++) {
+      const sz = -3.0 + k * 2.0;
+      B(g, 0.1, 0.8, 0.6, shieldCols[k % 3], 4.42, kh + 0.4, sz, null);
     }
   }
+
+  // LEVEL 5: CITADEL
+  if (L >= 5) {
+    B(g, 0.08, 2.2, 1.4, 0x4080e0, 1.22, dh - 2.8, 0, null, { emissive: 0x182850 });
+    for (const sz of [-6.0, 6.0]) {
+      B(g, 0.08, 5.8, 1.8, PURPLE_ROOF, 6.22, th - 4.5, sz, null);
+      B(g, 0.1, 1.2, 0.9, GOLD, 6.24, th - 3.8, sz, null);
+      B(g, 0.1, 0.25, 1.8, GOLD, 6.24, th - 7.1, sz, null);
+    }
+    for (const sz of [-3.8, 3.8]) {
+      B(g, 0.9, 0.5, 0.9, 0x4e5056, 5.6, 0.25, sz, null);
+      B(g, 0.5, 1.2, 0.5, 0x3e4044, 5.6, 1.1, sz, null);
+      B(g, 1.2, 0.45, 1.2, 0x8a6026, 5.6, 1.85, sz, null);
+      const fl = B(g, 0.8, 0.8, 0.8, 0xffb040, 5.6, 2.45, sz, null, { emissive: 0xff7a00 });
+      fl.castShadow = false;
+      torches.push(fl);
+    }
+  }
+
+  // Flag on Donjon / Keep
+  const fx = L >= 4 ? -1.5 : 0;
+  const fy = L >= 4 ? dh : kh;
+  addFactionFlag(g, fx, fy, 0, 4.5, 2.2, 1.2, 0xa3221c, GOLD, DARK_WOOD);
+
   g.userData.torches = torches;
   g.userData.level = L;
   g.userData.slots = castleSlots(L);
   return g;
 }
 
+/** Castle Lv 2: Fortified Norman Stone Keep without corner towers. */
+function buildStoneKeep(g) {
+  const torches = [];
+  const stone = [0x8c8e93, 0x7c7e84, 0x989aa0, 0x72747a];
+  const pick = (i) => stone[i % stone.length];
+  const GOLD = 0xe0b040;
+  const DARK_WOOD = 0x4a3520;
+
+  const hx = 4.2, hz = 5.2, kh = 8.5;
+
+  // Foundation stone plinth with corner buttress spurs
+  B(g, hx * 2 + 0.8, 0.5, hz * 2 + 0.8, 0x585a60, 0, 0.25, 0, null);
+  // Main solid stone masonry keep
+  B(g, hx * 2, kh, hz * 2, 0x82848a, 0, kh / 2, 0, null);
+
+  // Stepped corner buttresses (adds heavy Norman architectural weight without towers)
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      B(g, 1.2, 5.0, 1.2, pick(sx + sz + 3), sx * (hx + 0.2), 2.5, sz * (hz + 0.2), null);
+      B(g, 0.8, 3.2, 0.8, pick(sx + sz + 4), sx * (hx + 0.1), 6.6, sz * (hz + 0.1), null);
+    }
+  }
+
+  // Corbelled stone machicolation cornice under battlements
+  B(g, hx * 2 + 0.6, 0.45, hz * 2 + 0.6, 0x62646a, 0, kh - 0.7, 0, null);
+  for (let z = -hz + 0.8; z <= hz - 0.7; z += 1.4) {
+    B(g, 0.4, 0.35, 0.2, 0x3d2714, hx + 0.15, kh - 1.0, z, null);
+    B(g, 0.4, 0.35, 0.2, 0x3d2714, -(hx + 0.15), kh - 1.0, z, null);
+  }
+
+  // Wooden chemin de ronde (patrol walkway) on the roof (sitting slightly above stone deck)
+  B(g, 1.6, 0.08, hz * 2 - 1.2, 0x583a1e, 3.0, kh + 0.04, 0, null);
+
+  // Stone battlements along all 4 sides (merlons):
+  // Front wall (+x): 2 archer slots at z = ±1.2 (standing at x = 3.2, y = 8.5)
+  for (const z of [-3.8, -2.4, 0, 2.4, 3.8]) {
+    B(g, 0.55, 0.9, 0.9, 0x72747a, hx - 0.35, kh + 0.45, z, null);
+  }
+  // Side and rear parapets
+  for (const x of [-3.0, -1.5, 0, 1.5, 3.0]) {
+    B(g, 0.9, 0.9, 0.55, 0x72747a, x, kh + 0.45, hz - 0.35, null);
+    B(g, 0.9, 0.9, 0.55, 0x72747a, x, kh + 0.45, -(hz - 0.35), null);
+  }
+  for (const z of [-3.8, -1.9, 0, 1.9, 3.8]) {
+    B(g, 0.55, 0.9, 0.9, 0x72747a, -(hx - 0.35), kh + 0.45, z, null);
+  }
+
+  // Corner watch posts on the roof
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      B(g, 1.1, 1.2, 1.1, 0x6e7076, sx * (hx - 0.35), kh + 0.6, sz * (hz - 0.35), null);
+    }
+  }
+
+  // Arched Stone Portal (+x) - separate 3D pillars & lintel (no coplanar box fighting)
+  B(g, 0.5, 4.4, 0.6, 0x5e6066, hx + 0.25, 2.2, -1.8, null);
+  B(g, 0.5, 4.4, 0.6, 0x5e6066, hx + 0.25, 2.2, 1.8, null);
+  B(g, 0.6, 0.8, 4.2, 0x54565c, hx + 0.25, 4.6, 0, null);
+
+  // Recessed oak gate doors
+  B(g, 0.12, 4.0, 2.8, 0x3d2714, hx + 0.05, 2.0, 0, null);
+  for (const y of [1.1, 2.4, 3.6]) {
+    B(g, 0.14, 0.12, 2.8, 0x222426, hx + 0.07, y, 0, null);
+  }
+  // Iron Portcullis bars
+  for (let z = -1.1; z <= 1.11; z += 0.44) {
+    B(g, 0.1, 4.1, 0.1, 0x2a2c30, hx + 0.2, 2.05, z, null);
+    B(g, 0.14, 0.22, 0.14, 0x1e2022, hx + 0.2, 0.11, z, null);
+  }
+
+  // Wall Torches flanking entrance
+  for (const sz of [-2.4, 2.4]) {
+    B(g, 0.2, 0.6, 0.2, DARK_WOOD, hx + 0.35, 3.4, sz, null);
+    B(g, 0.3, 0.12, 0.3, 0x242628, hx + 0.35, 3.7, sz, null);
+    const fl = B(g, 0.32, 0.32, 0.32, 0xffa030, hx + 0.35, 3.96, sz, null, { emissive: 0xff7a00 });
+    fl.castShadow = false;
+    torches.push(fl);
+  }
+
+  // Crimson Faction Banners flanking portal
+  for (const sz of [-2.4, 2.4]) {
+    B(g, 0.06, 2.8, 1.2, 0xa3221c, hx + 0.38, 5.8, sz, null);
+    B(g, 0.08, 0.7, 0.6, GOLD, hx + 0.40, 6.0, sz, null);
+  }
+
+  // Faction flag on roof
+  addFactionFlag(g, -2.5, kh, 3.2, 4.2, 1.8, 1.0, 0xa3221c, GOLD, DARK_WOOD);
+
+  g.userData.torches = torches;
+  g.userData.level = 2;
+  g.userData.slots = castleSlots(2);
+}
+
+/** Castle Lv 1: Authentic Motte & Bailey Frontier Wooden Fort. */
+function buildWoodenFort(g) {
+  const torches = [];
+  const log = [0x6b4a2b, 0x5e4026, 0x7a5532];
+  const pickLog = (i) => log[i % log.length];
+
+  // Interlocking timber log blockhouse
+  for (let y = 0.4; y <= 6.8; y += 0.8) {
+    const idx = Math.floor(y);
+    B(g, 7.0, 0.75, 0.6, pickLog(idx), 0, y, -4.2, null);
+    B(g, 7.0, 0.75, 0.6, pickLog(idx + 1), 0, y, 4.2, null);
+    B(g, 0.6, 0.75, 8.0, pickLog(idx + 2), -3.2, y, 0, null);
+    B(g, 0.6, 0.75, 8.0, pickLog(idx + 3), 3.2, y, 0, null);
+  }
+
+  for (const sx of [-3.2, 3.2]) {
+    for (const sz of [-4.2, 4.2]) {
+      B(g, 0.85, 7.2, 0.85, 0x48321c, sx, 3.6, sz, null);
+    }
+  }
+
+  // Raised timber combat watch platform at y = 7.0
+  B(g, 6.8, 0.25, 8.8, 0x55381d, 0, 6.9, 0, null);
+
+  // Front log parapet (archer slot 1 at x = 1.9, y = 7.0, z = 0)
+  B(g, 0.5, 0.85, 3.2, 0x5e4026, 3.2, 7.45, -2.4, null);
+  B(g, 0.5, 0.85, 3.2, 0x5e4026, 3.2, 7.45, 2.4, null);
+  B(g, 0.5, 0.35, 1.6, 0x5e4026, 3.2, 7.2, 0, null);
+  B(g, 6.4, 0.8, 0.4, 0x5e4026, 0, 7.45, -4.2, null);
+  B(g, 6.4, 0.8, 0.4, 0x5e4026, 0, 7.45, 4.2, null);
+
+  // Weathered wooden plank roof shelter over rear half
+  for (const sz of [-4.0, 4.0]) {
+    B(g, 0.15, 2.2, 0.15, 0x422d19, -3.0, 8.0, sz, null);
+    B(g, 0.15, 2.4, 0.15, 0x422d19, 0, 8.1, sz, null);
+  }
+  const shelterRoof = B(g, 3.8, 0.1, 8.6, 0x4e331b, -1.5, 9.25, 0, null);
+  shelterRoof.rotation.z = 0.08;
+
+  // Outer Sharpened Log Palisade Perimeter
+  let k = 0;
+  const post = (x, z) => {
+    const h = 2.4 + ((k * 7) % 5) / 10;
+    B(g, 0.5, h, 0.5, log[k++ % 3], x, h / 2, z, null);
+    B(g, 0.32, 0.4, 0.32, 0x8a6a42, x, h + 0.18, z, null);
+  };
+  for (let z = -5.6; z <= 5.61; z += 0.6) {
+    if (Math.abs(z) > 1.8) post(5.2, z);
+  }
+  for (let x = -4.6; x <= 4.8; x += 0.6) {
+    post(x, -5.8);
+    post(x, 5.8);
+  }
+  B(g, 0.7, 3.8, 0.7, 0x3d2714, 5.2, 1.9, -1.8, null);
+  B(g, 0.7, 3.8, 0.7, 0x3d2714, 5.2, 1.9, 1.8, null);
+  B(g, 0.6, 0.5, 4.2, 0x3d2714, 5.2, 3.75, 0, null);
+
+  // Pitch Brazier on oak post beside the entrance
+  B(g, 0.3, 1.8, 0.3, 0x3d2714, 5.8, 0.9, 2.4, null);
+  B(g, 0.7, 0.25, 0.7, 0x2a2c30, 5.8, 1.85, 2.4, null);
+  const fl = B(g, 0.45, 0.45, 0.45, 0xffa030, 5.8, 2.2, 2.4, null, { emissive: 0xff7a00 });
+  fl.castShadow = false;
+  torches.push(fl);
+
+  // Red Medieval Faction Flag
+  addFactionFlag(g, -3.2, 0, 4.6, 6.2, 2.0, 1.1, 0xa3221c, 0xe0b040, 0x4a3520);
+
+  g.userData.torches = torches;
+  g.userData.level = 1;
+  g.userData.slots = castleSlots(1);
+}
+
 // HQ tiers — the Modern side's mirror of CASTLE_TIERS. Level 3 is the classic HQ the lane map uses. Front faces -x.
 export const HQ_TIERS = [
-  { name: 'Field Outpost', desc: 'Shipping-container office behind a sandbag ring, with a radio mast.' },
-  { name: 'Police Precinct', desc: 'Two-story station with front steps, a light bar and a flagpole.' },
-  { name: 'Command HQ', desc: 'Office block with a helipad and a concrete rooftop parapet.' },
-  { name: 'Military Compound', desc: 'Adds two guard towers with searchlights, razor wire and a radar dish.' },
-  { name: 'Tech Tower', desc: 'A glass tower on the roof, a helicopter on the pad and a rooftop turret.' },
+  { name: 'Field Outpost', desc: 'Tactical shipping-container FOB behind sandbag revetments, with generator and radio mast.' },
+  { name: 'Forward Command', desc: 'Reinforced two-story command bunker with blast barriers, satcom dish, and observation catwalk.' },
+  { name: 'Command HQ', desc: 'Brutalist fortified operations center with helipad, HVAC chillers, and blast gate.' },
+  { name: 'Military Compound', desc: 'Twin fortified guard towers with searchlights, razor-wire Hesco barriers, and rotating radar dish.' },
+  { name: 'Tech Tower', desc: 'Cyber-command citadel with stealth armor, CIWS defense turret, active radar, and attack gunship.' },
 ];
+
 /** Where Overwatch gunners stand at each HQ level (local coords). Roof gunners stand behind the parapet, in its gaps. */
 export function hqSlots(level = 3) {
   const L = Math.max(1, Math.min(HQ_TIERS.length, level));
-  if (L === 1) return [{ x: -1.5, y: 3, z: 0 }];
-  if (L === 2) return [-1, 1].map((z) => ({ x: -3.1, y: 6, z }));
-  const roof = [-1, 1, -3, 3].map((z) => ({ x: -4, y: 10.5, z }));
-  if (L >= 4) roof.push({ x: -5, y: 11.15, z: -6 }, { x: -5, y: 11.15, z: 6 });
-  if (L >= 5) roof.push({ x: 1.1, y: 18.5, z: -2 }, { x: 1.1, y: 18.5, z: -4 });
+  if (L === 1) return [{ x: -1.5, y: 2.95, z: 0 }];
+  if (L === 2) return [-1.2, 1.2].map((z) => ({ x: -3.2, y: 6.2, z }));
+  const roof = [-1.1, 1.1, -3.3, 3.3].map((z) => ({ x: -4.1, y: 10.5, z }));
+  if (L >= 4) roof.push({ x: -5.0, y: 11.2, z: -6.2 }, { x: -5.0, y: 11.2, z: 6.2 });
+  if (L >= 5) roof.push({ x: 1.0, y: 18.5, z: -2.0 }, { x: 1.0, y: 18.5, z: -4.0 });
   return roof;
 }
-const CONCRETE = 0x9a9da2;
+
+const CONCRETE = 0x6c7078;
 /** Concrete parapet blocks along a roof's front edge (the gaps between them are the gunner slots). */
-function parapet(g, x, y, zs) { for (const z of zs) B(g, 0.5, 0.8, 1.2, CONCRETE, x, y + 0.4, z, null); }
-function sandbag(g, x, y, z, rot = false) { B(g, rot ? 1.1 : 1, 0.45, rot ? 1 : 1.1, 0xa8956a, x, y + 0.23, z, null); }
+function parapet(g, x, y, zs) { for (const z of zs) B(g, 0.55, 0.85, 1.1, CONCRETE, x, y + 0.42, z, null); }
+function sandbag(g, x, y, z, rot = false) { B(g, rot ? 1.15 : 0.95, 0.42, rot ? 0.95 : 1.15, 0xa49268, x, y + 0.21, z, null); }
 
 export function buildHQ(level = 3) {
   const L = Math.max(1, Math.min(HQ_TIERS.length, level));
   const g = new THREE.Group();
-  if (L === 1) buildOutpost(g);
-  else if (L === 2) buildPrecinct(g);
-  else {
-    B(g, 10, 10, 12, 0xb8bcc2, 0, 5, 0, null);
-    B(g, 10.4, 0.5, 12.4, 0x9ea2a8, 0, 10.25, 0, null);
-    B(g, 10.4, 0.4, 12.4, 0x9ea2a8, 0, 0.2, 0, null);
-    // window strips on all faces
-    const glass = { emissive: 0x0b2a44 };
-    for (let y = 2.5; y <= 8.5; y += 2) {
-      B(g, 0.1, 0.9, 10.5, 0x4fa8e0, -5.03, y, 0, null, glass);
-      B(g, 0.1, 0.9, 10.5, 0x4fa8e0, 5.03, y, 0, null, glass);
-      B(g, 8.5, 0.9, 0.1, 0x4fa8e0, 0, y, 6.03, null, glass);
-      B(g, 8.5, 0.9, 0.1, 0x4fa8e0, 0, y, -6.03, null, glass);
+  if (L === 1) {
+    buildOutpost(g);
+  } else if (L === 2) {
+    buildForwardCommand(g);
+  } else {
+    const blinks = [];
+    const fans = [];
+
+    // Heavy Brutalist foundation plinth with blast skirts
+    B(g, 10.6, 0.5, 12.6, 0x50545c, 0, 0.25, 0, null);
+    // Main Operations Center Block
+    B(g, 10.0, 9.8, 12.0, 0x828790, 0, 5.2, 0, null);
+    // Perimeter cornice slab below roof deck
+    B(g, 10.5, 0.45, 12.5, 0x666a72, 0, 10.25, 0, null);
+
+    // Vertical structural pilasters / buttresses along facades
+    for (const z of [-5.0, -2.5, 2.5, 5.0]) {
+      B(g, 0.35, 9.8, 0.5, 0x5a5e66, -5.1, 5.2, z, null);
+      B(g, 0.35, 9.8, 0.5, 0x5a5e66, 5.1, 5.2, z, null);
     }
-    // entrance facing -x
-    B(g, 0.2, 2.6, 3.2, 0x7fc4f0, -5.1, 1.5, 0, null, { emissive: 0x123a5a });
-    B(g, 2, 0.3, 4.4, 0x5a5e64, -6, 3, 0, null);
-    for (const z of [-1.9, 1.9]) B(g, 0.25, 2.8, 0.25, 0x5a5e64, -6.8, 1.5, z, null);
-    B(g, 0.15, 0.6, 3.6, 0x1c2a50, -5.12, 3.6, 0, null);
-    // rooftop
-    B(g, 3, 1.4, 3, 0x8a8e94, 2.5, 11.2, -3, null);
-    B(g, 1.4, 0.6, 1.4, 0x5a5e64, 2.5, 12.2, -3, null);
-    // helipad
-    B(g, 5, 0.1, 5, 0x3a3d42, -1.5, 10.55, 2, null);
-    B(g, 0.5, 0.12, 2.6, 0xf2c94c, -2.4, 10.62, 2, null);
-    B(g, 0.5, 0.12, 2.6, 0xf2c94c, -0.6, 10.62, 2, null);
-    B(g, 1.6, 0.12, 0.5, 0xf2c94c, -1.5, 10.62, 2, null);
-    // antenna + blinker
-    B(g, 0.2, 5, 0.2, 0x6a6e74, 3.5, 13, 3.5, null);
-    B(g, 0.9, 0.12, 0.12, 0x6a6e74, 3.5, 14.2, 3.5, null);
-    const blink = B(g, 0.35, 0.35, 0.35, 0xff2020, 3.5, 15.6, 3.5, null, { emissive: 0xff0000 });
+    for (const x of [-3.0, 0, 3.0]) {
+      B(g, 0.5, 9.8, 0.35, 0x5a5e66, x, 5.2, -6.1, null);
+      B(g, 0.5, 9.8, 0.35, 0x5a5e66, x, 5.2, 6.1, null);
+    }
+
+    // Ribbon windows with dividing mullions
+    const glass = { emissive: 0x092238 };
+    for (let y = 2.8; y <= 8.8; y += 2.2) {
+      B(g, 0.08, 0.85, 10.5, 0x3a82ba, -5.04, y, 0, null, glass);
+      B(g, 0.08, 0.85, 10.5, 0x3a82ba, 5.04, y, 0, null, glass);
+      B(g, 8.5, 0.85, 0.08, 0x3a82ba, 0, y, 6.04, null, glass);
+      B(g, 8.5, 0.85, 0.08, 0x3a82ba, 0, y, -6.04, null, glass);
+      for (let z = -4; z <= 4.01; z += 2) {
+        B(g, 0.12, 0.85, 0.12, 0x282c32, -5.06, y, z, null);
+        B(g, 0.12, 0.85, 0.12, 0x282c32, 5.06, y, z, null);
+      }
+    }
+
+    // Fortified Ground Entrance (faces -x)
+    B(g, 0.3, 3.2, 4.2, 0x22252a, -5.08, 1.6, 0, null);
+    B(g, 0.15, 2.7, 3.4, 0x2e333a, -5.15, 1.5, 0, null);
+    B(g, 0.17, 0.15, 3.4, 0xf2c94c, -5.16, 2.7, 0, null);
+    B(g, 0.17, 0.15, 3.4, 0xf2c94c, -5.16, 0.3, 0, null);
+
+    // Cantilevered entrance canopy
+    B(g, 2.4, 0.4, 5.4, 0x3a3f46, -6.2, 3.4, 0, null);
+    for (const sz of [-2.4, 2.4]) {
+      B(g, 0.3, 3.2, 0.3, 0x3a3f46, -7.1, 1.6, sz, null);
+    }
+    // Security bollards out front
+    for (const z of [-1.5, -0.5, 0.5, 1.5]) {
+      B(g, 0.28, 0.9, 0.28, 0xf2c94c, -7.8, 0.45, z, null);
+      B(g, 0.3, 0.18, 0.3, 0x222222, -7.8, 0.65, z, null);
+    }
+
+    // Flanking sandbags / blast barricades
+    for (let z = -5.4; z <= 5.41; z += 1.2) {
+      if (Math.abs(z) < 2.5) continue;
+      B(g, 1.0, 0.5, 1.1, 0xa49268, -7.6, 0.25, z, null);
+      B(g, 1.0, 0.45, 1.1, 0x928056, -7.6, 0.72, z + 0.25, null);
+    }
+
+    // Front parapet blocks on roof (embrasures for 4 wall gunners at z = -3.3, -1.1, 1.1, 3.3)
+    parapet(g, -4.75, 10.5, [0, -2.2, 2.2, -4.4, 4.4]);
+
+    // Helipad on the roof
+    B(g, 5.2, 0.1, 5.2, 0x282b30, -1.4, 10.55, 2.0, null);
+    B(g, 5.0, 0.12, 0.2, 0xf2c94c, -1.4, 10.6, -0.45, null);
+    B(g, 5.0, 0.12, 0.2, 0xf2c94c, -1.4, 10.6, 4.45, null);
+    B(g, 0.2, 0.12, 5.0, 0xf2c94c, -3.85, 10.6, 2.0, null);
+    B(g, 0.2, 0.12, 5.0, 0xf2c94c, 1.05, 10.6, 2.0, null);
+    B(g, 0.45, 0.12, 2.4, 0xf2c94c, -2.2, 10.61, 2.0, null);
+    B(g, 0.45, 0.12, 2.4, 0xf2c94c, -0.6, 10.61, 2.0, null);
+    B(g, 1.4, 0.12, 0.45, 0xf2c94c, -1.4, 10.61, 2.0, null);
+    for (const ox of [-3.8, 1.0]) {
+      for (const oz of [-0.4, 4.4]) {
+        const navL = B(g, 0.2, 0.18, 0.2, 0xffe070, ox, 10.65, oz, null, { emissive: 0xffa020 });
+        navL.castShadow = false;
+      }
+    }
+
+    // Mechanical Penthouse & Spinning HVAC Chiller Fan
+    B(g, 3.4, 1.8, 3.4, 0x585c64, 2.4, 11.4, -2.8, null);
+    B(g, 1.8, 0.35, 1.8, 0x2c3036, 2.4, 12.45, -2.8, null);
+    const fan = new THREE.Group();
+    fan.position.set(2.4, 12.5, -2.8);
+    B(fan, 1.4, 0.04, 0.22, 0x181a1c, 0, 0, 0, null);
+    B(fan, 0.22, 0.04, 1.4, 0x181a1c, 0, 0, 0, null);
+    B(fan, 0.35, 0.08, 0.35, 0x282c32, 0, 0, 0, null);
+    g.add(fan);
+    fans.push(fan);
+
+    // Heavy Communications Lattice Mast
+    B(g, 0.22, 6.5, 0.22, 0x50555e, 3.4, 13.75, 3.6, null);
+    B(g, 1.0, 0.12, 0.12, 0x50555e, 3.4, 15.2, 3.6, null);
+    B(g, 0.12, 0.12, 1.0, 0x50555e, 3.4, 16.0, 3.6, null);
+    B(g, 0.45, 0.5, 0.5, 0xd4d8de, 3.1, 14.5, 3.6, null);
+    const blink = B(g, 0.35, 0.35, 0.35, 0xff2020, 3.4, 17.2, 3.6, null, { emissive: 0xff0000 });
     blink.castShadow = false;
+    blinks.push(blink);
+
+    // Faction Flag (rotates anchored to pole, stripe stays locked)
+    addFactionFlag(g, -6.5, 0, 5.4, 6.5, 2.2, 1.2, 0x2f6fd6, 0xffffff);
+
+    g.userData.fans = fans;
     g.userData.blink = blink;
-    // flag
-    B(g, 0.15, 5, 0.15, 0xcccccc, -6.2, 2.5, 5.2, null);
-    const flag = B(g, 0.1, 1.1, 1.8, 0x2f6fd6, -6.2, 4.4, 6.1, null);
-    B(g, 0.12, 0.3, 1.8, 0xffffff, -6.2, 4.4, 6.1, null);
-    g.userData.flag = flag;
-    // sandbags / barriers out front
-    for (let z = -5; z <= 5; z += 1.2) {
-      if (Math.abs(z) < 2.2) continue;
-      B(g, 1, 0.5, 1.1, 0xa8956a, -7.6, 0.25, z, null);
-      B(g, 1, 0.45, 1.1, 0x9a8760, -7.6, 0.72, z + 0.3, null);
+    g.userData.blinks = blinks;
+
+    // =========================================================================
+    // LEVEL 4: MILITARY COMPOUND
+    // =========================================================================
+    if (L >= 4) {
+      const searchlights = [];
+      for (const z of [-6.2, 6.2]) {
+        for (const [ox, oz] of [[-1.1, -1.1], [-1.1, 1.1], [1.1, -1.1], [1.1, 1.1]]) {
+          B(g, 0.35, 11.2, 0.35, 0x363a40, -5.0 + ox, 5.6, z + oz, null);
+        }
+        for (const y of [3.6, 7.4]) {
+          B(g, 2.4, 0.18, 0.18, 0x363a40, -5.0, y, z - 1.1, null);
+          B(g, 2.4, 0.18, 0.18, 0x363a40, -5.0, y, z + 1.1, null);
+          B(g, 0.18, 0.18, 2.4, 0x363a40, -6.1, y, z, null);
+          B(g, 0.18, 0.18, 2.4, 0x363a40, -3.9, y, z, null);
+        }
+        B(g, 3.2, 0.35, 3.2, 0x484d54, -5.0, 11.0, z, null);
+        B(g, 0.15, 0.85, 2.8, 0x2c3036, -6.45, 11.55, z, null);
+        B(g, 2.8, 0.65, 0.1, 0x34383e, -5.0, 11.5, z - 1.45, null);
+        B(g, 2.8, 0.65, 0.1, 0x34383e, -5.0, 11.5, z + 1.45, null);
+        B(g, 0.1, 0.65, 2.8, 0x34383e, -3.55, 11.5, z, null);
+
+        const slGroup = new THREE.Group();
+        slGroup.position.set(-6.3, 11.6, z);
+        B(slGroup, 0.2, 0.35, 0.35, 0x24272a, 0, 0, 0, null);
+        B(slGroup, 0.55, 0.5, 0.55, 0x30353c, -0.2, 0.1, 0, null);
+        const lens = B(slGroup, 0.08, 0.42, 0.46, 0xfff6c8, -0.5, 0.1, 0, null, { emissive: 0xfff0a0 });
+        lens.castShadow = false;
+        g.add(slGroup);
+        searchlights.push(slGroup);
+      }
+      g.userData.searchlights = searchlights;
+
+      for (let z = -5.4; z <= 5.41; z += 1.35) {
+        if (Math.abs(z) < 2.2) continue;
+        B(g, 1.2, 1.1, 1.2, 0x9e8c68, -8.7, 0.55, z, null);
+        B(g, 1.25, 0.12, 1.25, 0x40444a, -8.7, 1.12, z, null);
+        B(g, 0.65, 0.55, 0.95, 0x7a8088, -9.6, 0.3, z, null);
+      }
+
+      const radar = new THREE.Group();
+      B(radar, 0.35, 1.2, 0.35, 0x4a4f56, 0, 0.6, 0, null);
+      const head = new THREE.Group();
+      head.position.set(0, 1.2, 0);
+      radar.add(head);
+      const dish = B(head, 0.25, 1.6, 2.6, 0xd8dce4, 0.2, 0.6, 0, null);
+      dish.rotation.z = 0.35;
+      B(head, 0.8, 0.1, 0.1, 0x383c42, -0.3, 0.6, 0, null);
+      B(head, 0.2, 0.22, 0.22, 0x282c32, -0.7, 0.6, 0, null);
+      radar.position.set(2.4, 12.8, -2.8);
+      g.add(radar);
+      g.userData.radar = head;
     }
-    parapet(g, -4.75, 10.5, [0, -2, 2, -4, 4]);
-  }
-  if (L >= 4) {
-    // guard towers at the front corners: steel legs, platform, railing, searchlight
-    const lights = [];
-    for (const z of [-6, 6]) {
-      for (const [ox, oz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) B(g, 0.3, 11, 0.3, 0x4a4e54, -5 + ox, 5.5, z + oz, null);
-      for (const y of [3.5, 7]) { B(g, 2.3, 0.15, 0.15, 0x4a4e54, -5, y, z - 1, null); B(g, 2.3, 0.15, 0.15, 0x4a4e54, -5, y, z + 1, null); }
-      B(g, 2.8, 0.3, 2.8, 0x5a5e64, -5, 11, z, null);
-      for (const oz of [-1.3, 1.3]) B(g, 2.8, 0.6, 0.12, 0x3a3d42, -5, 11.45, z + oz, null);
-      B(g, 0.12, 0.6, 2.8, 0x3a3d42, -3.65, 11.45, z, null);
-      const sl = B(g, 0.5, 0.4, 0.5, 0xfff4c0, -6.1, 11.6, z, null, { emissive: 0xfff0a0 });
-      sl.castShadow = false; lights.push(sl);
+
+    // =========================================================================
+    // LEVEL 5: TECH TOWER
+    // =========================================================================
+    if (L >= 5) {
+      const cyberGlass = { emissive: 0x06283d };
+      const cyanGlow = { emissive: 0x00d4ff };
+
+      B(g, 5.0, 8.5, 5.6, 0x22262e, 2.4, 14.75, -2.8, null);
+      B(g, 5.4, 0.4, 6.0, 0x343a44, 2.4, 18.35, -2.8, null);
+
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const seam = B(g, 0.12, 8.5, 0.12, 0x00e5ff, 2.4 + sx * 2.52, 14.75, -2.8 + sz * 2.82, null, cyanGlow);
+          seam.castShadow = false;
+        }
+      }
+
+      for (let y = 12.0; y <= 17.5; y += 1.6) {
+        B(g, 0.1, 0.9, 4.8, 0x1a455c, -0.12, y, -2.8, null, cyberGlass);
+        B(g, 4.4, 0.9, 0.1, 0x1a455c, 2.4, y, -0.02, null, cyberGlass);
+        B(g, 4.4, 0.9, 0.1, 0x1a455c, 2.4, y, -5.58, null, cyberGlass);
+      }
+
+      parapet(g, 0.1, 18.5, [-1.0, -2.8, -4.8]);
+
+      const turret = new THREE.Group();
+      turret.position.set(3.6, 18.8, -1.6);
+      B(turret, 1.3, 0.45, 1.3, 0x2b3038, 0, 0.22, 0, null);
+      B(turret, 1.6, 0.14, 0.14, 0x181a1d, -0.8, 0.28, -0.16, null);
+      B(turret, 1.6, 0.14, 0.14, 0x181a1d, -0.8, 0.28, 0.16, null);
+      B(turret, 0.7, 0.55, 0.85, 0x383e46, 0.4, 0.3, 0, null);
+      B(turret, 0.5, 0.5, 0.5, 0xd8dee6, 0, 0.65, 0, null);
+      g.add(turret);
+      g.userData.turret = turret;
+
+      if (g.userData.radar) {
+        g.userData.radar.parent.position.set(3.8, 18.8, -4.6);
+      }
+
+      const heli = new THREE.Group();
+      B(heli, 3.2, 1.1, 1.2, 0x28322c, 0, 0.85, 0, null);
+      B(heli, 1.3, 0.75, 1.0, 0x4fa8e0, -1.4, 0.95, 0, null, { emissive: 0x0d3856 });
+      B(heli, 0.35, 0.35, 0.35, 0x181b1d, -1.8, 0.45, 0, null);
+      B(heli, 3.0, 0.35, 0.35, 0x28322c, 2.5, 1.1, 0, null);
+      B(heli, 0.4, 0.9, 0.1, 0x28322c, 3.8, 1.5, 0, null);
+      B(heli, 0.08, 0.7, 0.12, 0x181a1d, 3.85, 1.5, 0.15, null);
+      B(heli, 0.6, 0.12, 2.4, 0x28322c, -0.2, 0.85, 0, null);
+      for (const sz of [-1.1, 1.1]) {
+        B(heli, 0.8, 0.32, 0.32, 0x384038, -0.2, 0.65, sz, null);
+        B(heli, 0.05, 0.28, 0.28, 0x1a1c1e, -0.62, 0.65, sz, null);
+      }
+      for (const sz of [-0.65, 0.65]) {
+        B(heli, 2.6, 0.1, 0.1, 0x1f2224, 0, 0.1, sz, null);
+        B(heli, 0.1, 0.45, 0.1, 0x1f2224, -0.8, 0.3, sz, null);
+        B(heli, 0.1, 0.45, 0.1, 0x1f2224, 0.8, 0.3, sz, null);
+      }
+      const rotorMast = new THREE.Group();
+      rotorMast.position.set(-0.2, 1.55, 0);
+      heli.add(rotorMast);
+      B(rotorMast, 0.25, 0.2, 0.25, 0x1f2224, 0, 0, 0, null);
+      B(rotorMast, 5.0, 0.05, 0.24, 0x1e2024, 0, 0.08, 0, null);
+      B(rotorMast, 0.24, 0.05, 5.0, 0x1e2024, 0, 0.08, 0, null);
+      for (const s of [-2.35, 2.35]) {
+        B(rotorMast, 0.3, 0.06, 0.24, 0xf2c94c, s, 0.08, 0, null);
+        B(rotorMast, 0.24, 0.06, 0.3, 0xf2c94c, 0, 0.08, s, null);
+      }
+
+      heli.position.set(-1.4, 10.6, 2.0);
+      heli.rotation.y = 0.35;
+      g.add(heli);
+      g.userData.rotor = rotorMast;
     }
-    g.userData.searchlights = lights;
-    // razor wire along the front
-    for (let z = -5; z <= 5.01; z += 1) if (Math.abs(z) > 2) { B(g, 0.6, 0.5, 0.9, 0x7a7e84, -8.6, 0.3, z, null); B(g, 0.15, 0.6, 0.15, 0x4a4e54, -8.6, 0.3, z + 0.45, null); }
-    // radar dish on the rooftop unit (Tech Tower: on the upper deck)
-    const radar = new THREE.Group();
-    B(radar, 0.25, 1, 0.25, 0x6a6e74, 0, 0.5, 0, null);
-    const dish = B(radar, 0.25, 1.4, 2.2, 0xd8dce2, 0.2, 1.2, 0, null);
-    dish.rotation.z = 0.35;
-    if (L >= 5) radar.position.set(3.8, 18.5, -4.6); else radar.position.set(2.5, 12.5, -3);
-    g.add(radar);
-    g.userData.radar = radar;
   }
-  if (L >= 5) {
-    // glass tower on the roof (back half, beside the helipad)
-    const glass = { emissive: 0x0b2a44 };
-    B(g, 4.5, 8, 5, 0x8fa4b8, 2.5, 14.5, -3, null);
-    for (let y = 11.5; y <= 17.5; y += 1.5) {
-      B(g, 0.1, 0.8, 4.4, 0x4fa8e0, 0.22, y, -3, null, glass);
-      B(g, 4, 0.8, 0.1, 0x4fa8e0, 2.5, y, -0.47, null, glass);
-      B(g, 4, 0.8, 0.1, 0x4fa8e0, 2.5, y, -5.53, null, glass);
-    }
-    B(g, 4.9, 0.3, 5.4, 0x6a6e74, 2.5, 18.35, -3, null);
-    parapet(g, 0.5, 18.5, [-1, -3, -5]);
-    // rooftop turret on the upper deck
-    B(g, 1.2, 0.6, 1.2, 0x3a3d42, 3.6, 18.8, -1.8, null);
-    B(g, 1.6, 0.25, 0.25, 0x2a2d32, 2.6, 19.2, -1.8, null);
-    // helicopter parked on the helipad
-    const heli = new THREE.Group();
-    B(heli, 2.4, 1.1, 1.2, 0x2f5f3a, 0, 0.75, 0, null);
-    B(heli, 0.8, 0.7, 1.1, 0x9ad8ff, -1.4, 0.8, 0, null, { emissive: 0x123a5a });
-    B(heli, 2.6, 0.35, 0.35, 0x2f5f3a, 2.3, 0.95, 0, null);
-    B(heli, 0.3, 0.8, 0.12, 0x2f5f3a, 3.5, 1.3, 0, null);
-    for (const z of [-0.55, 0.55]) B(heli, 2.4, 0.1, 0.1, 0x2a2d32, 0, 0.1, z, null);
-    const rotor = new THREE.Group(); rotor.position.set(0, 1.45, 0); heli.add(rotor);
-    B(rotor, 4.6, 0.06, 0.25, 0x2a2d32, 0, 0, 0, null);
-    B(rotor, 0.25, 0.06, 4.6, 0x2a2d32, 0, 0, 0, null);
-    heli.position.set(-1.5, 10.6, 2); heli.rotation.y = 0.5;
-    g.add(heli);
-    g.userData.rotor = rotor;
-  }
+
   g.userData.level = L;
   g.userData.slots = hqSlots(L);
   return g;
 }
 
-/** HQ Lv 1: a container office inside a sandbag ring. */
+/** HQ Lv 1: Tactical Forward Operating Base (FOB) shipping container & sandbag perimeter. */
 function buildOutpost(g) {
-  B(g, 5, 3, 8, 0x5a6b4a, 0, 1.5, 0, null);
-  for (let z = -3.6; z <= 3.61; z += 0.6) { B(g, 0.08, 2.8, 0.2, 0x4e5e40, -2.53, 1.5, z, null); B(g, 0.08, 2.8, 0.2, 0x4e5e40, 2.53, 1.5, z, null); }
-  B(g, 5.1, 0.15, 8.1, 0x4e5e40, 0, 3.05, 0, null);
-  B(g, 0.12, 2.2, 1.2, 0x3a3d42, -2.56, 1.1, 0, null);                                    // door
-  B(g, 0.1, 0.8, 1.6, 0x4fa8e0, -2.56, 1.9, -2.4, null, { emissive: 0x0b2a44 });          // window
-  for (const z of [-2.6, -1.1, 1.1, 2.6]) sandbag(g, -2.2, 3.1, z, true);                // roof sandbags (slot gap in the middle)
-  // sandbag ring, open at the door
-  for (let z = -4.6; z <= 4.61; z += 1.15) if (Math.abs(z) > 1.5) { sandbag(g, -4.6, 0, z); sandbag(g, -4.6, 0.45, z + 0.3); }
-  for (let x = -3.4; x <= 3.4; x += 1.15) { sandbag(g, x, 0, -5.2, true); sandbag(g, x, 0, 5.2, true); }
-  // radio mast + blinker
-  B(g, 0.15, 6, 0.15, 0x6a6e74, 1.6, 6, 3.2, null);
-  B(g, 1, 0.1, 0.1, 0x6a6e74, 1.6, 7.6, 3.2, null);
-  const blink = B(g, 0.3, 0.3, 0.3, 0xff2020, 1.6, 9.1, 3.2, null, { emissive: 0xff0000 });
-  blink.castShadow = false; g.userData.blink = blink;
-  B(g, 0.12, 4, 0.12, 0xcccccc, -3.6, 2, 3.8, null);
-  const flag = B(g, 0.1, 0.9, 1.5, 0x2f6fd6, -3.6, 3.5, 4.55, null);
-  B(g, 0.12, 0.25, 1.5, 0xffffff, -3.6, 3.5, 4.55, null);
-  g.userData.flag = flag;
+  const blinks = [];
+  // Main container body (olive-drab steel)
+  B(g, 4.8, 2.8, 7.6, 0x44503c, 0, 1.4, 0, null);
+  // Heavy corner casting posts
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      B(g, 0.35, 2.85, 0.35, 0x242822, sx * 2.3, 1.42, sz * 3.7, null);
+    }
+  }
+  // Peripheral top & bottom framing rails
+  B(g, 0.3, 0.2, 7.6, 0x242822, -2.3, 2.75, 0, null);
+  B(g, 0.3, 0.2, 7.6, 0x242822, 2.3, 2.75, 0, null);
+  B(g, 0.3, 0.2, 7.6, 0x242822, -2.3, 0.1, 0, null);
+  B(g, 0.3, 0.2, 7.6, 0x242822, 2.3, 0.1, 0, null);
+  B(g, 4.8, 0.2, 0.3, 0x242822, 0, 2.75, -3.7, null);
+  B(g, 4.8, 0.2, 0.3, 0x242822, 0, 2.75, 3.7, null);
+
+  // Corrugation ribs:
+  // Back wall (x = +2.43) gets full ribs
+  for (let z = -3.3; z <= 3.31; z += 0.55) {
+    B(g, 0.08, 2.5, 0.18, 0x364030, 2.43, 1.4, z, null);
+  }
+  // Front wall (x = -2.43): skip ribs where door (z in [0.1, 1.5]) and window (z in [-2.3, -0.9]) are located
+  for (let z = -3.3; z <= 3.31; z += 0.55) {
+    if ((z >= -2.3 && z <= -0.9) || (z >= 0.1 && z <= 1.5)) continue;
+    B(g, 0.08, 2.5, 0.18, 0x364030, -2.43, 1.4, z, null);
+  }
+
+  // Personnel door with frame, latch & warning plate
+  B(g, 0.12, 2.1, 1.1, 0x282c26, -2.44, 1.05, 0.8, null);
+  B(g, 0.14, 0.1, 0.2, 0xd4a024, -2.46, 1.05, 0.45, null);
+  B(g, 0.6, 0.12, 1.3, 0x323830, -2.72, 0.06, 0.8, null);
+
+  // Front slit window with protective sun visor (clean and unobstructed)
+  B(g, 0.1, 0.65, 1.2, 0x4fa8e0, -2.44, 1.8, -1.6, null, { emissive: 0x092238 });
+  B(g, 0.35, 0.08, 1.4, 0x242822, -2.58, 2.18, -1.6, null);
+
+  // Flush, structurally sound Camouflage Awning over entrance:
+  B(g, 0.08, 2.15, 0.08, 0x242822, -3.9, 1.08, 0.0, null);
+  B(g, 0.08, 2.15, 0.08, 0x242822, -3.9, 1.08, 1.6, null);
+  B(g, 0.08, 0.08, 1.7, 0x242822, -3.9, 2.15, 0.8, null);
+  for (const rz of [0.0, 1.6]) {
+    const rafter = B(g, 1.62, 0.07, 0.07, 0x242822, -3.15, 2.45, rz, null);
+    rafter.rotation.z = 0.38;
+  }
+  const tarp = B(g, 1.65, 0.05, 1.8, 0x4e5842, -3.15, 2.50, 0.8, null);
+  tarp.rotation.z = 0.38;
+
+  // Tactical Field Diesel Generator
+  B(g, 1.4, 0.15, 1.4, 0x222524, 0.6, 0.08, -4.8, null);
+  B(g, 1.1, 0.85, 1.1, 0x3b4735, 0.6, 0.58, -4.8, null);
+  B(g, 0.08, 0.45, 0.8, 0x16181a, 0.03, 0.6, -4.8, null);
+  B(g, 0.1, 0.9, 0.1, 0x202224, 0.8, 1.1, -4.5, null);
+  B(g, 0.25, 0.4, 0.35, 0xd49b20, -0.2, 0.25, -4.5, null);
+
+  // Tactical Comms Mast & Satcom Dish
+  B(g, 0.6, 0.15, 0.6, 0x2c3028, 1.8, 2.85, 3.2, null);
+  B(g, 0.14, 6.5, 0.14, 0x585e66, 1.8, 6.1, 3.2, null);
+  B(g, 0.1, 0.1, 1.2, 0x585e66, 1.8, 7.8, 3.2, null);
+  const satDish = B(g, 0.15, 0.9, 0.9, 0xc8ccd2, 1.6, 5.2, 3.2, null);
+  satDish.rotation.z = 0.4;
+  const blink = B(g, 0.3, 0.3, 0.3, 0xff2525, 1.8, 9.45, 3.2, null, { emissive: 0xff0000 });
+  blink.castShadow = false;
+  blinks.push(blink);
+
+  // Munition crates & oil drums
+  B(g, 0.8, 0.6, 0.8, 0x8a633a, 2.2, 0.3, -4.2, null);
+  B(g, 0.7, 0.5, 0.7, 0x44503c, 2.2, 0.85, -4.2, null);
+  B(g, 0.65, 0.95, 0.65, 0x2e3b2b, -1.3, 0.48, -4.6, null);
+  B(g, 0.65, 0.95, 0.65, 0x942e28, -2.0, 0.48, -4.6, null);
+
+  // Ground perimeter sandbag revetment
+  for (let z = -4.6; z <= 4.61; z += 1.15) {
+    if (z > 0.1 && z < 1.7) continue;
+    sandbag(g, -4.6, 0, z);
+    sandbag(g, -4.6, 0.42, z + 0.28);
+  }
+  for (let x = -3.4; x <= 3.4; x += 1.15) {
+    sandbag(g, x, 0, -5.2, true);
+    sandbag(g, x, 0, 5.2, true);
+  }
+
+  // Rooftop Sandbag Nest (Gunner Slot 1 at x = -1.5, y = 2.95, z = 0)
+  B(g, 1.3, 0.1, 1.3, 0x6a4e2e, -1.5, 2.85, 0, null);
+  sandbag(g, -2.3, 2.85, -0.85, true);
+  sandbag(g, -2.3, 2.85, 0, true);
+  sandbag(g, -2.3, 2.85, 0.85, true);
+  sandbag(g, -1.5, 2.85, -0.95);
+  sandbag(g, -1.5, 2.85, 0.95);
+  sandbag(g, -0.7, 2.85, -0.85, true);
+  sandbag(g, -0.7, 2.85, 0.85, true);
+
+  // Faction Flag (rotates anchored to pole, stripe stays locked)
+  addFactionFlag(g, -4.2, 0, 3.8, 4.5, 1.8, 1.0, 0x2f6fd6, 0xffffff);
+
+  g.userData.flag = g.userData.flag;
+  g.userData.blink = blink;
+  g.userData.blinks = blinks;
 }
 
-/** HQ Lv 2: a two-story police precinct. */
-function buildPrecinct(g) {
-  B(g, 8, 6, 10, 0xa88c6a, 0, 3, 0, null);
-  B(g, 8.3, 0.4, 10.3, 0x8a7458, 0, 6.05, 0, null);
-  B(g, 8.1, 0.5, 10.1, 0x2a4a8a, 0, 3.1, 0, null);                                       // blue band between floors
-  const glass = { emissive: 0x0b2a44 };
-  for (const y of [1.6, 4.6]) for (const z of [-3.6, -2, 2, 3.6]) B(g, 0.1, 1.1, 1, 0x4fa8e0, -4.03, y, z, null, glass);
-  for (const y of [1.6, 4.6]) for (const x of [-2.5, 0, 2.5]) { B(g, 1, 1.1, 0.1, 0x4fa8e0, x, y, 5.03, null, glass); B(g, 1, 1.1, 0.1, 0x4fa8e0, x, y, -5.03, null, glass); }
-  // entrance: double door, steps, sign
-  B(g, 0.15, 2.4, 2.2, 0x3a3d42, -4.05, 1.2, 0, null);
-  B(g, 0.2, 2.4, 0.08, 0x9aa3ab, -4.12, 1.2, 0, null);
-  for (let k = 0; k < 3; k++) B(g, 0.6, 0.2, 3.4 - k * 0.3, 0x9a9da2, -4.6 - (2 - k) * 0.5, 0.1 + k * 0.2, 0, null);
-  B(g, 0.15, 0.6, 3, 0x1c2a50, -4.1, 2.8, 0, null);
-  B(g, 0.17, 0.2, 2.4, 0xffffff, -4.12, 2.8, 0, null);
-  parapet(g, -3.75, 6.25, [0, -2, 2, -4, 4]);
-  // light bar + antenna
-  B(g, 0.4, 0.3, 1.6, 0x2a2d32, 2, 6.4, -2.5, null);
-  B(g, 0.4, 0.3, 0.7, 0xff2020, 2, 6.7, -2.9, null, { emissive: 0xaa0000 });
-  const blink = B(g, 0.4, 0.3, 0.7, 0x2060ff, 2, 6.7, -2.1, null, { emissive: 0x0030cc });
-  blink.castShadow = false; g.userData.blink = blink;
-  B(g, 0.15, 3, 0.15, 0x6a6e74, 2.5, 7.75, 3.5, null);
-  // flagpole out front
-  B(g, 0.15, 6, 0.15, 0xcccccc, -6, 3, 4, null);
-  const flag = B(g, 0.1, 1.1, 1.8, 0x2f6fd6, -6, 5.4, 4.9, null);
-  B(g, 0.12, 0.3, 1.8, 0xffffff, -6, 5.4, 4.9, null);
-  g.userData.flag = flag;
+/** HQ Lv 2: Reinforced Forward Command Post (2-story tactical bunker with blast barriers & catwalk). */
+function buildForwardCommand(g) {
+  const blinks = [];
+  // Reinforced foundation plinth
+  B(g, 8.4, 0.4, 10.8, 0x3e423d, 0, 0.2, 0, null);
+  // Ground floor bunker
+  B(g, 8.0, 3.0, 10.4, 0x555e52, 0, 1.8, 0, null);
+  // Mid-floor steel belt & tactical blue trim
+  B(g, 8.2, 0.35, 10.6, 0x223e72, 0, 3.2, 0, null);
+
+  // Upper Command Floor (step-back cabin at rear)
+  B(g, 5.6, 2.8, 7.6, 0x5f685c, 1.0, 4.7, 0, null);
+  B(g, 5.8, 0.3, 7.8, 0x383e36, 1.0, 6.2, 0, null);
+
+  // Front Observation Catwalk (y = 6.2, matching hqSlots)
+  B(g, 2.6, 0.3, 10.4, 0x363b40, -2.7, 6.05, 0, null);
+  for (const z of [-4.2, -2.7, 0, 2.7, 4.2]) {
+    B(g, 0.45, 0.85, 1.1, 0x2d3238, -3.85, 6.6, z, null);
+  }
+  for (const sz of [-1, 1]) {
+    B(g, 2.4, 0.7, 0.08, 0x282c30, -2.7, 6.55, sz * 5.15, null);
+  }
+
+  // Ground Floor Front Blast Entrance (-x)
+  B(g, 0.2, 2.5, 2.4, 0x22262a, -4.05, 1.3, 0, null);
+  B(g, 0.15, 2.2, 1.8, 0x2e3338, -4.12, 1.3, 0, null);
+  B(g, 0.08, 0.1, 0.1, 0x00ff66, -4.22, 1.3, 0.8, null, { emissive: 0x00dd55 });
+  B(g, 1.8, 0.25, 3.6, 0x363b42, -4.9, 2.7, 0, null);
+  for (const sz of [-1.6, 1.6]) {
+    B(g, 0.2, 2.6, 0.2, 0x363b42, -5.6, 1.3, sz, null);
+  }
+
+  // Concrete Jersey Barriers
+  for (const sz of [-2.4, 2.4]) {
+    B(g, 0.55, 0.9, 2.4, 0x888c92, -6.4, 0.45, sz, null);
+    B(g, 0.57, 0.18, 2.4, 0xf2c94c, -6.4, 0.7, sz, null);
+  }
+
+  // Windows
+  const glass = { emissive: 0x092238 };
+  for (const z of [-3.6, 3.6]) {
+    B(g, 0.1, 0.8, 1.4, 0x4fa8e0, -4.03, 1.6, z, null, glass);
+    B(g, 0.25, 0.08, 1.5, 0x22262a, -4.1, 2.05, z, null);
+  }
+  B(g, 0.1, 0.9, 4.4, 0x4fa8e0, -1.82, 4.8, 0, null, glass);
+  for (const sz of [-1, 1]) {
+    B(g, 2.6, 0.9, 0.1, 0x4fa8e0, 1.0, 4.8, sz * 3.82, null, glass);
+  }
+
+  // Satcom Uplink Dish
+  const satPod = new THREE.Group();
+  satPod.position.set(1.8, 6.35, -2.4);
+  B(satPod, 0.35, 0.8, 0.35, 0x444950, 0, 0.4, 0, null);
+  const dishMesh = B(satPod, 0.2, 1.4, 1.4, 0xd0d4da, 0.1, 0.9, 0, null);
+  dishMesh.rotation.z = 0.45;
+  g.add(satPod);
+
+  // Dual whip antennas
+  for (const z of [2.2, 3.0]) {
+    B(g, 0.08, 3.0, 0.08, 0x686e76, 2.4, 7.8, z, null);
+  }
+
+  // Rooftop HVAC
+  B(g, 1.8, 0.9, 1.4, 0x363c35, 2.0, 6.8, 0, null);
+  B(g, 0.08, 0.5, 1.0, 0x181a1c, 1.08, 6.8, 0, null);
+
+  // Dual Tactical Warning Beacon Light Bar
+  B(g, 0.35, 0.25, 1.5, 0x24282c, 0.8, 6.45, -2.5, null);
+  const blinkRed = B(g, 0.35, 0.25, 0.65, 0xff2020, 0.8, 6.7, -2.9, null, { emissive: 0xcc0000 });
+  const blinkBlue = B(g, 0.35, 0.25, 0.65, 0x2060ff, 0.8, 6.7, -2.1, null, { emissive: 0x0040ee });
+  blinkRed.castShadow = false;
+  blinkBlue.castShadow = false;
+  blinks.push(blinkRed, blinkBlue);
+
+  // Faction Flag (rotates anchored to pole, stripe stays locked)
+  addFactionFlag(g, -6.0, 0, 4.2, 6.2, 2.0, 1.1, 0x2f6fd6, 0xffffff);
+
+  g.userData.flag = g.userData.flag;
+  g.userData.blink = blinkBlue;
+  g.userData.blinks = blinks;
 }
 
 export function buildTree(scale = 1, hue = 0) {

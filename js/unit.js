@@ -1317,15 +1317,77 @@ export class Unit {
 
   animate(dt, spd) {
     const r = this.rig;
-    if (this.structure) {   // buildings: barrel recoil + muzzle flash (a swing from the Dev Lab viewer counts as a shot)
-      if (this.swing > 0) { this.swing = 0; this.recoilT = 1; this.muzzleT = 0.1; }
+    if (this.structure) {   // buildings: barrel recoil + muzzle flash + physicalized carriage rock & hydraulics
+      if (this.swing > 0) { this.swing = 0; this.recoilT = 1; this.muzzleT = 0.12; }
       this.recoilT = Math.max(0, this.recoilT - dt * 2.5);
-      if (r.recoil) r.recoil.position.z = -(this.structure.fire === 'direct' ? 0.1 : 0.45) * Math.sin(Math.min(1, this.recoilT) * Math.PI / 2);
+      const rt = Math.min(1, this.recoilT);
+
+      if (r.rigType === 'cannon') {
+        // Medieval Artillery: Physicalized carriage recoil and wheel-rocking
+        if (r.recoils?.length > 1) {
+          const S = this.structure, isVolley = S?.fire === 'volley' || S?.fire === 'line';
+          const activeIdx = (this.shotIdx + r.recoils.length - 1) % r.recoils.length;
+          r.recoils.forEach((rec, i) => {
+            if (isVolley) {
+              const stagger = Math.max(0, Math.min(1, rt * 1.3 - i * 0.08));
+              rec.position.z = -0.42 * Math.sin(stagger * Math.PI / 2);
+            } else {
+              rec.position.z = (i === activeIdx) ? -0.42 * Math.sin(rt * Math.PI / 2) : 0;
+            }
+          });
+        } else if (r.recoil) {
+          r.recoil.position.z = -0.42 * Math.sin(rt * Math.PI / 2);
+        }
+        // Carriage wheel-rocking: chassis pitches up by ~4.3° (-0.075 rad) and rolls back
+        if (r.chassisRock) {
+          const rockPhase = Math.sin(rt * Math.PI);
+          r.chassisRock.rotation.x = -0.075 * rockPhase;
+          r.chassisRock.position.z = -0.10 * rockPhase;
+        }
+      } else if (r.rigType === 'howitzer') {
+        // Modern Artillery: Two-stage hydraulic recoil
+        // Stroke 1 (Kick): Instant slam back over ~0.04s
+        // Stroke 2 (Recovery): Smooth pneumatic push forward with ease-out damping
+        const hydr = rt > 0.82 ? 1 : Math.pow(rt / 0.82, 1.8);
+        if (r.recoil) r.recoil.position.z = -0.48 * hydr;
+        // Ground spade absorption / chassis settling
+        if (r.chassisRock) {
+          const shockPhase = Math.sin(rt * Math.PI);
+          r.chassisRock.rotation.x = -0.025 * shockPhase;
+          r.chassisRock.position.z = -0.04 * shockPhase;
+        }
+      } else {
+        // Generic structure recoil
+        if (r.recoil) r.recoil.position.z = -(this.structure.fire === 'direct' ? 0.1 : 0.45) * Math.sin(rt * Math.PI / 2);
+        if (r.chassisRock) {
+          r.chassisRock.rotation.x = 0;
+          r.chassisRock.position.z = 0;
+        }
+      }
+
       this.muzzleT -= dt;
       const S = this.structure, all = S.fire === 'volley' || S.fire === 'line';   // volleys flash every barrel
       if (r.muzzles?.length > 1) r.muzzles.forEach((mz, i) => (mz.visible = this.muzzleT > 0 && (all || i === (this.shotIdx + r.muzzles.length - 1) % r.muzzles.length)));
-      else r.muzzle.visible = this.muzzleT > 0;
-      if (r.radar) r.radar.rotation.y += dt * 1.5;   // Guided Shells radar / Autoloader drum
+      else if (r.muzzle) r.muzzle.visible = this.muzzleT > 0;
+
+      // Auxiliary touchhole / vent smoke flash (independent or all in volley)
+      if (r.touchholes?.length > 1) {
+        const activeTh = (this.shotIdx + r.touchholes.length - 1) % r.touchholes.length;
+        r.touchholes.forEach((th, i) => (th.visible = this.muzzleT > 0 && (all || i === activeTh)));
+      } else {
+        for (const th of r.touchholes || []) th.visible = this.muzzleT > 0;
+      }
+      // Auxiliary rocket back-blast exhaust
+      if (r.exhaust) r.exhaust.visible = this.muzzleT > 0;
+      // Auxiliary rotating drum / radar
+      if (r.radar) r.radar.rotation.y += dt * 1.5;
+      if (r.drum) r.drum.rotation.z += dt * 2.0;
+      // Auxiliary railgun capacitor glow pulsing
+      if (r.glow) {
+        const pulse = this.aimT > 0 ? (0.6 + 0.4 * Math.sin(Date.now() * 0.012)) : 0.25;
+        for (const g of r.glow) if (g.material?.emissive) g.material.emissive.setRGB(0, 0.56 * pulse, 0.75 * pulse);
+      }
+
       return;
     }
     this.aimT -= dt;

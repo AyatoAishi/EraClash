@@ -212,14 +212,23 @@ export class DevLab {
     this.inspT = (this.inspT || 0) - dt;
     if (this.inspT <= 0) { this.inspT = 0.2; this.renderInspectorStats(); this.renderArenaStatus(); }
   }
-  /** Torches, flags, blinkers, radar, rotor — whatever the base model has (world.js only animates the lane map's own bases). */
+  /** Torches, flags, blinkers, radar, rotor, fans, turret, searchlights — whatever the base model has. */
   animateBase(o, dt) {
     const d = o.userData;
     d.torches?.forEach((f, i) => f.scale.setScalar(0.85 + Math.sin(this.t * 13 + i * 2) * 0.12 + Math.random() * 0.06));
     if (d.flag) d.flag.rotation.y = Math.sin(this.t * 2.2) * 0.15;
-    if (d.blink) d.blink.visible = (this.t % 1.2) < 0.5;
-    if (d.radar) d.radar.rotation.y += dt * 1.2;
-    if (d.rotor) d.rotor.rotation.y += dt * 0.6;
+    const blinks = d.blinks || (d.blink ? [d.blink] : []);
+    const blinkVis = (this.t % 1.2) < 0.5;
+    blinks.forEach((b) => { b.visible = blinkVis; });
+    if (d.radar) d.radar.rotation.y += dt * 1.5;
+    if (d.rotor) d.rotor.rotation.y += dt * 8.0;
+    if (d.fans) d.fans.forEach((fan) => { fan.rotation.y += dt * 6.0; });
+    if (d.turret) d.turret.rotation.y = Math.sin(this.t * 0.7) * 0.5;
+    if (d.searchlights) {
+      d.searchlights.forEach((sl, i) => {
+        sl.rotation.y = Math.sin(this.t * 0.65 + i * 2.2) * 0.45;
+      });
+    }
   }
   /** Sandbox default: everything visible (the fog toggle turns the normal line-of-sight rules back on). */
   revealAll(g) {
@@ -324,7 +333,13 @@ export class DevLab {
     u.moving = V.anim === 'walk';
     if (V.anim === 'attack') {
       this.atkT = (this.atkT || 0) - adt;
-      if (this.atkT <= 0) { this.atkT = attackInterval(u.effAttackSpeed); u.swing = 1; u.aimT = 0.6; u.muzzleT = 0.06; }
+      if (this.atkT <= 0) {
+        this.atkT = attackInterval(u.effAttackSpeed);
+        u.swing = 1;
+        u.aimT = 0.6;
+        u.muzzleT = 0.12;
+        u.shotIdx = (u.shotIdx + 1) % Math.max(1, u.rig.muzzles?.length || 1);
+      }
     }
     u.animate(adt, u.stats.moveSpeed || 3);
   }
@@ -355,6 +370,22 @@ export class DevLab {
         h('div', { class: 'dl-row' }, ['idle', 'walk', 'attack'].map((a) => h('button', { class: 'dl-b' + (V.anim === a ? ' on' : ''),
           onclick: () => { V.anim = a; this.atkT = 0; this.renderViewerPanel(); } }, a))),
         this.slider('Speed', 0.1, 2, 0.05, V.animSpeed, (v) => (V.animSpeed = v), (v) => v.toFixed(2) + 'x'));
+      if (vm.unit.structure) {
+        p.append(h('div', { class: 'dl-row', style: 'margin-top: 6px;' },
+          h('button', {
+            class: 'dl-b on',
+            style: 'width: 100%; font-weight: bold; background: #c25e1a; border-color: #e07a22; color: #fff;',
+            title: 'Trigger physicalized recoil, chassis rock, and muzzle flash',
+            onclick: () => {
+              const u = vm.unit;
+              u.swing = 1;
+              u.recoilT = 1;
+              u.muzzleT = 0.14;
+              u.aimT = 0.6;
+              u.shotIdx = (u.shotIdx + 1) % Math.max(1, u.rig.muzzles?.length || 1);
+            }
+          }, '💥 Fire Artillery / Test Recoil')));
+      }
       if (d) {
         p.append(h('div', { class: 'dl-sec' }, 'Stats'), h('table', { class: 'dl-stats' },
           [['Cost', d.cost], ['Family', d.family], ['Type', d.type + (d.flying ? ' · flying' : '')], ...STAT_ROWS.map(([k, n]) => [n, fmt(s[k] || 0)])]

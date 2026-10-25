@@ -304,10 +304,25 @@ export function createWorld(scene) {
     update(dt) {
       t += dt;
       flames.forEach((f, idx) => { f.scale.setScalar(0.85 + Math.sin(t * 13 + idx * 2) * 0.12 + Math.random() * 0.06); });
-      hq.userData.blink.visible = (t % 1.2) < 0.5;
       for (const fo of fountains) { const j = fo.userData.jet; if (j) j.scale.y = 1 + Math.sin(t * 6) * 0.25; }
-      castle.userData.flag.rotation.y = Math.sin(t * 2.2) * 0.15;
-      hq.userData.flag.rotation.y = Math.sin(t * 2.6 + 1) * 0.15;
+      if (castle.userData.flag) castle.userData.flag.rotation.y = Math.sin(t * 2.2) * 0.15;
+
+      // Modern HQ dynamic animations
+      const hd = hq.userData;
+      if (hd.flag) hd.flag.rotation.y = Math.sin(t * 2.6 + 1) * 0.15;
+      const blinks = hd.blinks || (hd.blink ? [hd.blink] : []);
+      const blinkVis = (t % 1.2) < 0.5;
+      for (let i = 0; i < blinks.length; i++) blinks[i].visible = blinkVis;
+      if (hd.radar) hd.radar.rotation.y += dt * 1.5;
+      if (hd.rotor) hd.rotor.rotation.y += dt * 8.0;
+      if (hd.fans) hd.fans.forEach((fan) => { fan.rotation.y += dt * 6.0; });
+      if (hd.turret) hd.turret.rotation.y = Math.sin(t * 0.7) * 0.5;
+      if (hd.searchlights) {
+        hd.searchlights.forEach((sl, i) => {
+          sl.rotation.y = Math.sin(t * 0.65 + i * 2.2) * 0.45;
+        });
+      }
+
       if (lightsEnabled) {
         for (const L of lights) {
           const fl = L.userData.flicker ? 0.85 + Math.sin(t * 11 + L.position.x) * 0.1 + Math.random() * 0.08 : 1;
