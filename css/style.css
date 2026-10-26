@@ -834,3 +834,14 @@ body.placing #view canvas { cursor: copy; }
 .sitem .lock { display: none; }
 .sitem.locked > :not(.lock) { filter: grayscale(.85) brightness(.6); }
 .sitem.locked .lock { display: flex; position: absolute; inset: 0; align-items: center; justify-content: center; text-align: center; padding: 0 .6rem; font-family: var(--head); font-size: 1rem; letter-spacing: .03em; color: #ffd27a; background: rgba(7, 9, 13, .78); text-shadow: 2px 2px 0 #000; pointer-events: none; }
+
+/* ---------- Online 1v1 lobby ---------- */
+.on-name { display: flex; align-items: center; gap: .6rem; margin: .4rem 0 1rem; color: var(--muted); }
+#scr-online input { font: inherit; font-size: 1.2rem; padding: .35rem .5rem; background: var(--panel2); color: var(--text); border: 2px solid #3a4560; }
+.on-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.on-box { padding: .9rem; display: flex; flex-direction: column; gap: .7rem; background: var(--panel2); }
+.on-box h3 { margin: 0; }
+#on-join-code { text-transform: uppercase; letter-spacing: .4em; text-align: center; font-size: 1.6rem !important; }
+.on-code { font-family: var(--arcade); font-size: 2rem; letter-spacing: .3em; text-align: center; color: var(--gold, #f2c94c); min-height: 2.4rem; }
+.on-status { min-height: 1.6rem; margin-top: .8rem; color: var(--muted); }
+.on-status.err { color: #ff6a6a; }

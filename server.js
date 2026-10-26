@@ -41,8 +41,87 @@ async function autoPull() {
   }
 }
 
-http.createServer((req, res) => {
+// ---------- PvP relay (Online 1v1) ----------
+// A tiny zero-dependency WebSocket server on /ws. The HOST's browser runs the match; this only pairs two players
+// by a room code and passes their messages through. Messages are JSON: { t: 'create' | 'join' | 'relay' | 'leave', ... }.
+const crypto = require('crypto');
+const rooms = new Map();   // code -> { host, guest, hostFaction }
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const newCode = () => { let c; do { c = Array.from({ length: 4 }, () => CODE_CHARS[crypto.randomInt(CODE_CHARS.length)]).join(''); } while (rooms.has(c)); return c; };
+function wsSend(sock, obj) {
+  if (sock.destroyed) return;
+  const data = Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj));
+  const n = data.length, head = n < 126 ? Buffer.from([0x81, n]) : n < 65536 ? Buffer.from([0x81, 126, n >> 8, n & 255]) : Buffer.concat([Buffer.from([0x81, 127, 0, 0, 0, 0]), Buffer.from([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255])]);
+  sock.write(Buffer.concat([head, data]));
+}
+function wsClose(sock) { try { if (!sock.destroyed) sock.end(Buffer.from([0x88, 0])); } catch {} }
+function leaveRoom(sock) {
+  const code = sock.room; if (!code) return;
+  sock.room = null;
+  const R = rooms.get(code); if (!R) return;
+  const other = R.host === sock ? R.guest : R.host;
+  rooms.delete(code);
+  if (other) { other.room = null; wsSend(other, { t: 'peerLeft' }); }
+}
+function onWsMessage(sock, text) {
+  let m; try { m = JSON.parse(text); } catch { return; }
+  if (m.t === 'relay') {   // the hot path: forward as-is to the other player
+    const R = sock.room && rooms.get(sock.room); if (!R) return;
+    const other = R.host === sock ? R.guest : R.host;
+    if (other) wsSend(other, text);
+  } else if (m.t === 'create') {
+    leaveRoom(sock);
+    const code = newCode();
+    rooms.set(code, { host: sock, guest: null, hostFaction: m.faction === 'modern' ? 'modern' : 'medieval', name: String(m.name || '').slice(0, 20) });
+    sock.room = code;
+    wsSend(sock, { t: 'room', code });
+  } else if (m.t === 'join') {
+    const code = String(m.code || '').toUpperCase().trim(), R = rooms.get(code);
+    if (!R) return wsSend(sock, { t: 'error', msg: 'No room with that code' });
+    if (R.guest) return wsSend(sock, { t: 'error', msg: 'That room is full' });
+    if (R.host === sock) return wsSend(sock, { t: 'error', msg: "That's your own room" });
+    leaveRoom(sock);
+    R.guest = sock; sock.room = code;
+    wsSend(sock, { t: 'joined', code, hostFaction: R.hostFaction, hostName: R.name });
+    wsSend(R.host, { t: 'peer', name: String(m.name || '').slice(0, 20) });
+  } else if (m.t === 'leave') leaveRoom(sock);
+}
+function acceptWs(req, sock) {
+  const key = req.headers['sec-websocket-key'];
+  if (!key) return sock.destroy();
+  const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  sock.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+  sock.setNoDelay(true);
+  let buf = Buffer.alloc(0), frag = [];
+  sock.on('data', (chunk) => {
+    buf = Buffer.concat([buf, chunk]);
+    for (;;) {
+      if (buf.length < 2) return;
+      const fin = buf[0] & 0x80, op = buf[0] & 0x0f, masked = buf[1] & 0x80;
+      let len = buf[1] & 0x7f, off = 2;
+      if (len === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); off = 4; }
+      else if (len === 127) { if (buf.length < 10) return; len = Number(buf.readBigUInt64BE(2)); off = 10; }
+      if (len > 8 * 1024 * 1024) return sock.destroy();   // nothing legit is this big
+      const need = off + (masked ? 4 : 0) + len;
+      if (buf.length < need) return;
+      const mask = masked ? buf.subarray(off, off + 4) : null; off += masked ? 4 : 0;
+      const data = Buffer.from(buf.subarray(off, off + len));
+      if (mask) for (let i = 0; i < data.length; i++) data[i] ^= mask[i & 3];
+      buf = buf.subarray(need);
+      if (op === 8) { wsClose(sock); sock.destroy(); return; }
+      if (op === 9) { sock.write(Buffer.concat([Buffer.from([0x8a, data.length]), data])); continue; }   // ping -> pong
+      if (op === 10) continue;
+      if (op === 0 || op === 1) { frag.push(data); if (fin) { const t = Buffer.concat(frag).toString('utf8'); frag = []; onWsMessage(sock, t); } }
+    }
+  });
+  const ping = setInterval(() => { if (!sock.destroyed) sock.write(Buffer.from([0x89, 0])); }, 25000);   // keeps hosting proxies from closing idle sockets
+  const bye = () => { clearInterval(ping); leaveRoom(sock); };
+  sock.on('close', bye); sock.on('error', bye);
+}
+
+const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
+  if (p === '/__health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok ' + rooms.size + ' rooms'); }
   if (p === '/__build') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(build));
@@ -55,7 +134,9 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   });
-}).listen(PORT, async () => {
+});
+server.on('upgrade', (req, sock) => { if (req.url.split('?')[0] === '/ws') acceptWs(req, sock); else sock.destroy(); });
+server.listen(PORT, async () => {
   const url = `http://localhost:${PORT}`;
   console.log(`\n  ERA CLASH running at ${url}\n  Ctrl+C to stop.\n`);
   if (IS_GIT) { await readHead(); console.log(`  Build ${build.hash}: ${build.subject}\n  Auto-update: checking GitHub every 60s\n`); }

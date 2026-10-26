@@ -124,7 +124,7 @@ export class Chat {
   send(raw) {
     const text = raw.trim(); if (!text) return;
     this.history.push(text); this.hIdx = this.history.length;
-    if (!text.startsWith('/')) return this.line(`[You]: ${text}`, 'me');
+    if (!text.startsWith('/')) { if (this.app.netRole) this.app.net?.send({ k: 'chat', text: text.slice(0, 200) }); return this.line(`[You]: ${text}`, 'me'); }
     const g = this.app.game, me = this.app.playerTeam;
     if (!g || me === null || g.over) return this.line('Commands only work during a match.', 'err');
     if (!g.teams.some((T, t) => t !== me && T.isAI)) return this.line('Commands are disabled in matches against other players.', 'err');

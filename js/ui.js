@@ -136,8 +136,10 @@ export class UI {
       else if (go === 'restart') this.app.restart();
       else if (go === 'quit') this.app.quitToMenu();
       else if (go === 'devlab') this.app.openDevLab();
+      else if (go === 'online') { this.show('online'); this.onlineStatus(''); }
       else this.show(go);
     });
+    this.wireOnline();
     $('#btn-pause').addEventListener('click', () => { sfx('click'); this.app.pause(); });
     $('#btn-help').addEventListener('click', () => { sfx('click'); this.app.pause(); this.helpReturn = 'pause'; this.show('help'); });
     $('#btn-shop').addEventListener('click', () => this.toggleShop());
@@ -1087,7 +1089,7 @@ export class UI {
     const g = this.app.game, pt = this.app.playerTeam;
     for (const t of [0, 1]) {
       const name = `${(t === 0 ? CASTLE_TIERS : HQ_TIERS)[g.bases[t].level - 1].name} <small>Lv ${g.bases[t].level}</small>`;
-      const tag = t === pt ? '<em>YOU</em>' : '<em class="ai">AI</em>';
+      const tag = t === pt ? '<em>YOU</em>' : `<em class="ai">${this.app.game?.pvp ? 'FOE' : 'AI'}</em>`;
       $('.bname', $(`#base-${t}`)).innerHTML = t === 0 ? name + tag : tag + name;
     }
   }
@@ -1332,6 +1334,7 @@ export class UI {
         const pt = this.app.playerTeam, sel = this.app.controls.selection.filter((u) => !u.dead && u.team === pt && u.ability(A.id));
         const list = sel.length ? sel : [p], on = !list[0].ability(A.id).st.auto;
         for (const u of list) u.ability(A.id).st.auto = on;
+        this.app.game?.mirror?.send({ k: 'auto', ids: list.map((u) => u.id), ab: A.id, on });   // Online 1v1 guest
         sfx('click');
         this.toast(`${A.name} autocast ${on ? 'ON' : 'OFF'} (${list.length} troop${list.length > 1 ? 's' : ''})`);
         this.updateAbilityBar(p);
@@ -1468,14 +1471,32 @@ export class UI {
     while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
   }
 
-  showEnd(win, g) {
+  // ---------- Online 1v1 lobby ----------
+  wireOnline() {
+    let fac = 'medieval';
+    const nameEl = $('#on-name');
+    try { nameEl.value = localStorage.getItem('eraclash.name') || ''; } catch {}
+    const name = () => { const n = nameEl.value.trim().slice(0, 16) || 'Player'; try { localStorage.setItem('eraclash.name', n); } catch {} return n; };
+    $$('#on-faction button').forEach((b) => (b.onclick = () => { fac = b.dataset.f; $$('#on-faction button').forEach((x) => x.classList.toggle('on', x === b)); sfx('click'); }));
+    $('#on-create').onclick = () => { sfx('click'); this.app.online.create(fac, name()); };
+    $('#on-join').onclick = () => { sfx('click'); const c = $('#on-join-code').value.trim().toUpperCase(); if (c.length !== 4) return this.onlineStatus('Enter the 4-letter room code', true); this.app.online.join(c, name()); };
+    $('#on-join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#on-join').click(); });
+    $('#on-back').onclick = () => { sfx('click'); this.app.online.cancel(); this.show('mode'); };
+  }
+  onlineStatus(text, err = false, code = null) {
+    const s = $('#on-status'); if (!s) return;
+    s.textContent = text; s.classList.toggle('err', !!err);
+    if (code !== null) $('#on-code').textContent = code;
+  }
+  showEnd(win, g, note = '') {
     const me = g.teams[this.app.playerTeam], ai = g.teams[1 - this.app.playerTeam];
     $('#end-title').textContent = win ? 'VICTORY' : 'DEFEAT';
     $('#end-title').className = win ? 'win' : 'lose';
-    $('#end-sub').textContent = win ? `The ${FACTIONS[ai.faction].baseName} has fallen.` : `Your ${FACTIONS[me.faction].baseName} was destroyed.`;
+    $('#end-sub').textContent = note || (win ? `The ${FACTIONS[ai.faction].baseName} has fallen.` : `Your ${FACTIONS[me.faction].baseName} was destroyed.`);
+    const foe = g.pvp ? (this.app.opponentName || 'Opponent') : `AI (${g.diffId} · ${DIFFICULTY[g.diffId].name})`;
     $('#end-stats').innerHTML = `
-      <tr><th></th><th>You</th><th>AI (${g.diffId} · ${DIFFICULTY[g.diffId].name})</th></tr>
-      <tr><td>AI personality</td><td colspan="2">${ai.persona?.name || '—'}</td></tr>
+      <tr><th></th><th>You</th><th>${foe}</th></tr>
+      ${g.pvp ? '' : `<tr><td>AI personality</td><td colspan="2">${ai.persona?.name || '—'}</td></tr>`}
       <tr><td>Match time</td><td colspan="2">${fmtTime(g.time)}</td></tr>
       <tr><td>Troops trained</td><td>${me.stats.trained}</td><td>${ai.stats.trained}</td></tr>
       <tr><td>Kills</td><td>${me.stats.kills}</td><td>${ai.stats.kills}</td></tr>

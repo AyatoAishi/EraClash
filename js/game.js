@@ -23,8 +23,9 @@ export class Game {
    * @param {function} o.getViewX  returns camera x (for audio culling)
    * @param {boolean} o.sandbox  Dev Lab arena: no AI, no neutral camps (js/dev/devlab.js drives it)
    */
-  constructor({ scene, playerTeam, difficulty = 'normal', world, getViewX = () => 0, sandbox = false }) {
+  constructor({ scene, playerTeam, difficulty = 'normal', world, getViewX = () => 0, sandbox = false, humanTeams = null }) {
     this.scene = scene;
+    this.humanTeams = humanTeams;   // Online 1v1: both teams are players (no AI brain, no AI bonuses)
     this.sandbox = sandbox;
     this.world = world;
     this.playerTeam = playerTeam;
@@ -128,7 +129,8 @@ export class Game {
     const f = night ? ramp : 1 - ramp;            // fades over the first `fade` seconds of each phase
     return { night, f: this.time < fade && !night ? 0 : f, left: half - into, cycle: Math.floor(this.time / (half * 2)) + 1 };
   }
-  isAI(t) { return !this.sandbox && (this.playerTeam === null || t !== this.playerTeam); }
+  isAI(t) { if (this.humanTeams) return !this.humanTeams.includes(t); return !this.sandbox && (this.playerTeam === null || t !== this.playerTeam); }
+  get pvp() { return !!this.humanTeams; }
   on(evt, fn) { (this.listeners[evt] ||= []).push(fn); }
   emit(evt, ...a) { (this.listeners[evt] || []).forEach((fn) => fn(...a)); }
 
@@ -452,7 +454,7 @@ export class Game {
     const y0 = this.terrain?.heightAt(p.x, p.z) || 0;
     mesh.position.set(p.x, 0.5 + y0, p.z);
     this.scene.add(mesh);
-    this.loot.push({ id: itemId, x: p.x, z: p.z, y0, mesh, t: 0 });
+    this.loot.push({ id: itemId, uid: this.lootUid = (this.lootUid || 0) + 1, x: p.x, z: p.z, y0, mesh, t: 0 });
     this.emit('lootDrop', itemId, p);
   }
   updateLoot(dt) {
@@ -1971,6 +1973,10 @@ export class Game {
     if (!this.over) { if (!this.sandbox) this.updateCamps(); this.updateLoot(dt); }
     this.vision?.update(dt);
     this.applyFog();
+    this.updateVisuals(dt);
+  }
+  /** Particles, decals and click/shockwave markers (also drawn by the Online 1v1 guest mirror). */
+  updateVisuals(dt) {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -2000,6 +2006,7 @@ export class Game {
   }
 
   dispose() {
+    this.mirror?.dispose(); this.netHost?.dispose();
     this.units.forEach((u) => u.dispose());
     this.particles.forEach((p) => this.scene.remove(p.m));
     this.decals.forEach((d) => this.scene.remove(d.g)); this.decals = [];

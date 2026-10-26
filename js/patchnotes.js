@@ -7,6 +7,21 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.32.0', date: '2026-10-26T23:59:00+08:00', title: 'Online 1v1', author: 'AyatoAishi',
+    sections: [
+      { title: 'New: Online 1v1', items: [
+        '<b>Play → Online 1v1</b>: the host picks an era and creates a room, then sends the 4-letter code. The friend joins with it and plays the other era.',
+        'The host\'s browser runs the match. The joiner sees it live and every order (moving, casting, hiring, research, building, skill trees, items, rally flag, autocast) goes to the host.',
+        'Chat (Enter) goes to the other player. Cheat commands are off, and online matches can\'t be paused or sped up. The Pause menu still opens, but the match keeps running.',
+        'If a player leaves or loses connection, the other player wins. The host can alt-tab: the match keeps running in the background.',
+      ] },
+      { title: 'Hosting', items: [
+        '<code>server.js</code> now also runs the Online 1v1 relay (<code>/ws</code>, still zero dependencies) and a health check at <code>/__health</code>.',
+        'Added <code>render.yaml</code> and <code>package.json</code> for one-click deploys on Render (steps in the README).',
+      ] },
+    ],
+  },
+  {
     version: '0.31.5', date: '2026-10-26T23:25:00+08:00', title: 'Fast-attack fix', author: 'AyatoAishi',
     sections: [
       { title: 'Bug fixes', items: [

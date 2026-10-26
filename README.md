@@ -149,3 +149,23 @@ Systems are split so new features plug in without touching each other:
 - v0.22.0 adds the Archer Tower tree and these structure fields: `multishot` (extra arrows at other targets, `Game.fireExtraShots`), `burnHit: { dps, t }` (on-hit burn, `Unit.addBurn` / `tickBurn`, true damage), `rain: { every, count, radius, damage, splash }` (`Game.fireRain`, its own timer), `bolt` (line shots shown as a flying bolt), `pierceSlow`, `flyingBonus` (extra damage vs flying, projectiles and line shots).
 - v0.23.0 adds the Sniper Tower tree and: `critChance / critMult` (line shots), `beamColor` (line-shot tracer), `rain.kind` ('arrow' | 'missile'). True-sight detectors read the building's current `structure.trueSight`, so upgrades widen it.
 - v0.25.0 adds the paired Hwacha and Machine Gun Nest trees and: `volleyTargets` (extra volleys at other groups, `Game.fireExtraVolleys`), `suppress` now also slows on volley rockets (passed to shells as `slow`), `armorPierce` (structure shots ignore that much armor, `Unit.takeDamage`), `hitSplash: { radius, pct }` (direct shots splash around the target, `Game.hitSplash`). `Game.activateStructure` is idempotent and runs again after each upgrade, so a level that adds true sight (Vulcan CIWS) registers its detector. Rotary guns expose `rig.spins` (barrel clusters that spin while firing). The Rocket Rack / Belt Feed Barracks upgrades were folded into path B.
+
+
+## Online 1v1 (play with friends)
+
+**Play → Online 1v1.** One player hosts: pick an era, then **Create room** and send the 4-letter code. The other player
+types the code and clicks **Join**; they get the other era. The host's browser runs the match. The joiner's browser shows it
+and sends their orders. Chat (Enter) goes to the other player. Cheat commands are off, online matches can't be paused or
+sped up, and if someone leaves, the other player wins.
+
+Both players must open the game from the same server (the deployed link, or `node server.js` on a LAN).
+The host should keep the game tab open. Alt-tabbing is fine: a background timer keeps the match running.
+
+### Deploy on Render
+1. Render dashboard → **New → Blueprint** → connect GitHub → pick `AyatoAishi/EraClash` → **Apply**.
+   `render.yaml` sets everything: `node server.js`, health check `/__health`, `NO_OPEN=1`, `NO_AUTOPULL=1`.
+2. Wait for the deploy (about a minute). Your game is at `https://eraclash.onrender.com` (or the name Render shows).
+3. Every push to `main` redeploys automatically.
+
+The free plan sleeps after about 15 minutes with no visitors, so the first load after that takes 30–50s.
+The Starter plan stays awake.

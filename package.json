@@ -1,0 +1,7 @@
+{
+  "name": "eraclash",
+  "private": true,
+  "description": "Era Clash: 3D voxel 1v1 lane RTS (static game + Online 1v1 relay in server.js, zero dependencies)",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}

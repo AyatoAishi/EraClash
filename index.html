@@ -251,9 +251,33 @@
     <div class="modes">
       <button class="mode frame" data-go="faction"><b>Player vs AI</b><small>Pick your era, crush the computer.</small></button>
       <button class="mode frame" disabled><b>Local 1v1</b><small>Two players, one keyboard — coming soon</small></button>
-      <button class="mode frame" disabled><b>Online 1v1</b><small>Coming soon</small></button>
+      <button class="mode frame" data-go="online"><b>Online 1v1</b><small>Host a room or join a friend's with a code.</small></button>
     </div>
     <div class="row-end"><button class="btn ghost" data-go="main">Back</button></div>
+  </div>
+</section>
+
+<!-- ================= ONLINE 1v1 LOBBY ================= -->
+<section id="scr-online" class="screen">
+  <div class="panel frame narrow">
+    <h2>Online 1v1</h2>
+    <label class="on-name">Your name <input id="on-name" maxlength="16" placeholder="Player" autocomplete="off"></label>
+    <div class="on-cols">
+      <div class="on-box frame">
+        <h3>Host a room</h3>
+        <div class="pills" id="on-faction"><button data-f="medieval" class="on">Medieval</button><button data-f="modern">Modern</button></div>
+        <button class="btn gold" id="on-create">Create room</button>
+        <div id="on-code" class="on-code"></div>
+      </div>
+      <div class="on-box frame">
+        <h3>Join a room</h3>
+        <input id="on-join-code" maxlength="4" placeholder="CODE" autocomplete="off">
+        <button class="btn" id="on-join">Join</button>
+        <small class="muted">You play the other era.</small>
+      </div>
+    </div>
+    <div id="on-status" class="on-status"></div>
+    <div class="row-end"><button class="btn ghost" id="on-back">Back</button></div>
   </div>
 </section>
 

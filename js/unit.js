@@ -766,6 +766,7 @@ export class Unit {
   /** Called when a swing/shot starts against `tg`. */
   onAttackStart(tg) {
     this.stillT = 0; this.invisible = false;
+    this.atkN = (this.atkN || 0) + 1;   // Online 1v1: the guest plays the attack animation when this ticks
     if (this.vendettaT > 0) { this.vendettaT = 0; this.vendettaStrike = true; }   // Vendetta: this attack ends it and hits very hard
     if (tg && tg.curse && tg.curse.t > 0) { this.curseHasteT = tg.curse.def.hasteTime; this.curseHaste = tg.curse.def.hasteAS; }
     if (tg && tg.team !== undefined) this.game.vision?.reveal(this, tg.team);   // attacking gives your position away
@@ -1849,7 +1850,8 @@ export class Unit {
       if (grounded) { m.target = null; continue; }
       m.cd -= dt; m.retT -= dt; m.wanderT -= dt;
       if (m.target && (m.target.dead || Math.hypot(m.target.pos.x - this.pos.x, m.target.pos.z - this.pos.z) - m.target.radius > reach + 1 || !g.canSee(this.team, m.target))) m.target = null;
-      if (!m.target && m.retT <= 0) {   // a random enemy around the owner
+      if (g.mirror) m.target = null;   // Online 1v1 guest: pets only drift (their shots come from the host)
+      else if (!m.target && m.retT <= 0) {   // a random enemy around the owner
         m.retT = 0.3;
         const pool = g.units.filter((o) => this.isFoe(o) && g.canSee(this.team, o) && Math.hypot(o.pos.x - this.pos.x, o.pos.z - this.pos.z) - o.radius <= reach);
         m.target = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;

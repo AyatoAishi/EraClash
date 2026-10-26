@@ -621,6 +621,7 @@ export class Controls {
       T.rally = { x: p.x, z: p.z }; this.hooks.toast?.('Rally point set: new troops walk to the flag');
       this.game.marker(p, 0xff4a3a);
     }
+    this.game.mirror?.send({ k: 'rally', v: T.rally });   // Online 1v1 guest: the host owns the real flag
     sfx('order');
   }
 

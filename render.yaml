@@ -1,0 +1,16 @@
+# Render Blueprint: one web service runs the game files AND the Online 1v1 relay (/ws).
+# Render dashboard -> New -> Blueprint -> pick this repo. (Or New -> Web Service with the same settings.)
+services:
+  - type: web
+    name: eraclash
+    runtime: node
+    plan: free            # free sleeps after ~15 min idle (first visit then takes ~30-50s); "starter" stays awake
+    buildCommand: echo "no build step"
+    startCommand: node server.js
+    healthCheckPath: /__health
+    autoDeploy: true      # every push to main redeploys
+    envVars:
+      - key: NO_OPEN       # don't try to open a browser on the server
+        value: "1"
+      - key: NO_AUTOPULL   # Render redeploys on push; the server must not git-pull itself
+        value: "1"

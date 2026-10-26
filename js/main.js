@@ -11,6 +11,7 @@ import { Controls } from './controls.js';
 import { UI, makePortraits } from './ui.js';
 import { sfx, setMusicMood } from './audio.js';
 import { DevLab } from './dev/devlab.js';
+import { NetClient, NetHost, NetGuest } from './net.js';
 
 const app = {
   state: 'menu',          // menu | playing | paused | ended
@@ -106,17 +107,21 @@ function startDemo() {
   setMusicMood('menu');
 }
 
-app.startMatch = (faction, difficulty) => {
+app.startMatch = (faction, difficulty, pvp = null) => {
   app.game?.dispose();
   app.playerFaction = faction;
   app.difficulty = difficulty;
   app.playerTeam = FACTIONS[faction].team;
-  const g = new Game({ scene, playerTeam: app.playerTeam, difficulty, world, getViewX: () => app.controls.target.x });
+  app.netRole = pvp?.role || null;
+  const g = new Game({ scene, playerTeam: app.playerTeam, difficulty, world, getViewX: () => app.controls.target.x, humanTeams: pvp ? [0, 1] : null });
   app.game = g;
+  if (pvp?.role === 'host') new NetHost(app, g, app.net, 1 - app.playerTeam);
+  else if (pvp?.role === 'guest') new NetGuest(app, g, app.net);
   app.controls.setGame(g, app.playerTeam);
   app.timeScale = 1;
   app.recentHires = [];
-  app.chat?.clear(); app.chat?.line(`Press ${settings.keys.chat === 'Enter' ? 'Enter' : settings.keys.chat} to chat. Type /help for test commands (vs AI only).`, 'sys');
+  app.chat?.clear(); app.chat?.line(pvp ? `Online 1v1 vs ${app.opponentName || 'Opponent'}. Press ${settings.keys.chat === 'Enter' ? 'Enter' : settings.keys.chat} to chat with them. Good luck!`
+    : `Press ${settings.keys.chat === 'Enter' ? 'Enter' : settings.keys.chat} to chat. Type /help for test commands (vs AI only).`, 'sys');
   app.controls.height = 34;
   app.controls.centerOn(app.playerTeam === 0 ? -GAME.baseX + 16 : GAME.baseX - 16);
   app.controls.enabled = true;
@@ -197,8 +202,49 @@ app.resume = () => {
   app.controls.enabled = true;
   app.ui.show('hud');
 };
-app.restart = () => app.startMatch(app.playerFaction, app.difficulty);
-app.quitToMenu = () => { startDemo(); app.ui.show('main'); };
+app.restart = () => { if (app.netRole) { app.quitToMenu(); app.ui.show('online'); return; } app.startMatch(app.playerFaction, app.difficulty); };
+app.quitToMenu = () => { if (app.netRole) { app.net?.leave(); app.netRole = null; } startDemo(); app.ui.show('main'); };
+
+// ---------------- Online 1v1 (js/net.js, server.js /ws) ----------------
+app.net = new NetClient();
+app.online = {
+  async connect() {
+    try { await app.net.connect(); return true; }
+    catch (e) { app.ui.onlineStatus(e.message + ' (online play needs the game opened from the server, not a file)', true); return false; }
+  },
+  wire() {
+    const N = app.net, st = (t, err, code) => app.ui.onlineStatus(t, err, code);
+    N.on('room', (m) => st('Room open: send this code to your friend. Waiting for them to join…', false, m.code));
+    N.on('error', (m) => st(m.msg, true));
+    N.on('peer', (m) => { app.opponentName = m.name || 'Opponent'; st(`${app.opponentName} joined — starting!`, false, ''); app.startMatch(app.online.hostFaction, 2, { role: 'host' }); });
+    N.on('joined', (m) => { app.opponentName = m.hostName || 'Opponent'; st('Joined — starting!'); app.startMatch(m.hostFaction === 'medieval' ? 'modern' : 'medieval', 2, { role: 'guest' }); });
+    N.on('peerLeft', () => app.online.lost(`${app.opponentName || 'Your opponent'} left the match.`));
+    N.on('closed', () => { if (app.netRole) app.online.lost('Lost connection to the game server.'); else st('Disconnected from the server.', true, ''); });
+  },
+  async create(faction, name) {
+    this.wire(); this.hostFaction = faction;
+    if (!(await this.connect())) return;
+    app.ui.onlineStatus('Creating room…', false, '');
+    app.net.create(faction, name);
+  },
+  async join(code, name) {
+    this.wire();
+    if (!(await this.connect())) return;
+    app.ui.onlineStatus(`Joining ${code}…`);
+    app.net.join(code, name);
+  },
+  cancel() { app.net.leave(); app.ui.onlineStatus('', false, ''); },
+  /** The other player is gone: the match ends (a win for whoever is still here, unless it was already over). */
+  lost(msg) {
+    const g = app.game; if (!app.netRole || !g) return;
+    app.ui.toast(msg, 'err');
+    if (!g.over && (app.state === 'playing' || app.state === 'paused')) {
+      g.over = true; app.controls.enabled = false; app.controls.setArmed(false);
+      app.state = 'ended'; app.ui.showEnd(true, g, msg);
+    }
+    app.netRole = null;
+  },
+};
 // Dev Lab (main menu button): model viewer + sandbox. It takes over the frame loop until closed.
 app.openDevLab = () => {
   app.game?.dispose(); app.game = null;
@@ -253,7 +299,7 @@ function frame() {
     app.controls.target.z = 2;
     if (g.over) { demoRestart += dt; if (demoRestart > 4) { demoRestart = 0; startDemo(); } }
   }
-  if (app.state !== 'paused') g.update(dt, camera.quaternion);
+  if (app.state !== 'paused' || app.netRole) g.update(dt, camera.quaternion);   // online matches never pause
   FOW.on.value = g && g.vision && g.playerTeam !== null && !g.cheat?.reveal ? 1 : 0;
   if (FOW.on.value) updateFogTexture(g.vision.vis[g.playerTeam], dt);
   if (g) { world.setNight(g.dayNight.f); FOW.dark.value = 0.42 + 0.14 * g.dayNight.f; }   // fog lifts a little at night so it isn't pitch black
@@ -269,6 +315,20 @@ function frame() {
 startDemo();
 app.ui.show('main');
 frame();
+// Online host in a background tab: the browser stops animation frames there, which would freeze the match for BOTH
+// players. A worker timer (not throttled like the page) keeps the simulation running until the tab is visible again.
+(() => {
+  let last = performance.now();
+  const tick = () => {
+    const now = performance.now(), el = Math.min(1, (now - last) / 1000); last = now;
+    if (!document.hidden || app.netRole !== 'host' || !app.game || app.state === 'ended') return;
+    for (let t = el; t > 1e-4; t -= 0.05) app.game.update(Math.min(0.05, t), camera.quaternion);
+  };
+  try {
+    const w = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 50)'], { type: 'text/javascript' })));
+    w.onmessage = tick;
+  } catch { setInterval(tick, 50); }
+})();
 // ---------------- auto-update (server.js pulls from GitHub; we just notice the new build) ----------------
 (() => {
   let first = null, shown = false;
