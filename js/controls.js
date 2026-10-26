@@ -73,7 +73,7 @@ export class Controls {
     this.cancelBuild?.();
     if (this.flag) { this.flag.parent?.remove(this.flag); this.flag = null; }
     this.game = game; this.team = team; this.selection = []; this.groups = {}; this.armed = false; this.selectedBase = null;
-    for (const m of [this.rangeMesh, this.minRangeMesh, this.hoverRing, this.baseRing, this.aimMesh]) if (m) game.scene.add(m);   // the Dev Lab arena has its own scene
+    for (const m of [this.rangeMesh, this.minRangeMesh, this.hoverRing, this.baseRing, this.aimMesh, this.aimRing]) if (m) game.scene.add(m);   // the Dev Lab arena has its own scene
     this.hooks.onSelectionChange?.();
   }
 
@@ -144,7 +144,7 @@ export class Controls {
   // ---------------- single-unit attack-range circle (pixel dots) ----------------
   /** Buildings with a minimum range (artillery, Hwacha): an orange ring shows where they can't hit. */
   updateMinRange(one) {
-    const r = one?.structure ? one.minRange : 0;
+    const r = one ? one.minRange : 0;   // artillery and Catapult: where they can't hit
     if (!r) { if (this.minRangeMesh) this.minRangeMesh.visible = false; return; }
     if (!this.minRangeMesh) {
       this.minRangeMesh = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64), new THREE.MeshBasicMaterial({ color: 0xff8a5a, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
@@ -394,7 +394,7 @@ export class Controls {
     const readyIn = (u) => { const k = slotOf(u); return u.def.id === type && k >= 0 && u.abil[k].st.cd <= 0 && (u.abil[k].def.manaCost || 0) <= u.mana && !u.casting; };
     const ready = units.filter(readyIn);
     if (!ready.length) { this.hooks.toast?.((a.def.manaCost || 0) > units[0].mana ? `Not enough mana for ${a.def.name}` : `${a.def.name} not ready`); return false; }
-    if (a.def.cast === 'line' || a.def.cast === 'unit') {
+    if (a.def.cast === 'line' || a.def.cast === 'unit' || a.def.cast === 'point') {
       // Quick cast (Options > Gameplay): fire at the cursor right away. Normal cast: show the aim lines and wait for a click.
       if (settings.gameplay.quickCast) {
         const p = this.mouse.inside ? this.groundAt(this.mouse.x, this.mouse.y) : null;
@@ -499,7 +499,7 @@ export class Controls {
   updateAiming() {
     const T = this.targeting;
     this.aimMeshes ||= [];
-    if (!T || !this.game) { for (const m of this.aimMeshes) m.visible = false; return; }
+    if (!T || !this.game) { for (const m of this.aimMeshes) m.visible = false; if (this.aimRing) this.aimRing.visible = false; return; }
     const casters = this.own().filter((x) => { const a = x.ability(T.abil); return x.def.id === T.type && a && a.st.cd <= 0 && (a.def.manaCost || 0) <= x.mana && !x.casting; });
     if (!casters.length) return this.cancelTargeting();
     const p = this.groundAt(this.mouse.x, this.mouse.y);
@@ -519,6 +519,16 @@ export class Controls {
       m.position.set(u.pos.x + dx * L / 2, 0.12 + Math.max(0, u.pos.y || 0), u.pos.z + dz * L / 2);
       m.rotation.y = Math.atan2(dx, dz);
     });
+    // point casts (Acid Spray): a ring where it will land, clamped to cast range from the first caster
+    if (T.def.cast === 'point' && p && casters[0]) {
+      if (!this.aimRing) {
+        this.aimRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 40), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
+        this.aimRing.material.userData.noFow = true; this.aimRing.rotation.x = -Math.PI / 2; this.aimRing.renderOrder = 6; this.game.scene.add(this.aimRing);
+      }
+      const u = casters[0]; let dx = p.x - u.pos.x, dz = p.z - u.pos.z; const d = Math.hypot(dx, dz), c = T.def.castRange || d;
+      if (d > c) { dx *= c / d; dz *= c / d; }
+      this.aimRing.visible = true; this.aimRing.scale.setScalar(T.def.radius || 1); this.aimRing.position.set(u.pos.x + dx, 0.14, u.pos.z + dz);
+    } else if (this.aimRing) this.aimRing.visible = false;
   }
   setArmed(v) {
     this.armed = v && this.own().length > 0;

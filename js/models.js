@@ -197,6 +197,22 @@ export function animateFx(r, dt) {
 
 /** Gear pieces for skill-tree forms. Each gets the rig and the kit; positions follow the humanoid skeleton. */
 export const FORM_GEAR = {
+  // ---- Dryad ----
+  hushVeil: (r, { solid }) => { solid(r.head, 0.52, 0.2, 0.04, 0x6a3aa8, 0, -0.13, 0.262); solid(r.head, 0.1, 0.1, 0.04, 0xd8a8ff, 0, -0.13, 0.285); },
+  runeHalo: (r, { glow, fx }) => { for (const [x, z, w, d] of [[0, 0.24, 0.5, 0.06], [0, -0.24, 0.5, 0.06], [0.24, 0, 0.06, 0.42], [-0.24, 0, 0.06, 0.42]]) glow(r.head, w, 0.05, d, 0xc070ff, x, 0.62, z); fx(r.head, 'orbit', 4, [0xff4ad8, 0xd8a8ff], 0, 0.62, 0, 0.36, 0.06, 0.2); },
+  spearFan: (r, { solid }) => { if (!r.quiver) return; for (const [x, rz] of [[-0.2, -0.45], [0.2, 0.45]]) { const sp = new THREE.Group(); sp.position.set(x, 0.1, 0); sp.rotation.z = rz; r.quiver.add(sp); solid(sp, 0.05, 1.0, 0.05, 0xc8a070, 0, 0.3, 0); solid(sp, 0.08, 0.14, 0.08, 0xd8e8c8, 0, 0.86, 0); } },
+  thornCrown: (r, { solid }) => { for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; solid(r.head, 0.06, 0.18, 0.06, 0x8a1a1a, Math.cos(a) * 0.24, 0.42, Math.sin(a) * 0.24); } },
+  // ---- Catapult ----
+  ironBands: (r, { solid }) => { for (const z of [-0.6, 0.2]) solid(r.throwArm, 0.24, 0.24, 0.08, 0x5a5f66, 0, 0, z - 0.6); for (const sx of [-1, 1]) solid(r.body, 0.06, 0.26, 2.2, 0x5a5f66, sx * 0.66, 0.62, 0); },
+  fireBucket: (r, { glow, fx }) => { const b = r.stone.parent; glow(b, 0.38, 0.06, 0.38, 0xff6a1a, 0, 0.38, 0); fx(b, 'rise', 5, [0xffd23a, 0xff8a3a, 0xff3a1a], 0, 0.35, 0, 0.18, 0.07, 0.8); r.stone.material = new THREE.MeshBasicMaterial({ color: 0xc8501a }); r.extraMats.push(r.stone.material); },
+  heavyPlates: (r, { solid }) => { for (const sx of [-1, 1]) { solid(r.body, 0.08, 0.5, 1.6, 0x4a4f56, sx * 0.72, 0.85, 0); for (const z of [-0.5, 0, 0.5]) solid(r.body, 0.14, 0.1, 0.1, 0xc9d1d8, sx * 0.8, 0.95, z); } for (const x of [-0.4, 0, 0.4]) solid(r.body, 0.1, 0.1, 0.4, 0xc9d1d8, x, 0.7, -1.25); },
+  // ---- Batrider ----
+  batShield: (r, { solid }) => { solid(r.rider, 0.06, 0.4, 0.34, 0x2f62b8, -0.28, 0.28, 0.05); solid(r.rider, 0.07, 0.1, 0.1, 0xf2c94c, -0.31, 0.3, 0.05); },
+  batHalo: (r, { glow, fx }) => { for (const [x, z, w, d] of [[0, 0.18, 0.4, 0.05], [0, -0.18, 0.4, 0.05], [0.18, 0, 0.05, 0.3], [-0.18, 0, 0.05, 0.3]]) glow(r.rider, w, 0.04, d, 0xfff3a0, x, 1.0, z); fx(r.torso, 'orbit', 4, [0xfff3a0, 0xffffff], 0, 0.2, 0, 1.1, 0.06, 0.3); },
+  batSpikes: (r, { solid }) => { for (let k = 0; k < 4; k++) solid(r.torso, 0.08, 0.2, 0.08, 0xd8d0c0, 0, 0.36, -0.5 + k * 0.18); },
+  dragonHorns: (r, { solid }) => { for (const s2 of [-1, 1]) { solid(r.torso, 0.08, 0.3, 0.08, 0xe8d8a8, s2 * 0.14, 0.48, 0.55); solid(r.torso, 0.07, 0.07, 0.2, 0xe8d8a8, s2 * 0.14, 0.62, 0.45); } for (const z of [-0.3, 0, 0.3]) solid(r.torso, 0.72, 0.06, 0.12, 0x3a7a3a, 0, -0.27, z); },
+  emberTrail: (r, { fx }) => { for (const w of r.batWings || []) fx(w, 'rise', 3, [0xffd23a, 0xff8a3a], (w.position.x > 0 ? 1 : -1) * 1.2, 0, 0, 0.3, 0.07, 0.8); },
+
   // ---- Viking ----
   warpaint: (r, { glow }) => { glow(r.head, 0.5, 0.05, 0.02, 0xc0141a, 0, 0.0, 0.262); glow(r.head, 0.05, 0.22, 0.02, 0xc0141a, 0, 0.06, 0.263); },
   bloodAxe: (r, { glow }) => { glow(r.weapon, 0.075, 0.44, 0.06, 0xff2a1a, 0, 0.12, 0.84); },
@@ -584,6 +600,97 @@ export function buildReconDrone() {
   r.armL = pivot(body, 0, 0, 0); r.armR = pivot(body, 0, 0, 0);
   r.handL = pivot(r.armL, 0, 0, 0); r.handR = pivot(r.armR, 0, 0, 0);
   r.style = 'drone';
+  return finalize(r);
+}
+
+
+// ======================= Tier 2 troops (v0.29) =======================
+/** Dryad: a small leafy spirit with a big head, flower in her hair and a bundle of thorn spears. Throws overhand. */
+export function buildDryad() {
+  const p = { skin: 0x7ac04a, pants: 0x4a8a2a, boots: 0x6b4a2a, shirt: 0x4a8a2a, sleeve: 0x7ac04a, belt: 0xc8a070 };
+  const r = humanoid(p); const m = r.mats;
+  r.head.scale.setScalar(1.25); r.head.position.y += 0.06;                    // chibi head
+  for (const [x, y, z, c] of [[-0.18, 0.3, 0, 0x4a8a2a], [0.18, 0.3, 0, 0x4a8a2a], [0, 0.34, -0.1, 0x5aa040], [0, 0.3, 0.12, 0x4a8a2a], [-0.28, 0.1, -0.1, 0x5aa040], [0.28, 0.1, -0.1, 0x5aa040]]) B(r.head, 0.2, 0.14, 0.2, c, x, y, z, m);
+  B(r.head, 0.52, 0.42, 0.12, 0x4a8a2a, 0, 0.0, -0.27, m);                     // leafy hair, back
+  B(r.head, 0.1, 0.1, 0.1, 0xff8ad8, 0.2, 0.34, 0.12, m); B(r.head, 0.05, 0.05, 0.05, 0xffe14a, 0.2, 0.34, 0.17, m);   // flower
+  r.eyes.forEach((e) => e.scale.set(1.4, 1.7, 1));                             // big eyes
+  B(r.head, 0.06, 0.04, 0.02, 0xff8a9a, -0.16, -0.08, 0.255, m); B(r.head, 0.06, 0.04, 0.02, 0xff8a9a, 0.16, -0.08, 0.255, m);   // blush
+  B(r.torso, 0.74, 0.2, 0.46, 0xc8a070, 0, -0.36, 0, m);                       // bark skirt
+  for (const s2 of [-1, 1]) B(r.torso, 0.14, 0.14, 0.14, 0x5aa040, s2 * 0.36, 0.3, 0, m);   // leaf shoulders
+  const sp = pivot(r.handR, 0, 0, 0);                                         // spear in hand
+  B(sp, 0.07, 0.07, 1.5, 0xc8a070, 0, 0, 0.35, m); B(sp, 0.12, 0.12, 0.22, 0xd8e8c8, 0, 0, 1.15, m);
+  r.weapon = sp;
+  const q = pivot(r.torso, 0, 0.1, -0.28); q.rotation.z = 0.3; r.quiver = q;  // spear bundle on the back
+  for (const x of [-0.08, 0, 0.08]) { B(q, 0.05, 1.0, 0.05, 0xc8a070, x, 0.2, 0, m); B(q, 0.08, 0.14, 0.08, 0xd8e8c8, x, 0.76, 0, m); }
+  r.scale = 0.9;
+  return finalize(r);
+}
+
+/** Catapult: wheeled frame, a throwing arm with a boulder in the bucket, one operator on the right side. */
+export function buildCatapult() {
+  const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
+  const m = new Map(); const r = { root, body, mats: m };
+  const wood = 0x8a6a42, dark = 0x6b4a2a, iron = 0x5a5f66;
+  B(body, 1.3, 0.22, 2.2, wood, 0, 0.62, 0, m);                                // chassis
+  for (const sx of [-1, 1]) { B(body, 0.16, 0.16, 2.3, dark, sx * 0.6, 0.62, 0, m); B(body, 0.14, 1.15, 0.14, dark, sx * 0.5, 1.25, -0.25, m); }   // rails + uprights
+  B(body, 1.2, 0.14, 0.14, dark, 0, 1.78, -0.25, m);                           // crossbar the arm hits
+  B(body, 0.9, 0.3, 0.5, 0x4a3a2a, 0, 0.85, 0.65, m);                          // counterweight box
+  r.wheels = [];
+  for (const [x, z] of [[-0.75, 0.7], [0.75, 0.7], [-0.75, -0.7], [0.75, -0.7]]) {
+    const w = pivot(body, x, 0.42, z); r.wheels.push(w);
+    B(w, 0.14, 0.84, 0.3, dark, 0, 0, 0, m); B(w, 0.14, 0.3, 0.84, dark, 0, 0, 0, m); B(w, 0.16, 0.16, 0.16, iron, 0, 0, 0, m);
+  }
+  const arm = pivot(body, 0, 0.95, 0.35); r.throwArm = arm;                    // pivot near the back, swings forward
+  B(arm, 0.18, 0.18, 1.9, wood, 0, 0, -0.85, m);
+  const bucket = pivot(arm, 0, 0.05, -1.75);
+  B(bucket, 0.5, 0.12, 0.5, dark, 0, -0.06, 0, m); for (const s2 of [-1, 1]) { B(bucket, 0.08, 0.2, 0.5, dark, s2 * 0.22, 0.04, 0, m); B(bucket, 0.5, 0.2, 0.08, dark, 0, 0.04, s2 * 0.22, m); }
+  r.stone = B(bucket, 0.36, 0.36, 0.36, 0x7a7a80, 0, 0.18, 0, m);
+  r.muzzle = r.stone;
+  arm.rotation.x = 1.0;                                                         // rest: arm cocked back, bucket low
+  // operator on the right side
+  const op = pivot(body, 0.95, 0.62, -0.2); r.op = op;
+  B(op, 0.36, 0.4, 0.3, 0x8a3a2a, 0, 0.45, 0, m); B(op, 0.3, 0.3, 0.3, 0xe2b08a, 0, 0.82, 0, m); B(op, 0.34, 0.12, 0.34, iron, 0, 1.0, 0, m);
+  for (const s2 of [-1, 1]) B(op, 0.14, 0.3, 0.16, 0x4a3a2a, s2 * 0.1, 0.12, 0, m);
+  r.eyes = [B(op, 0.05, 0.05, 0.02, 0x111111, -0.07, 0.84, 0.155, m), B(op, 0.05, 0.05, 0.02, 0x111111, 0.07, 0.84, 0.155, m)];
+  r.torso = pivot(body, 0, 0.9, 0); r.head = pivot(op, 0, 0.82, 0);           // dummies for the shared animator
+  r.legL = pivot(body, 0, 0, 0); r.legR = pivot(body, 0, 0, 0); r.armL = pivot(op, 0, 0, 0); r.armR = pivot(op, 0, 0, 0);
+  r.handL = pivot(r.armL, 0, 0, 0); r.handR = pivot(r.armR, 0, 0, 0);
+  r.style = 'catapult'; r.barY = 2.9; r.scale = 1.05;
+  return finalize(r);
+}
+
+/** Batrider: an archer on a giant bat. Wings flap (r.batWings); the rider's arm draws on attack. */
+export function buildBatrider() {
+  const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
+  const m = new Map(); const r = { root, body, mats: m };
+  const fur = 0x5a3a4a, wing = 0x8a4a3a, dark = 0x3a2a30;
+  r.torso = pivot(body, 0, 0.9, 0);
+  B(r.torso, 0.7, 0.55, 1.1, fur, 0, 0, 0, m);                                 // bat body
+  B(r.torso, 0.5, 0.45, 0.45, fur, 0, 0.12, 0.7, m);                           // head
+  for (const s2 of [-1, 1]) B(r.torso, 0.12, 0.3, 0.12, dark, s2 * 0.18, 0.46, 0.66, m);   // ears
+  r.eyes = [B(r.torso, 0.09, 0.07, 0.02, 0xff3b2f, -0.12, 0.18, 0.93, m), B(r.torso, 0.09, 0.07, 0.02, 0xff3b2f, 0.12, 0.18, 0.93, m)];
+  B(r.torso, 0.22, 0.08, 0.04, 0xf2f2f2, 0, -0.02, 0.93, m);                   // fangs
+  for (const s2 of [-1, 1]) B(r.torso, 0.12, 0.3, 0.12, dark, s2 * 0.2, -0.36, -0.15, m);   // feet
+  r.batWings = [];
+  for (const s2 of [-1, 1]) {
+    const w = pivot(r.torso, s2 * 0.35, 0.15, 0); r.batWings.push(w);
+    B(w, 1.1, 0.06, 0.8, wing, s2 * 0.6, 0, -0.05, m); B(w, 0.7, 0.06, 0.5, wing, s2 * 1.4, 0, -0.2, m);
+    B(w, 1.6, 0.08, 0.08, dark, s2 * 0.85, 0.02, 0.35, m);                     // wing bone
+    for (const k of [0, 1, 2]) B(w, 0.06, 0.08, 0.7, dark, s2 * (0.5 + k * 0.5), 0.02, 0, m);
+  }
+  // rider: small archer on the bat's back
+  const rd = pivot(r.torso, 0, 0.35, -0.1); r.rider = rd;
+  B(rd, 0.38, 0.42, 0.28, 0x4e6b2e, 0, 0.25, 0, m); B(rd, 0.3, 0.3, 0.3, 0xe9b995, 0, 0.62, 0, m);
+  B(rd, 0.34, 0.12, 0.34, 0x3d5a24, 0, 0.8, -0.02, m); B(rd, 0.34, 0.24, 0.06, 0x3d5a24, 0, 0.6, -0.17, m);   // hood
+  r.head = pivot(rd, 0, 0.62, 0);
+  r.armL = pivot(rd, -0.24, 0.4, 0); r.armR = pivot(rd, 0.24, 0.4, 0);
+  for (const a of [r.armL, r.armR]) B(a, 0.12, 0.34, 0.14, 0x4e6b2e, 0, -0.15, 0, m);
+  r.handL = pivot(r.armL, 0, -0.32, 0); r.handR = pivot(r.armR, 0, -0.32, 0);
+  const bow = pivot(r.handL, 0, 0, 0.06);
+  for (const [y, z] of [[-0.3, 0], [-0.15, 0.08], [0, 0.1], [0.15, 0.08], [0.3, 0]]) B(bow, 0.04, 0.16, 0.04, 0x7b5130, 0, y, z, m);
+  r.legL = pivot(body, 0, 0, 0); r.legR = pivot(body, 0, 0, 0);
+  r.batWings[0].rotation.z = -0.5; r.batWings[1].rotation.z = 0.5;   // rest pose: wings up (the animator takes over in game)
+  r.style = 'bat'; r.barY = 2.2; r.scale = 0.95;
   return finalize(r);
 }
 
@@ -2376,7 +2483,7 @@ export function buildRocket() {
   return g;
 }
 
-export const UNIT_BUILDERS = { cannon: buildCannon, howitzer: buildHowitzer, archerTower: buildArcherTower, sniperTower: buildSniperTower, hwacha: buildHwacha, mgNest: buildMgNest, lancer: buildLancer, elf: buildElf, riotSkirmisher: buildRiotSkirmisher, reconDrone: buildReconDrone, direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
+export const UNIT_BUILDERS = { dryad: buildDryad, catapult: buildCatapult, batrider: buildBatrider, cannon: buildCannon, howitzer: buildHowitzer, archerTower: buildArcherTower, sniperTower: buildSniperTower, hwacha: buildHwacha, mgNest: buildMgNest, lancer: buildLancer, elf: buildElf, riotSkirmisher: buildRiotSkirmisher, reconDrone: buildReconDrone, direBear: buildDireBear, blueBear: buildBlueBear, banshee: buildBanshee, smallBanshee: buildSmallBanshee, alphaThug: buildAlphaThug, hooligan: buildHooligan, outlaw: buildOutlaw,  sniper: buildSniper,  viking: buildViking, police: buildPolice, archer: buildArcher, gunner: buildGunner, imp: buildImp };
 
 // projectiles — built along +Z so lookAt() aims them
 export function buildArrow() {
@@ -2398,6 +2505,16 @@ export function buildShell() {
   const g = new THREE.Group();
   B(g, 0.22, 0.22, 0.6, 0x5b6b3a, 0, 0, 0, null);
   B(g, 0.14, 0.14, 0.2, 0xc9a050, 0, 0, 0.38, null);
+  return g;
+}
+
+/** Dryad spear: a thorn-tipped shaft (built along +Z like the arrow). */
+export function buildSpear() {
+  const g = new THREE.Group();
+  B(g, 0.06, 0.06, 1.1, 0xc8a070, 0, 0, 0, null);
+  B(g, 0.11, 0.11, 0.2, 0xd8e8c8, 0, 0, 0.6, null);
+  B(g, 0.14, 0.03, 0.12, 0x5aa040, 0, 0, -0.5, null);
+  g.children.forEach((c) => (c.castShadow = false));
   return g;
 }
 

@@ -60,7 +60,7 @@ export const FACTIONS = {
     baseName: 'Stone Keep',
     emblem: 'em-medieval',                // pixel symbol id in index.html
     color: '#d9a441',
-    units: ['viking', 'archer', 'imp', 'lancer', 'elf'],   // shop order = default buy key order (1, 2, 3...)
+    units: ['viking', 'archer', 'imp', 'lancer', 'elf', 'dryad', 'catapult', 'batrider'],   // shop order
     buildings: ['cannon', 'archerTower', 'hwacha'],         // Build menu (deployable structures, UNITS entries with `structure`)
   },
   modern: {
@@ -557,6 +557,70 @@ export const ABILITIES = {
 /** Exact, current text for an ability definition (form overrides already merged in): `text(A, pct)` if it has one, else `desc`. */
 const fmtN = (x) => Math.round(x * 100) / 100;
 const pct = (x) => fmtN(x * 100) + '%';
+// ---------- v0.29 Tier 2 troops (Medieval): Dryad, Catapult, Batrider ----------
+Object.assign(UNITS, {
+  dryad: {
+    id: 'dryad', name: 'Dryad', theme: 'medieval', family: 'marksman', role: 'Spear-throwing spirit', type: 'ranged', tier: 2,
+    cost: 200, trainTime: 6,
+    hp: 200, hpRegen: 4, damage: 22, damageType: 'physical', attackSpeed: 50,
+    armor: 6, ward: 3, evasion: 0, missChance: 0,
+    moveSpeed: 3.2, range: 8.5, vision: [28, 18], aggro: 12, radius: 0.45,
+    mana: 250, manaRegen: 1,
+    projectile: { kind: 'spear', speed: 18, arc: 0.12 },
+    abilities: ['naturesGrace', 'arcaneCoating'],
+    lore: 'A small forest spirit with bark for skin and a bundle of thorn spears on her back. Creeps barely bruise her; whatever she coats keeps hurting long after she\'s gone.',
+  },
+  catapult: {
+    id: 'catapult', name: 'Catapult', theme: 'medieval', family: 'marksman', role: 'Mobile siege', type: 'ranged', tier: 2,
+    cost: 250, trainTime: 8,
+    hp: 400, hpRegen: 0, damage: 80, damageType: 'physical', attackSpeed: 10,
+    armor: 10, ward: -8, evasion: 0, missChance: 0,
+    moveSpeed: 1.8, range: 16, minRange: 3, groundOnly: true, vision: [22, 14], aggro: 17, radius: 0.85,
+    // ground-targeted boulder (Game.fireShell): lands where the target WAS, splash 1, can be dodged
+    siege: { shell: 'ball', flight: 1.6, arc: 0.35, splash: 1, groundOnly: true, marker: true },
+    abilities: ['siegeBonus', 'homingStone'],
+    lore: 'A wheeled throwing-arm with one very brave operator. Slow, blind up close and helpless against anything that flies, but walls hate it.',
+  },
+  batrider: {
+    id: 'batrider', name: 'Batrider', theme: 'medieval', family: 'marksman', role: 'Flying skirmisher', type: 'ranged', tier: 2, flying: true,
+    cost: 300, trainTime: 7,
+    hp: 180, hpRegen: 2, damage: 30, damageType: 'physical', attackSpeed: 60,
+    armor: 3, ward: 4, evasion: 0, missChance: 0,
+    moveSpeed: 3.3, range: 10, vision: [30, 20], aggro: 13, radius: 0.6,
+    projectile: { kind: 'arrow', speed: 22, arc: 0.1 },
+    abilities: ['acidSpray', 'grudge'],
+    lore: 'An archer strapped to a giant bat. Swords can\'t reach them, the acid flask hurts more the longer you stand in it, and when one falls the rest get very angry.',
+  },
+});
+
+Object.assign(ABILITIES, {
+  // ----- Dryad -----
+  naturesGrace: { id: 'naturesGrace', kind: 'passive', name: 'Nature\'s Grace', icon: 'p-grace', creepPhys: 0.5,
+    text: (A, P) => `Neutral creeps deal ${P(A.creepPhys)} less physical damage to her.` },
+  arcaneCoating: { id: 'arcaneCoating', kind: 'active', name: 'Arcane Coating', icon: 'a-coating', toggle: true, autocast: false, cooldown: 0.5,
+    manaPerHit: 18, dps: 10, t: 4, slow: 15, ai: { toggle: true },
+    text: (A, P) => `Toggle. While coated, every hit poisons the target for ${A.t}s: ${A.dps} magic damage per second${A.pctMaxHp ? ` + ${P(A.pctMaxHp)} of its max HP` : ''} and ${A.slow}% slow. ${A.manaPerHit ? `Costs ${A.manaPerHit} mana per hit; switches off when she runs dry.` : 'No mana cost.'}` },
+  silenceStrike: { id: 'silenceStrike', kind: 'passive', name: 'Interrupt', icon: 'p-interrupt', silence: 1, spellCut: 0,
+    text: (A, P) => `Anything she damages is <b>silenced</b> for ${A.silence}s (can't cast), refreshed on every hit${A.spellCut ? ` and deals ${P(A.spellCut)} less spell damage while silenced` : ''}. Counters casters.` },
+  splitshot: { id: 'splitshot', kind: 'passive', name: 'Splitshot', icon: 'p-split', targets: 2, dmgPct: 0.75,
+    text: (A, P) => `Every attack also throws a spear at the ${A.targets} nearest other enemies in range for ${P(A.dmgPct)} damage. On-hit effects apply (coated spears cost mana each).` },
+  // ----- Catapult -----
+  siegeBonus: { id: 'siegeBonus', kind: 'passive', name: 'Siege', icon: 'p-siege', unbreakable: true, vsBuildings: 2,
+    text: (A, P) => `All of its damage is +${P(A.vsBuildings)} against buildings and bases.` },
+  homingStone: { id: 'homingStone', kind: 'passive', name: 'Homing Stone', icon: 'p-stone', unbreakable: true, splash: 1,
+    text: (A) => `Boulders land where the target was when thrown (fast troops can dodge) and splash ${A.splash} around the impact. Can't hit flying units or anything within 3 range.${A.fire ? ` Leaves fire for ${A.fire.t}s: ${A.fire.dps} magic damage per second${A.fire.buildings ? ', burning buildings and bases too' : ''}.` : ''} Can't be broken.` },
+  // ----- Batrider -----
+  acidSpray: { id: 'acidSpray', kind: 'active', name: 'Acid Spray', icon: 'a-acid', cast: 'point', cooldown: 30, castRange: 10, radius: 4,
+    duration: 5, dps: 20, ramp: 0.2, affectsFlying: false, ai: { minTargets: 2 },
+    text: (A, P) => `Soaks a ${A.radius}-radius area within ${A.castRange} range in acid for ${A.duration}s: enemies inside take ${A.dps} magic damage per second, +${P(A.ramp)} for every second the pool has lingered. Several pools don't stack (the strongest counts).` },
+  grudge: { id: 'grudge', kind: 'passive', name: 'Grudge', icon: 'p-grudge', radius: 5, as: 50, t: 3,
+    text: (A) => `When it dies, allies within ${A.radius} gain +${A.as} attack speed for ${A.t}s.` },
+  protectorAura: { id: 'protectorAura', kind: 'passive', name: 'Protector Aura', icon: 'p-protector', aura: { radius: 5, bonusArmor: 3, bonusWard: 3 },
+    text: (A) => `Allies within ${A.aura.radius} gain +${A.aura.bonusArmor} armor and +${A.aura.bonusWard} ward. Several Batriders don't stack.${A.enemyAura ? ` Enemies (buildings and bases too) within ${A.enemyAura.radius} lose ${A.enemyAura.armor} armor and ${A.enemyAura.ward} ward.` : ''}` },
+  liberation: { id: 'liberation', kind: 'passive', name: 'Liberation', icon: 'p-liberation', every: 2, radius: 3, knockback: 2, flat: 30, adPct: 0.2, damageType: 'magic',
+    text: (A, P) => `Every ${A.every}s blasts enemies within ${A.radius}: ${A.flat} + ${P(A.adPct)} of its attack damage as ${A.damageType} damage, knocking them ${A.knockback} away.` },
+});
+
 /** Troop tier (UNITS[id].tier, default 1). Tier N needs a level N base to hire. */
 export const tierOf = (id) => UNITS[id]?.tier || 1;
 /** Army space a troop takes (UNITS[id].housing, default = its tier: Tier 1 = 1, Tier 2 = 2...). */

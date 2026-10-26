@@ -5,7 +5,7 @@ import { Unit } from './unit.js';
 import { UPGRADES, STAT_BOOST, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
 import { ABILITIES, ITEMS } from './config.js';
 import { NEUTRAL_TEAM, CAMP_RULES, CAMPS, CREEP_GROUPS, dropChanceForTier, creepTierOf } from './neutrals.js';
-import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ, buildCannonball, buildShell, buildRocket, CASTLE_TIERS, HQ_TIERS } from './models.js';
+import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ, buildCannonball, buildShell, buildRocket, buildSpear, CASTLE_TIERS, HQ_TIERS } from './models.js';
 import { sfx } from './audio.js';
 import { SKILL_TREES, LEVELING, levelInfo, formDef } from './skilltree.js';
 import { Vision } from './vision.js';
@@ -554,9 +554,10 @@ export class Game {
       if (o.dead || o.team === u.team || o.tower) continue;
       if (o.team === NEUTRAL_TEAM && o.aggroTeam !== u.team) continue;   // leave peaceful camps alone
       if (u.team <= 1 && !this.canSee(u.team, o)) continue;              // fog of war: can't target what you can't see
-      if (o.flying && !u.ranged) continue;                                // melee can't hit flying units
+      if (o.flying && !(u.hitsAir ?? u.ranged)) continue;                 // melee / Catapult can't hit flying units
       const dx = o.pos.x - u.pos.x, dz = o.pos.z - u.pos.z;
       const d2 = dx * dx + dz * dz;
+      if (u.def?.minRange && Math.sqrt(d2) - o.radius - u.radius < u.def.minRange) continue;   // Catapult: too close to throw at
       if (d2 < bd) { bd = d2; best = o; }
     }
     return best;
@@ -703,7 +704,7 @@ export class Game {
   // ---------------- artillery shells ----------------
   /** Fire a shell from building `src` at `target`'s current spot (no leading: moving out of the way works). */
   fireShell(src, target, o = {}) {
-    const S = src.structure, howitzer = S.shell === 'howitzer';
+    const S = src.structure || src.def.siege, howitzer = S.shell === 'howitzer';   // def.siege: troops that throw shells (Catapult)
     const kind = o.kind || (o.rocket ? (S.pellet ? 'pellet' : S.rocketKind || 'rocket') : howitzer ? 'shell' : 'ball');
     const mesh = kind === 'arrow' ? buildArrow() : kind === 'rocket' ? buildRocket() : kind === 'shell' || kind === 'missile' ? buildShell() : buildCannonball();
     if (kind === 'pellet') mesh.scale.setScalar(0.55);
@@ -720,15 +721,27 @@ export class Game {
       marker = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
       marker.material.userData.noFow = true;
       marker.rotation.x = -Math.PI / 2; marker.position.set(end.x, end.y + 0.05, end.z); marker.renderOrder = 3;
-      marker.scale.setScalar(src.splashRadius);
+      marker.scale.setScalar(o.splash ?? src.splashRadius);
       this.scene.add(marker);
     }
     this.shells.push({ mesh, marker, src, team: src.team, start, end, t: -(o.delay || 0), T: o.flight ?? S.flight, apex: dist * (o.arc ?? S.arc ?? (howitzer ? 0.45 : 0.06)),
       dmg: o.dmg ?? src.rollDamage(), splash: o.splash ?? src.splashRadius, kb: o.rocket && !S.pellet ? 0 : S.knockback || 0, groundOnly: S.groundOnly, small: !!o.rocket,
-      guided: S.guided && target.dead === false ? target : null, stun: S.stun || 0, burn: S.burn || null, slow: o.slow || null });
+      guided: S.guided && target.dead === false ? target : null, stun: S.stun || 0, burn: o.burn ?? S.burn ?? null, slow: o.slow || null,
+      hitsBase: !!o.hitsBase, siegeMult: o.siegeMult || 1 });
     if (o.rocket) return;
     if (this.audible(src.pos.x)) sfx('snipe', 60);
     this.burst(start, 6, [0xd8d8d8, 0x9a9a9a, 0xffb040], 2, 0.6, 1.2);   // muzzle smoke
+  }
+  /**
+   * Catapult: a boulder thrown at where the target is NOW (it lands there even if the target walks away: dodgeable).
+   * Splash = Homing Stone radius; Siege multiplies damage vs buildings / the enemy base; forms add burning ground.
+   */
+  fireBoulder(src, tg) {
+    const hs = src.abilDef('homingStone'), sb = src.ability('siegeBonus');
+    const pos = tg.isBase ? this.baseClosestPoint(src, tg.team) : { x: tg.pos.x, z: tg.pos.z };
+    const flight = src.def.siege.flight * Math.max(0.6, Math.min(1.3, Math.hypot(pos.x - src.pos.x, pos.z - src.pos.z) / 12));
+    this.fireShell(src, { pos }, { kind: 'ball', flight, splash: hs?.splash ?? src.def.siege.splash, hitsBase: true,
+      siegeMult: 1 + (sb && !sb.st.broken ? sb.def.vsBuildings : 0), burn: hs?.fire ? { ...hs.fire, structures: !!hs.fire.buildings } : null });
   }
   /**
    * Hwacha: `volley.count` (+ upgrades) rocket-arrows fanned over `volley.cone` around the target, landing at
@@ -787,12 +800,17 @@ export class Game {
       const d = Math.max(0, Math.hypot(o.pos.x - p.end.x, o.pos.z - p.end.z) - o.radius);
       if (d > R) continue;
       const f = 1 - 0.5 * (d / R);
-      const dealt = o.takeDamage(p.dmg * f, src, 'physical', { ranged: true, splash: true });
+      const dealt = o.takeDamage(p.dmg * f * (o.structure ? p.siegeMult || 1 : 1), src, 'physical', { ranged: true, splash: true });
       if (src && !src.dead) src.damageDealt += dealt;
       if (p.kb && !o.dead) o.knockback(p.end, p.kb * f);
       if (p.slow && !o.dead) o.addSlow(p.slow.pct, p.slow.t);   // Munjong / Whirlwind: volley rockets slow (structure.suppress)
       if (p.stun && !o.dead && !o.structure) { o.disarmT = Math.max(o.disarmT || 0, p.stun); o.pendingHit = null; o.addSlow(100, p.stun); }   // stun = can't attack or move
       if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
+    }
+    if (p.hitsBase && p.team <= 1) {   // Catapult boulders also hit the enemy base when they land against it
+      const et = 1 - p.team, b = this.bases[et];
+      const cx = Math.max(b.x - GAME.baseHalfX, Math.min(b.x + GAME.baseHalfX, p.end.x)), cz = Math.max(-GAME.baseHalfZ, Math.min(GAME.baseHalfZ, p.end.z));
+      if (Math.hypot(cx - p.end.x, cz - p.end.z) <= R + 0.3) this.damageBase(et, p.dmg * (p.siegeMult || 1), src && !src.dead ? src : null, p.end);
     }
     if (p.burn) this.addFire(p.team, src, p.end.x, p.end.z, p.burn);
     if (p.small) { this.burst(p.end, 5, [0xffb040, 0xff6a00, 0x5a4a3a], 2.5, 0.5, 0.8); return; }
@@ -806,7 +824,7 @@ export class Game {
     mesh.material.userData.noFow = true;
     mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, (this.terrain?.heightAt(x, z) || 0) + 0.07, z); mesh.renderOrder = 2;
     this.scene.add(mesh);
-    this.fires.push({ team, src, x, z, r: B.radius, dps: B.dps, t: B.t, life: B.t, tick: 0, mesh });
+    this.fires.push({ team, src, x, z, r: B.radius, dps: B.dps, t: B.t, life: B.t, tick: 0, mesh, structures: B.structures, buildings: !!B.buildings });
   }
   updateFires(dt) {
     for (let i = this.fires.length - 1; i >= 0; i--) {
@@ -818,14 +836,59 @@ export class Game {
         F.tick = 0.5;
         for (const o of this.units) {
           if (o.dead || o.tower || o.flying || o.team === F.team || (o.team === NEUTRAL_TEAM && o.aggroTeam !== F.team)) continue;
+          if (o.structure && F.structures === false) continue;   // Advanced Catapult fire: troops only (Heavy burns buildings)
           if (Math.hypot(o.pos.x - F.x, o.pos.z - F.z) - o.radius > F.r) continue;
           const dealt = o.takeDamage(F.dps * 0.5, F.src, 'magic', { splash: true });
           if (F.src && !F.src.dead) F.src.damageDealt += dealt;
+        }
+        if (F.buildings && F.team <= 1) {   // Heavy Catapult: the fire also burns the enemy base
+          const et = 1 - F.team, b = this.bases[et];
+          const cx = Math.max(b.x - GAME.baseHalfX, Math.min(b.x + GAME.baseHalfX, F.x)), cz = Math.max(-GAME.baseHalfZ, Math.min(GAME.baseHalfZ, F.z));
+          if (Math.hypot(cx - F.x, cz - F.z) <= F.r + 0.3) this.damageBase(et, F.dps * 0.5, F.src && !F.src.dead ? F.src : null, { x: cx, z: cz });
         }
         if (Math.random() < 0.6) this.burst({ x: F.x + (Math.random() - 0.5) * F.r, z: F.z + (Math.random() - 0.5) * F.r }, 2, [0xff6a1a, 0xffb040], 1.5, 0.4, 0.6);
       }
       if (F.t <= 0) { this.scene.remove(F.mesh); F.mesh.geometry.dispose(); F.mesh.material.dispose(); this.fires.splice(i, 1); }
     }
+  }
+  /** Acid Spray pools. A troop standing in any pool takes the strongest one (pools never stack). */
+  addAcid(src, x, z, P) {
+    const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshBasicMaterial({ color: 0x7ae85a, transparent: true, opacity: 0.4, depthWrite: false }));
+    mesh.material.userData.noFow = true;
+    mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, (this.terrain?.heightAt(x, z) || 0) + 0.08, z); mesh.renderOrder = 2; mesh.scale.setScalar(P.radius);
+    this.scene.add(mesh);
+    (this.acids ||= []).push({ team: src.team, src, x, z, r: P.radius, dps: P.dps, ramp: P.ramp, asCut: P.asCut, grow: P.grow, age: 0, t: P.t, tick: 0, mesh });
+  }
+  updateAcids(dt) {
+    const A = this.acids; if (!A?.length) return;
+    for (const P of A) {
+      P.age += dt; P.t -= dt; P.tick -= dt;
+      if (P.grow) P.r += P.grow * dt;
+      P.mesh.scale.setScalar(P.r);
+      P.mesh.material.opacity = 0.25 + 0.15 * Math.sin(this.time * 6) + 0.1 * Math.min(1, P.t);
+      P.mesh.visible = P.team === this.playerTeam || this.seenByViewer(P);
+    }
+    // one damage tick every 0.5s per troop: the strongest pool it stands in
+    this.acidTick = (this.acidTick || 0) - dt;
+    if (this.acidTick <= 0) {
+      this.acidTick = 0.5;
+      for (const o of this.units) {
+        if (o.dead || o.tower || o.flying) continue;
+        let best = null, bd = 0;
+        for (const P of A) {
+          if (o.team === P.team || (o.team === NEUTRAL_TEAM && o.aggroTeam !== P.team)) continue;
+          if (Math.hypot(o.pos.x - P.x, o.pos.z - P.z) - o.radius > P.r) continue;
+          const d = P.dps * (1 + P.ramp * P.age);
+          if (d > bd) { bd = d; best = P; }
+        }
+        if (!best) continue;
+        const dealt = o.takeDamage(bd * 0.5, best.src, 'magic', { splash: true });
+        if (best.src && !best.src.dead) best.src.damageDealt += dealt;
+        o.acidT = 0.6; o.acidAS = best.asCut;
+        if (Math.random() < 0.4) this.burst(o.pos, 2, [0x7ae85a, 0xb8ff7a], 1, 0.3, 0.5);
+      }
+    }
+    for (let i = A.length - 1; i >= 0; i--) if (A[i].t <= 0) { this.scene.remove(A[i].mesh); A[i].mesh.geometry.dispose(); A[i].mesh.material.dispose(); A.splice(i, 1); }
   }
   /** Whirlwind Battery: `n` more volleys, each at the biggest group outside the splash of the ones already aimed. */
   fireExtraVolleys(src, main, n) {
@@ -968,7 +1031,7 @@ export class Game {
   // ---------------- projectiles ----------------
   fireProjectile(src, target, extra = false, mods = null) {
     const pdef = src.def.projectile;
-    const mesh = pdef.kind === 'arrow' ? buildArrow() : pdef.kind === 'wisp' ? buildWisp() : buildBullet();
+    const mesh = pdef.kind === 'arrow' ? buildArrow() : pdef.kind === 'spear' ? buildSpear() : pdef.kind === 'wisp' ? buildWisp() : buildBullet();
     if (pdef.kind === 'sniper') mesh.scale.set(1.4, 1.4, 2.6);
     const f = src.facing;
     const start = new THREE.Vector3(src.pos.x + Math.sin(f) * 0.9, src.muzzleY + (src.yOff || 0) + (src.pos.y || 0), src.pos.z + Math.cos(f) * 0.9);
@@ -978,6 +1041,7 @@ export class Game {
     const dist0 = Math.max(0.5, start.distanceTo(end));
     let dmg = src.rollDamage(extra); const crit = src.lastCrit, shot = src.lastShot;
     if (mods) Object.assign(shot, mods);                                               // Flick slow / extra-shot flag
+    if (mods?.dmgMult) dmg *= mods.dmgMult;                                             // Splitshot spears: 75%
     if (src.structure?.flyingBonus && target.flying) dmg *= 1 + src.structure.flyingBonus;   // Skypiercer
     if (src.boomMult) dmg *= src.boomMult(target);                                      // Boomstick: closer = harder
     if (crit) mesh.scale.multiplyScalar(1.6);
@@ -1092,6 +1156,16 @@ export class Game {
         phys: u.effDamage, magic: A.bonusMagic[L - 1], mult: 1, falloff: A.falloff, slow: A.slow, slowTime: A.slowTime, air: A.affectsFlying !== false, hit: new Set(), mesh });
       if (this.audible(u.pos.x)) sfx('bow', 40);
       if (A.postBuff) u.apBuff = { as: A.postBuff.as, left: A.postBuff.attacks, until: this.time + A.postBuff.t };   // High Elf
+      return true;
+    }
+    if (A.id === 'acidSpray') {   // Batrider: an acid pool at the aimed point (clamped to cast range)
+      aim ||= u.target && !u.target.dead ? { x: u.target.pos.x, z: u.target.pos.z } : null;
+      if (!aim) return false;
+      let dx = aim.x - u.pos.x, dz = aim.z - u.pos.z; const d = Math.hypot(dx, dz);
+      if (d > A.castRange) { dx *= A.castRange / d; dz *= A.castRange / d; }
+      const L = this.upLevel(u.statTeam, 'acidContent'), U = UPGRADES.acidContent, max = L >= U.max;
+      this.addAcid(u, u.pos.x + dx, u.pos.z + dz, { radius: A.radius, t: A.duration, dps: A.dps + (L ? U.values.bonus[L - 1] : 0), ramp: A.ramp, asCut: max ? U.values.asCutAtMax : 0, grow: max ? U.values.growAtMax : 0 });
+      if (this.audible(u.pos.x)) sfx('zap', 60);
       return true;
     }
     if (A.id === 'scattershot') {
@@ -1292,6 +1366,9 @@ export class Game {
       if (killer && !killer.dead && !killer.tower && !killer.brainwashed && this.teams[killer.team]?.autoLoot && killer.addItem(id) >= 0) this.emit('pickup', killer, id);
       else this.spawnLoot(id, u.pos);
     }
+    // Grudge (Batrider): allies around it get angry
+    const gr = u.ability?.('grudge');
+    if (gr && u.team <= 1) for (const o of this.units) if (!o.dead && o !== u && o.team === u.team && !o.tower && Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z) <= gr.def.radius) { o.grudgeT = gr.def.t; o.grudgeAS = gr.def.as; }
     // Cut Throat (Stalker): a kill makes the killer untouchable for a moment
     const ct = killer && !killer.dead && killer.ability?.('cutThroat');
     if (ct && !ct.st.broken && killer.team !== u.team) { killer.invulnT = Math.max(killer.invulnT, ct.def.duration); this.burst(killer.pos, 6, [0xff3b2f, 0x1e1e26], 2, 0.5, 0.7); }
@@ -1334,7 +1411,8 @@ export class Game {
     const b = this.bases[team];
     if (b.dead || this.over || b.invulnerable) return;
     if (this.cheat?.god && team === this.playerTeam) return;
-    const debuff = b.armorDebuff && b.armorDebuff.until > this.time ? b.armorDebuff.v : 0;   // Cursed Splatter
+    const debuff = (b.armorDebuff && b.armorDebuff.until > this.time ? b.armorDebuff.v : 0)   // Cursed Splatter
+      + (b.auraDebuff && b.auraDebuff.until > this.time ? b.auraDebuff.v : 0);                 // Guardian Aura
     const dmg = raw * defenseMult(b.armor - debuff) * this.dmgMult(src?.team, team);
     b.hp = Math.max(0, b.hp - dmg);
     b.shake = 0.18;
@@ -1765,6 +1843,7 @@ export class Game {
     this.updateSkillshots(dt);
     this.updateShells(dt);
     this.updateFires(dt);
+    this.updateAcids(dt);
     this.updateBeams(dt);
     this.updateTrails(dt);
     this.updateChains(dt);
@@ -1808,6 +1887,7 @@ export class Game {
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
     this.shells.forEach((p) => { this.scene.remove(p.mesh); if (p.marker) this.scene.remove(p.marker); }); this.shells = [];
     this.fires.forEach((F) => this.scene.remove(F.mesh)); this.fires = [];
+    (this.acids || []).forEach((P) => this.scene.remove(P.mesh)); this.acids = [];
     this.beams.forEach((b) => this.scene.remove(b.mesh)); this.beams = [];
     (this.tethers || []).forEach((T) => this.scene.remove(T.g)); this.tethers = []; this.chains = [];
     this.units = []; this.particles = []; this.markers = []; this.projectiles = [];

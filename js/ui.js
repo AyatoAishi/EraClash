@@ -36,7 +36,7 @@ export function makePortraits() {
     if (rig.fx) for (const f of rig.fx) { f.ph = Math.random(); } if (rig.fx) animateFx(rig, 0.01);   // spread form particles
     sc.add(rig.root);
     // buildings (towers / artillery) are bigger than troops: frame the whole model instead of a face
-    const big = UNITS[id]?.structure ? new THREE.Box3().setFromObject(rig.root) : null;
+    const big = UNITS[id]?.structure || rig.style === 'catapult' || rig.style === 'bat' ? new THREE.Box3().setFromObject(rig.root) : null;   // non-humanoids: frame the model
     const bs = big ? big.getSize(new THREE.Vector3()) : null, bc = big ? big.getCenter(new THREE.Vector3()) : null, bd = big ? Math.max(bs.x, bs.y, bs.z) : 0;
     r.setSize(56, 56, false);
     if (big) { cam.position.set(bc.x + bd * 1.1, bc.y + bd * 0.7, bc.z + bd * 1.9); cam.lookAt(bc); }
@@ -1344,7 +1344,7 @@ export class UI {
       if (!entry) return;
       const { def: A, st } = entry;
       const on = A.id === 'snipeStance' ? ((st.mode === 'stand' || st.mode === 'prone' || !st.mode) && st.cd <= 0) : A.kind === 'active' ? st.cd <= 0 : (A.id === 'eagleEye' || A.id === 'bullsEye' || st.active);
-      el.classList.toggle('toggled', A.id === 'snipeStance' && st.mode === 'prone');
+      el.classList.toggle('toggled', (A.id === 'snipeStance' && st.mode === 'prone') || (A.id === 'arcaneCoating' && !!st.on));
       el.classList.toggle('auto', !!st.auto);
       el.classList.toggle('on', on && !st.broken);
       el.classList.toggle('broken', !!st.broken);

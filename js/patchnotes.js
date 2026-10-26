@@ -7,6 +7,40 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.29.0', date: '2026-10-26T17:55:00+08:00', title: 'Tier 2 Medieval: Dryad, Catapult, Batrider',
+    sections: [
+      { title: 'Dryad (Tier 2, 200g, 2 army)', items: [
+        '200 HP, 6 armor, 3 ward, 22 damage, 50 attack speed, range 8.5, 3.2 move, 4 regen, 250 mana (+1/s). Throws spears.',
+        '<b>Nature\'s Grace</b>: neutral creeps deal 50% less physical damage to her.',
+        '<b>Arcane Coating</b> (toggle, Q): coated hits poison for 4s (10 magic/s) and slow 15%, 18 mana per hit; switches off when she runs dry. The AI turns it on when it has mana for a few hits.',
+        'Upgrades: <b>Arcane Potency</b> (300 / 600 / 1,200 / 2,400 / 4,800): poison 15 / 20 / 25 / 30 / 35 per second, max level adds 2% of the target\'s max HP per second. <b>Nature\'s Will</b>: stat boost.',
+        'Skill tree: Lv 5 <b>Rabble</b> (+20 HP, +2 ward, +0.4 move, <b>Interrupt</b>: anything she damages is silenced 1s) → Lv 15 <b>Silencer</b> (+30 HP, +4 ward, +0.6 move, 2s silence, silenced targets deal 30% less spell damage, coating costs no mana) · Lv 5 <b>Relentless</b> (+10 attack speed, <b>Splitshot</b>: 2 extra spears at the nearest other enemies for 75% damage, on-hit effects included) → Lv 15 <b>Split</b> (+25 attack speed, 4 extra spears).',
+      ] },
+      { title: 'Catapult (Tier 2, 250g, 2 army)', items: [
+        '400 HP, 10 armor, <b>-8 ward</b>, 80 damage, 10 attack speed (one throw every 6s), range 16, <b>can\'t hit anything within 3</b> (it backs off instead) and <b>can\'t hit flying units</b>, 1.8 move.',
+        '<b>Siege</b>: +200% damage against buildings and bases. <b>Homing Stone</b>: boulders land where the target was when thrown (a red ring marks the spot, fast troops can walk out), splash 1. Neither can be broken.',
+        'Upgrades: <b>Spiked Plating</b> (250 / 500 / 1,000 / 2,000 / 4,000): +2 / 4 / 6 / 8 / 10 armor and reflects 10–50% of <b>melee</b> attack damage. <b>Reinforced Frame</b>: stat boost.',
+        'Skill tree: Lv 5 <b>Advanced</b> (+20 damage, +1 range, boulders leave fire for 5s, 30 magic/s, troops only) → Lv 15 <b>Heavy</b> (+30 damage, +20 HP, -0.4 move, +1 range, the fire also burns buildings and the enemy base).',
+      ] },
+      { title: 'Batrider (Tier 2, 300g, 2 army, flying)', items: [
+        '180 HP, 3 armor, 4 ward, 30 damage, 60 attack speed, range 10, 3.3 move, 2 regen. Flies: melee can\'t reach it.',
+        '<b>Acid Spray</b> (Q, 30s, range 10, radius 4): an acid pool for 5s, 20 magic/s that grows +20% for every second it lingers. Pools from several Batriders never stack (the strongest counts). New point-target aiming with a landing ring.',
+        '<b>Grudge</b>: when it dies, allies within 5 get +50 attack speed for 3s.',
+        'Upgrades: <b>Acid Content</b> (300 / 600 / 1,200 / 2,400 / 4,800): +15 / 20 / 25 / 30 / 35 acid damage per second; max level: enemies in the acid lose 20 attack speed and the pool grows 0.3 radius per second. <b>Roost Training</b>: stat boost.',
+        'Skill tree: Lv 5 <b>Protector</b> (+5 armor, aura: allies within 5 get +3 armor and +3 ward, doesn\'t stack) → Lv 15 <b>Guardian</b> (+6 armor, the aura also takes 3 armor and 3 ward from enemies, buildings and the enemy base within 5) · Lv 5 <b>Ravaging</b> (+1 move, +30 HP, <b>Liberation</b>: every 2s, 30 + 20% attack damage magic to enemies within 3 and knocks them 2 away) → Lv 15 <b>Draconic</b> (+2 move, +50 HP, 40 + 50% attack damage as <b>true</b> damage).',
+      ] },
+      { title: 'Also', items: [
+        'All three are <b>Tier 2</b>: they unlock at a level 2 castle (Stone Keep) and take 2 army space. The AI hires them once its base allows.',
+        'Status row shows the new effects: Poisoned, Silenced, Acid, Coated, Grudge, Ward reduced.',
+        'Every new ability and upgrade has its own pixel icon; every form has its own look (Silencer\'s rune halo, Heavy Catapult\'s iron plates and burning bucket, Guardian\'s halo, Draconic\'s horns and embers...).',
+      ] },
+      { title: 'Balance watch (honest)', items: [
+        'In a test a single <b>Heavy Catapult</b> took ~1,900 HP off an undefended level 1 base (2,500 HP) in 25s (330 per boulder vs buildings plus the fire). Wall Rangers outrange it, but an unanswered Heavy Catapult ends games. First thing to tune if it feels bad.',
+        'Acid Spray ramps from 20/s to 40/s over a pool\'s 5s (before upgrades); with Acid Content maxed it\'s 55/s rising to 110/s on everything standing in it. Watch it on big fights.',
+      ] },
+    ],
+  },
+  {
     version: '0.28.0', date: '2026-10-26T17:40:00+08:00', title: 'Troop tiers & army space',
     sections: [
       { title: 'Tiers (new)', items: [

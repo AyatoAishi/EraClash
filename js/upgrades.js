@@ -131,6 +131,57 @@ export const UPGRADES = {
     levelText: (l) => `${l} wall ranger${l > 1 ? 's' : ''}`,
   },
 
+  // ----- Tier 2 (v0.29) -----
+  arcanePotency: {
+    id: 'arcanePotency', faction: 'medieval', category: 'troop', unit: 'dryad', icon: 'u-potency',
+    name: 'Arcane Potency', max: 5,
+    price: [300, 600, 1200, 2400, 4800], time: [10, 14, 18, 22, 26],
+    values: { dps: [15, 20, 25, 30, 35], pctMaxHpAtMax: 0.02 },
+    desc: 'Improves <b>Arcane Coating</b>: poison 10 → 15 / 20 / 25 / 30 / 35 magic damage per second. Max level: the poison also deals <b>2% of the target\'s max HP</b> per second.',
+    levelText: (l, U) => `Poison ${U.values.dps[l - 1]}/s${l === 5 ? ' + 2% max HP/s' : ''}`,
+  },
+  naturesWill: {
+    id: 'naturesWill', faction: 'medieval', category: 'troop', unit: 'dryad', icon: 'u-natureswill', kind: 'statBoost',
+    name: 'Nature\'s Will', max: Infinity,
+    price: boostPrice('dryad'), time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'dryad', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Dryad gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Dryad cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
+  },
+  spikedPlating: {
+    id: 'spikedPlating', faction: 'medieval', category: 'troop', unit: 'catapult', icon: 'u-spiked',
+    name: 'Spiked Plating', max: 5,
+    price: [250, 500, 1000, 2000, 4000], time: [10, 14, 18, 22, 26],
+    effects: [{ type: 'unitStats', unit: 'catapult', perLevel: { armor: 2 } }],
+    values: { reflect: [0.1, 0.2, 0.3, 0.4, 0.5] },
+    desc: 'Catapults get <b>+2 armor</b> per level (up to +10) and <b>reflect 10–50%</b> of the damage from <b>melee</b> attacks back at the attacker.',
+    levelText: (l, U) => `+${2 * l} armor, reflects ${Math.round(U.values.reflect[l - 1] * 100)}% melee damage`,
+  },
+  reinforcedFrame: {
+    id: 'reinforcedFrame', faction: 'medieval', category: 'troop', unit: 'catapult', icon: 'u-frame', kind: 'statBoost',
+    name: 'Reinforced Frame', max: Infinity,
+    price: boostPrice('catapult'), time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'catapult', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Catapult gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Catapult cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
+  },
+  acidContent: {
+    id: 'acidContent', faction: 'medieval', category: 'troop', unit: 'batrider', icon: 'u-acid',
+    name: 'Acid Content', max: 5,
+    price: [300, 600, 1200, 2400, 4800], time: [10, 14, 18, 22, 26],
+    values: { bonus: [15, 20, 25, 30, 35], asCutAtMax: 20, growAtMax: 0.3 },
+    desc: 'Improves <b>Acid Spray</b>: +15 / 20 / 25 / 30 / 35 damage per second. Max level: enemies in the acid also lose <b>20 attack speed</b>, and the pool <b>grows 0.3</b> radius every second it lingers.',
+    levelText: (l, U) => `Acid +${U.values.bonus[l - 1]}/s${l === 5 ? ', -20 attack speed, pool grows' : ''}`,
+  },
+  roostTraining: {
+    id: 'roostTraining', faction: 'medieval', category: 'troop', unit: 'batrider', icon: 'u-roost', kind: 'statBoost',
+    name: 'Roost Training', max: Infinity,
+    price: boostPrice('batrider'), time: STAT_BOOST_TIME,
+    effects: [{ type: 'statBoost', unit: 'batrider', pct: STAT_BOOST.pct }],
+    desc: 'Stat boost: every Batrider gets <b>+10% base HP, armor, ward, damage and HP regen</b> per level. Lv 1 costs 2x the troop\'s base hiring cost. Each level also makes the Batrider cost +10% of its base price, and the next level of this upgrade costs and takes +10% more.',
+    levelText: (l) => `+${10 * l}% base HP / armor / ward / damage / regen · cost +${10 * l}%`,
+  },
+
   // ===================== BOTH FACTIONS =====================
   housing: {
     id: 'housing', faction: 'both', category: 'base', icon: 'u-housing',

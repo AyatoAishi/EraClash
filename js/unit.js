@@ -189,6 +189,41 @@ export class Unit {
     if (this.burnSrc && !this.burnSrc.dead) this.burnSrc.damageDealt += d;
     this.game.burst(this.pos, 2, [0xff6a1a, 0xffb040], 1.2, 0.35, 0.5);
   }
+  /** Poison (Arcane Coating): magic damage per second (+ % of max HP) for `t` seconds. Strongest wins, re-poison refreshes. */
+  addPoison(dps, t, src, pctMaxHp = 0) {
+    if (this.dead || this.tower || this.structure || this.invulnerable) return;
+    const tot = dps + pctMaxHp * this.maxHp;
+    if (!(this.poisonT > 0) || tot >= this.poisonDps) { this.poisonDps = tot; this.poisonSrc = src; }
+    this.poisonT = Math.max(this.poisonT || 0, t);
+  }
+  tickPoison(dt) {
+    this.poisonT -= dt; this.poisonTick = (this.poisonTick || 0) - dt;
+    if (this.poisonTick > 0) return;
+    this.poisonTick = 0.5;
+    const d = this.takeDamage(this.poisonDps * 0.5, this.poisonSrc, 'magic');
+    if (this.poisonSrc && !this.poisonSrc.dead) this.poisonSrc.damageDealt += d;
+    if (Math.random() < 0.5) this.game.burst(this.pos, 2, [0x7ae85a, 0x3a8a2a], 1, 0.3, 0.5);
+  }
+  /** Silence (Interrupt): can't cast actives; `spellCut` = its ability damage is reduced meanwhile. */
+  addSilence(t, spellCut = 0) {
+    if (this.dead || this.tower || this.structure || this.invulnerable) return;
+    if (!(this.silenceT > 0) || spellCut >= (this.silenceSpell || 0)) this.silenceSpell = spellCut;
+    this.silenceT = Math.max(this.silenceT || 0, t);
+  }
+  /** Timed ward reduction under `key` (Guardian Aura); same rules as addArmorDebuff. */
+  addWardDebuff(key, v, t) {
+    if (this.dead || this.tower) return;
+    const now = this.game.time || 0, D = (this.wardDebuffs ||= {}), cur = D[key];
+    D[key] = { v: cur && cur.until > now ? Math.max(cur.v, v) : v, until: now + t };
+  }
+  get wardDebuff() {
+    const D = this.wardDebuffs; if (!D) return 0;
+    const now = this.game.time || 0; let v = 0;
+    for (const k in D) { if (D[k].until > now) v += D[k].v; else delete D[k]; }
+    return v;
+  }
+  /** Ranged troops hit flying units; melee and ground-only throwers (Catapult) can't. */
+  get hitsAir() { return this.ranged && !this.def.groundOnly; }
   addSlow(pct, t) {
     if (this.invulnerable || this.tower || this.structure || this.dead) return;
     this.slows.push({ pct, t });
@@ -239,7 +274,7 @@ export class Unit {
   applyShred(v, t) { if (this.tower || this.dead) return; if (!(this.shredT > 0) || v >= this.shred) this.shred = v; this.shredT = t; }
   /** Index of the k-th ACTIVE ability in this.abil (hotkeys Q W E R T map to actives in order). */
   activeSlot(k) { let n = -1; for (let i = 0; i < this.abil.length; i++) if (this.abil[i].def.kind === 'active' && ++n === k) return i; return -1; }
-  get ward() { return this.stats.ward + this.pas.bonusWard; }
+  get ward() { return this.stats.ward + this.pas.bonusWard - this.wardDebuff; }
   /** Invulnerable: takes no damage and (future) can't be crowd-controlled. Can still be targeted. */
   get invulnerable() { return this.invulnT > 0; }
   get effRange() { return this.stats.range + (this.pas.bonusRange || 0) + (this.towerRange || 0); }
@@ -266,6 +301,8 @@ export class Unit {
     const ad = this.armorDebuffs ? Object.values(this.armorDebuffs).filter((d) => d.until > now) : [];
     const shred = (this.shredT > 0 ? this.shred : 0) + ad.reduce((v, d) => v + d.v, 0);
     if (shred > 0) add('armor', 's-armor', 'Armor reduced', 'debuff', `-${f1(shred)} armor.`, Math.max(this.shredT || 0, ...ad.map((d) => d.until - now)), ad.find((d) => d.stacks)?.stacks);
+    const wd = this.wardDebuff;
+    if (wd > 0) add('ward', 's-armor', 'Ward reduced', 'debuff', `-${f1(wd)} ward.`, 0);
     if (this.fury && this.fury.t > 0 && this.fury.stacks) add('fury', 's-expose', 'Exposed', 'debuff', `Takes ${Math.round(this.fury.stacks * this.fury.per * 100)}% more damage from ${UNITS[this.fury.unit]?.name || 'the attacker'}s.`, this.fury.t, this.fury.stacks);
     if (this.weakenUntil > now) add('weaken', 's-weaken', 'Weakened', 'debuff', `Deals ${Math.round(this.weakenPct * 100)}% less damage.`, this.weakenUntil - now);
     if (this.curse && this.curse.t > 0) add('curse', 's-curse', 'Banshee Curse', 'debuff', 'If it dies while cursed, it rises for the Banshee\'s side.', this.curse.t);
@@ -285,6 +322,7 @@ export class Unit {
     if (this.giveUpHealT > 0) add('regen', 's-regen', 'Regrouping', 'buff', `Heals ${Math.round(CAMP_RULES.giveUpHeal.pct * 100)}% max HP per second.`, this.giveUpHealT);
     for (const { def: A, st } of this.abil) {
       if (st.buffT > 0 && A.kind === 'active') add('ab-' + A.id, A.icon, A.name, 'buff', abilityText(A), st.buffT);
+      if (A.id === 'arcaneCoating' && st.on) add('coating', A.icon, 'Coated', 'buff', abilityText(A), 0);
       if (A.id === 'fervor' && st.stacks > 0) add('fervor', A.icon, A.name, 'buff', `+${f1(st.bonusAS)} attack speed.`, 0, st.stacks);
       if (A.id === 'blueLine' && st.stacks > 0) add('blueline', A.icon, A.name, 'buff', `+${f1(st.bonusDamage)} damage${st.bonusArmor ? `, +${f1(st.bonusArmor)} armor` : ''} from ${st.stacks} nearby officer${st.stacks > 1 ? 's' : ''}.`, 0, st.stacks);
     }
@@ -384,6 +422,8 @@ export class Unit {
     if (this.game.cheat?.god && this.team === this.game.playerTeam) return 0;
     if (source && source.team !== undefined) raw *= this.game.dmgMult ? this.game.dmgMult(source.team, this.team) : 1;   // AI difficulty 4+
     if (source && source.weakenUntil > (this.game.time || 0)) raw *= 1 - source.weakenPct;   // Mediator: the attacker deals less
+    if (source && source.silenceT > 0 && source.silenceSpell && !opts?.attack) raw *= 1 - source.silenceSpell;   // Silencer: silenced casters' spells hit softer
+    if (type === 'physical' && source?.team === NEUTRAL_TEAM) { const ng = this.ability('naturesGrace'); if (ng && !ng.st.broken) raw *= 1 - ng.def.creepPhys; }   // Dryad
     const fz = this.fury;   // Fury: more damage from the troop type that stacked it (Vikings), any damage type
     if (fz && fz.t > 0 && fz.stacks > 0 && source && source.team === fz.team && source.def?.id === fz.unit) raw *= 1 + fz.stacks * fz.per;
     if (opts?.attack) {
@@ -408,6 +448,14 @@ export class Unit {
     if (dmg <= 0) return 0;
     this.hp -= dmg;
     this.flash = 1;
+    // Interrupt (Dryad forms): anything it damages is silenced (refreshes every hit, poison ticks included)
+    const si = source?.ability?.('silenceStrike');
+    if (si && !si.st.broken && source.team !== this.team) this.addSilence(si.def.silence, si.def.spellCut || 0);
+    // Spiked Plating (Catapult upgrade): reflects part of melee attack damage
+    if (opts?.attack && !opts.ranged && !opts.reflect && source && !source.isBase && !source.dead && UPGRADES.spikedPlating.unit === this.def.id) {
+      const L = this.upLevel('spikedPlating');
+      if (L) { const rd = source.takeDamage(dmg * UPGRADES.spikedPlating.values.reflect[L - 1], this, 'physical', { reflect: true }); this.damageDealt += rd; }
+    }
     const rs = this.ability('resentment');
     if (rs) { rs.st.acc = (rs.st.acc || 0) + dmg; if (rs.st.acc >= rs.def.threshold) { rs.st.acc = 0; rs.st.buffT = rs.def.duration; } }
     if (this.team === NEUTRAL_TEAM && this.hp > 0) this.game.neutralAggro(this, source);
@@ -522,7 +570,22 @@ export class Unit {
         s.bonusAS = s.active ? P.bonusAS : 0;
       } else if (P.id === 'doubleTap') {
         s.cd = Math.max(0, (s.cd || 0) - dt); s.active = s.cd <= 0;
-      } else if (P.id === 'counterstrike' || P.id === 'dkCurse' || P.id === 'zealot' || P.id === 'galewinds' || P.id === 'disrupt' || P.id === 'flick' || P.id === 'boomstick') {
+      } else if (P.id === 'liberation') {   // Ravaging / Draconic Batrider: pulse damage + knockback
+        s.active = true; s.cd = (s.cd ?? P.every) - dt;
+        if (s.cd <= 0) {
+          const hit = this.game.enemiesInRadius(this, P.radius).filter((o) => this.isFoe(o));
+          if (hit.length) {
+            s.cd = P.every;
+            for (const o of hit) {
+              const d = o.takeDamage(P.flat + P.adPct * this.effDamage, this, P.damageType || 'magic', { splash: true });
+              this.damageDealt += d; if (d > 0) this.game.emit('hitDmg', o.pos, d, false, this.team);
+              if (!o.dead && !o.structure) o.knockback(this.pos, P.knockback);
+            }
+            this.game.ring?.(this.pos, P.radius, P.damageType === 'true' ? 0xffe14a : 0xb07aff);
+          } else s.cd = 0.25;   // nothing in reach: check again soon, pulse as soon as something walks in
+        }
+      } else if (P.id === 'counterstrike' || P.id === 'dkCurse' || P.id === 'zealot' || P.id === 'galewinds' || P.id === 'disrupt' || P.id === 'flick' || P.id === 'boomstick'
+        || P.id === 'naturesGrace' || P.id === 'silenceStrike' || P.id === 'splitshot' || P.id === 'siegeBonus' || P.id === 'homingStone' || P.id === 'grudge') {
         s.active = true;                    // handled on hit / when hit
       } else if (P.id === 'resentment') {
         s.buffT = Math.max(0, (s.buffT || 0) - dt);
@@ -583,6 +646,19 @@ export class Unit {
     }
     this.invisible = invis;
     if (this.curseHasteT > 0) sum.bonusAS += this.curseHaste || 0;
+    if (this.grudgeT > 0) { this.grudgeT -= dt; sum.bonusAS += this.grudgeAS || 0; }   // Grudge: a Batrider ally fell
+    if (this.acidT > 0) { this.acidT -= dt; sum.bonusAS -= this.acidAS || 0; }         // Acid Content max: acid slows attacks
+    // Guardian Aura: strips armor and ward from enemies (buildings and the enemy base too) around this troop
+    const ea = !this.broken && this.abil.find((a) => a.def.enemyAura)?.def.enemyAura;
+    if (ea && (this.eaScan = (this.eaScan || 0) - dt) <= 0) {
+      this.eaScan = 0.2;
+      for (const o of this.game.units) {
+        if (o.dead || o.tower || !this.isFoe(o) || Math.hypot(o.pos.x - this.pos.x, o.pos.z - this.pos.z) - o.radius > ea.radius) continue;
+        o.addArmorDebuff('guardian', ea.armor, 0.35); o.addWardDebuff('guardian', ea.ward, 0.35);
+      }
+      const eb = this.game.bases?.[1 - this.team];
+      if (eb && this.team <= 1 && this.game.distToBase(this, 1 - this.team) <= ea.radius) eb.auraDebuff = { v: ea.armor, until: (this.game.time || 0) + 0.35 };
+    }
     if (this.apBuff) { if (this.apBuff.until <= (this.game.time || 0)) this.apBuff = null; else sum.bonusAS += this.apBuff.as; }
     // auras received: every aura ability (def.aura) from allies in range. The same aura never stacks (strongest
     // copy wins); different auras add up. A broken aura carrier stops emitting.
@@ -668,6 +744,17 @@ export class Unit {
   /** After an attack's damage lands (melee or projectile): lifesteal, on-hit slows. */
   onAttackLanded(tg, dealt, raw = 0, crit = false, shot = null) {
     if (dealt > 0) this.game.emit('hitDmg', tg.pos, dealt, crit, this.team);
+    // Arcane Coating (Dryad): coated hits poison + slow, paying mana per hit (switches off when dry)
+    const ac = this.ability('arcaneCoating');
+    if (ac && ac.st.on && !tg.dead && !tg.isBase && !tg.structure) {
+      const A = ac.def, cost = A.manaPerHit || 0;
+      if (this.mana >= cost) {
+        if (!(this.game.cheat?.wtf && this.team === this.game.playerTeam)) this.mana -= cost;
+        const L = this.upLevel('arcanePotency'), U = UPGRADES.arcanePotency;
+        tg.addPoison(L ? U.values.dps[L - 1] : A.dps, A.t, this, L >= U.max ? U.values.pctMaxHpAtMax : 0);
+        tg.addSlow(A.slow, A.t);
+      } else ac.st.on = false;
+    }
     const sup = this.structure?.suppress;   // Machine Gun Nest: every hit slows
     if (sup && !tg.dead) tg.addSlow(sup.pct, sup.t);
     const bh = this.structure?.burnHit;     // Fire Archers: hits set the target on fire
@@ -761,7 +848,13 @@ export class Unit {
   castAbility(i, aim = null) {
     const a = this.abil[i];
     if (!a || this.dead || a.def.kind !== 'active' || a.st.cd > 0 || this.casting || this.ccd || this.leap) return false;
+    if (this.silenceT > 0) return false;   // Interrupt
     if ((a.def.manaCost || 0) > this.mana) return false;
+    if (a.def.id === 'arcaneCoating') {   // toggle: coated hits poison + slow (mana per hit, see onAttackLanded)
+      a.st.on = !a.st.on; a.st.cd = a.def.cooldown || 0;
+      this.game.burst(this.pos, 5, a.st.on ? [0x7ae85a, 0xd8ffb0] : [0x9aa3ab], 1.5, 0.4, 0.6);
+      return true;
+    }
     if (a.def.cast === 'unit') {   // needs an enemy troop; out of range -> walk there first (cast fires from update)
       const t = aim?.unit || (this.target && !this.target.isBase ? this.target : null);
       if (!t || t.dead || t.team === this.team || t.tower || t.isBase) return false;
@@ -860,6 +953,20 @@ export class Unit {
       }
       if ((A.id === 'enforce' || A.id === 'mediator') && this.game.enemiesInRadius(this, A.radius, A).filter((o) => !o.structure).length >= A.ai.minTargets) { this.castAbility(i); continue; }
       if (A.id === 'execute' && this.target && !this.target.dead && !this.target.isBase && this.aimT > 0) { this.castAbility(i, { unit: this.target }); continue; }
+      if (A.id === 'arcaneCoating') {   // keep the coating on while there's mana for a few hits
+        if (!st.on && this.aimT > 0 && this.mana >= (A.manaPerHit || 0) * 3) this.castAbility(i);
+        continue;
+      }
+      if (A.id === 'acidSpray') {   // the biggest clump of ground enemies within reach
+        let best = null, bn = 0;
+        for (const o of this.game.units) {
+          if (!this.isFoe(o) || o.flying || this.flatDist(o.pos) > A.castRange + A.radius * 0.5) continue;
+          const n = this.game.units.filter((e) => this.isFoe(e) && !e.flying && Math.hypot(e.pos.x - o.pos.x, e.pos.z - o.pos.z) <= A.radius).length;
+          if (n > bn) { bn = n; best = o; }
+        }
+        if (best && bn >= A.ai.minTargets) this.castAbility(i, { x: best.pos.x, z: best.pos.z });
+        continue;
+      }
       if (A.id === 'scattershot' && this.target && !this.target.dead && this.aimT > 0 && this.edgeDist(this.target) <= A.range) { this.castAbility(i, { x: this.target.pos.x, z: this.target.pos.z }); continue; }
     }
   }
@@ -867,8 +974,19 @@ export class Unit {
   releaseAttack(tg) {
     const g = this.game;
     if (this.ranged) {
+      if (this.def.siege) {   // Catapult: a ground-targeted boulder (Game.fireBoulder), can be dodged
+        if (tg.isBase || !tg.dead) { g.fireBoulder(this, tg); this.onAttackDone(); }
+        return;
+      }
       if (tg.isBase || !tg.dead) {
         g.fireProjectile(this, tg); this.onAttackDone();
+        const sp = this.ability('splitshot');     // Relentless / Split Dryad: extra spears at the nearest other enemies
+        if (sp && !sp.st.broken && !tg.isBase) {
+          const r = this.effRange + this.radius + 0.5;
+          const pool = g.units.filter((o) => o !== tg && this.isFoe(o) && !(o.flying && !this.hitsAir) && g.canSee(this.team, o) && Math.hypot(o.pos.x - this.pos.x, o.pos.z - this.pos.z) - o.radius <= r)
+            .sort((a, b) => Math.hypot(a.pos.x - tg.pos.x, a.pos.z - tg.pos.z) - Math.hypot(b.pos.x - tg.pos.x, b.pos.z - tg.pos.z)).slice(0, sp.def.targets);
+          for (const o of pool) g.fireProjectile(this, o, true, { extra: true, dmgMult: sp.def.dmgPct });
+        }
         const dt2 = this.ability('doubleTap');   // Rambo: the shot fires twice
         if (dt2 && !dt2.st.broken && !(dt2.st.cd > 0)) { dt2.st.cd = dt2.def.cooldown; this.doubleTapQ = { t: dt2.def.delay, target: tg }; }
         const fl = this.ability('flick');         // Desperado: Flick on his own attacks too
@@ -894,6 +1012,8 @@ export class Unit {
   update(dt, camQuat) {
     if (this.dead) return this.updateDeath(dt);
     if (this.burnT > 0) { this.tickBurn(dt); if (this.dead) return false; }
+    if (this.poisonT > 0) { this.tickPoison(dt); if (this.dead) return false; }
+    if (this.silenceT > 0) this.silenceT -= dt;
     const g = this.game, s = this.stats;
     if (this.tower) return this.updateTower(dt, camQuat);
     if (this.structure) return this.updateStructure(dt, camQuat);
@@ -935,7 +1055,7 @@ export class Unit {
     const o = this.order;
     if (o.type === 'attack') {
       if (!o.target || o.target.dead) this.order = { type: 'idle' };
-      else if (o.target.flying && !this.ranged) this.command({ type: 'attackMove', point: { x: o.target.pos.x, z: o.target.pos.z } });   // melee can't hit flyers
+      else if (o.target.flying && !this.hitsAir) this.command({ type: 'attackMove', point: { x: o.target.pos.x, z: o.target.pos.z } });   // melee / Catapult can't hit flyers
       else if (!o.target.isBase && !g.canSee(this.team, o.target)) this.command({ type: 'attackMove', point: { x: o.target.pos.x, z: o.target.pos.z } });   // lost in the fog: go to the last seen spot
       else engage = o.target;
     }
@@ -973,7 +1093,13 @@ export class Unit {
     if (this.dash) { engage = null; goal = null; }   // Tumble: rolling, no attacks or walking until it ends
     if (engage) {
       const dist = engage.isBase ? g.distToBase(this, engage.team) : this.edgeDist(engage);
-      if (dist <= this.effRange) {
+      const tooClose = this.def.minRange && !engage.isBase && dist < this.minRange;   // Catapult: can't throw at its own feet
+      if (tooClose) {
+        // back off from it (and look for something else to shoot meanwhile)
+        const dx = this.pos.x - engage.pos.x, dz = this.pos.z - engage.pos.z, d = Math.hypot(dx, dz) || 1;
+        goal = { x: this.pos.x + dx / d * 3, z: this.pos.z + dz / d * 3 };
+        if (engage === this.target) { this.target = null; this.retarget = 0; }
+      } else if (dist <= this.effRange) {
         attacking = true;
         const tp = engage.isBase ? g.baseClosestPoint(this, engage.team) : engage.pos;
         this.faceTowards(tp.x - this.pos.x, tp.z - this.pos.z, dt, 14);
@@ -1115,8 +1241,8 @@ export class Unit {
     }
     if (this.nState === 'chase') {
       let tg = this.nTarget;
-      if (!tg || tg.dead || (tg.flying && !this.ranged)) {   // look for another enemy of the same team nearby (melee: no flyers)
-        tg = this.nTarget = g.units.find((o) => !o.dead && !o.tower && o.team === this.aggroTeam && !(o.flying && !this.ranged) && this.edgeDist(o) < 7) || null;
+      if (!tg || tg.dead || (tg.flying && !this.hitsAir)) {   // look for another enemy of the same team nearby (melee: no flyers)
+        tg = this.nTarget = g.units.find((o) => !o.dead && !o.tower && o.team === this.aggroTeam && !(o.flying && !this.hitsAir) && this.edgeDist(o) < 7) || null;
       }
       if (!tg || fromHome > R.leash || this.outT > R.chaseWindow || g.time - this.lastHitT > R.giveUpAfter) giveUp();
       else {
@@ -1182,7 +1308,7 @@ export class Unit {
   get built() { return !this.structure || this.buildT >= this.structure.buildTime; }
   /** Barracks tweaks for this building type (minRange / splash), from `structureMods` upgrade effects. */
   get structMods() { return this.game.teams?.[this.team]?.structMods?.[this.def.id] || {}; }
-  get minRange() { return Math.max(0, (this.structure?.minRange || 0) + (this.structMods.minRange || 0)); }
+  get minRange() { return Math.max(0, (this.structure?.minRange || this.def.minRange || 0) + (this.structMods.minRange || 0)); }
   get splashRadius() { return (this.structure?.splash || 0) + (this.structMods.splash || 0); }
   /**
    * Turn this building into its (level, path) version from BUILD_TREES: new stat sheet + structure block,
@@ -1513,6 +1639,19 @@ export class Unit {
         r.armR.rotation.x += (-0.3 - r.armR.rotation.x) * 0.15;
         r.armL.rotation.x += (-0.5 - r.armL.rotation.x) * 0.2;
       }
+    }
+    if (r.throwArm) {   // Catapult: wheels roll with movement; the arm flings forward on a throw, then winds back
+      for (const w of r.wheels) w.rotation.x += spd * dt / 0.42;
+      this.throwT = this.swing > 0 ? 1 - this.swing : Math.min(2, (this.throwT ?? 2) + dt * 0.5);
+      const t = this.throwT;
+      r.throwArm.rotation.x = t < 0.25 ? lerp(1.0, -0.55, t / 0.25) : t < 1 ? -0.55 : t < 2 ? lerp(-0.55, 1.0, t - 1) : 1.0;
+      r.stone.visible = t < 0.2 || t >= 1.8;
+    }
+    if (r.batWings) {   // Batrider: big slow flaps, faster when moving
+      this.animT = (this.animT || 0) + dt * (this.moving ? 9 : 5);
+      const f = Math.sin(this.animT);
+      r.batWings[0].rotation.z = -0.25 - f * 0.45; r.batWings[1].rotation.z = 0.25 + f * 0.45;
+      r.torso.position.y = 0.9 + Math.cos(this.animT) * 0.08;
     }
     if (r.wingL) {   // imp: flapping wings + wagging tail, faster when running
       this.animT = (this.animT || 0) + dt * (this.moving ? 14 : 5);

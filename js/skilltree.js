@@ -222,6 +222,74 @@ export const SKILL_TREES = {
       desc: 'Mediator: enemies deal half damage.',
     },
   },
+  // ---------- Tier 2 (v0.29) ----------
+  dryad: {
+    rabble: {
+      name: 'Rabble Dryad', from: null, level: 5,
+      stats: { hp: 20, ward: 2, moveSpeed: 0.4 }, abilities: ['silenceStrike'],
+      look: { colors: { 0x7ac04a: 0x9a6ad8, 0x4a8a2a: 0x6a3aa8 }, eyes: 0xd8a8ff, gear: ['hushVeil'] },
+      desc: 'Hits silence for 1s.',
+    },
+    silencer: {
+      name: 'Silencer Dryad', from: 'rabble', level: 15,
+      stats: { hp: 30, ward: 4, moveSpeed: 0.6 }, abilities: ['silenceStrike'],
+      abilityMods: { silenceStrike: { silence: 2, spellCut: 0.3 }, arcaneCoating: { manaPerHit: 0 } },
+      look: { colors: { 0x7ac04a: 0x3a2a5a, 0x4a8a2a: 0x22183a, 0xc8a070: 0x6a5a8a }, eyes: 0xff4ad8, gear: ['hushVeil', 'runeHalo'] },
+      desc: '2s silence, -30% spell damage, free coating.',
+    },
+    relentless: {
+      name: 'Relentless Dryad', from: null, level: 5,
+      stats: { attackSpeed: 10 }, abilities: ['splitshot'],
+      look: { colors: { 0x7ac04a: 0xd8902a, 0x4a8a2a: 0xa0601a }, eyes: 0xffe14a, gear: ['spearFan'] },
+      desc: 'Spears split to 2 more targets.',
+    },
+    split: {
+      name: 'Split Dryad', from: 'relentless', level: 15,
+      stats: { attackSpeed: 25 }, abilities: ['splitshot'], abilityMods: { splitshot: { targets: 4 } },
+      look: { colors: { 0x7ac04a: 0xc83a2a, 0x4a8a2a: 0x8a1a1a, 0xc8a070: 0xe8d0a0 }, eyes: 0xffffff, gear: ['spearFan', 'thornCrown'] },
+      desc: 'Splits to 4 targets.',
+    },
+  },
+  catapult: {
+    advanced: {
+      name: 'Advanced Catapult', from: null, level: 5,
+      stats: { damage: 20, range: 1 }, abilityMods: { homingStone: { fire: { radius: 1.2, dps: 30, t: 5 } } },
+      look: { colors: { 0x8a6a42: 0x5a4a3a }, gear: ['ironBands', 'fireBucket'] },
+      desc: 'Boulders leave burning ground.',
+    },
+    heavy: {
+      name: 'Heavy Catapult', from: 'advanced', level: 15,
+      stats: { damage: 30, hp: 20, moveSpeed: -0.4, range: 1 }, abilityMods: { homingStone: { fire: { radius: 1.2, dps: 30, t: 5, buildings: true } } },
+      look: { colors: { 0x8a6a42: 0x3a2e24, 0x6b4a2a: 0x2a221a }, gear: ['ironBands', 'fireBucket', 'heavyPlates'] },
+      desc: 'Fire burns buildings and bases too.',
+    },
+  },
+  batrider: {
+    protector: {
+      name: 'Protector Batrider', from: null, level: 5,
+      stats: { armor: 5 }, abilities: ['protectorAura'],
+      look: { colors: { 0x5a3a4a: 0x3a4a6a, 0x8a4a3a: 0x2f62b8 }, eyes: 0x9ad8ff, gear: ['batShield'] },
+      desc: 'Aura: allies +3 armor, +3 ward.',
+    },
+    guardian: {
+      name: 'Guardian Batrider', from: 'protector', level: 15,
+      stats: { armor: 6 }, abilities: ['protectorAura'], abilityMods: { protectorAura: { name: 'Guardian Aura', enemyAura: { radius: 5, armor: 3, ward: 3 } } },
+      look: { colors: { 0x5a3a4a: 0xc8b070, 0x8a4a3a: 0xf2c94c }, eyes: 0xffffff, gear: ['batShield', 'batHalo'] },
+      desc: 'Aura also strips enemies (and buildings).',
+    },
+    ravaging: {
+      name: 'Ravaging Batrider', from: null, level: 5,
+      stats: { moveSpeed: 1, hp: 30 }, abilities: ['liberation'],
+      look: { colors: { 0x5a3a4a: 0x6a1a1a, 0x8a4a3a: 0x3a0a0a }, eyes: 0xff3b2f, gear: ['batSpikes'] },
+      desc: 'Pulses damage + knockback every 2s.',
+    },
+    draconic: {
+      name: 'Draconic Batrider', from: 'ravaging', level: 15,
+      stats: { moveSpeed: 2, hp: 50 }, abilities: ['liberation'], abilityMods: { liberation: { flat: 40, adPct: 0.5, damageType: 'true' } },
+      look: { colors: { 0x5a3a4a: 0x2a5a2a, 0x8a4a3a: 0x1a3a1a, 0x3a2a30: 0x1a2a1a }, eyes: 0xffe14a, gear: ['batSpikes', 'dragonHorns', 'emberTrail'] },
+      desc: 'Bigger pulse, true damage.',
+    },
+  },
   gunner: {
     machineGunner: {
       name: 'Machine Gunner', from: null, level: 5,
