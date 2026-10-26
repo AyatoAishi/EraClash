@@ -1214,7 +1214,10 @@ export class Unit {
           this.onAttackStart(engage);
           this.atkCd = Math.max(this.atkCd, -0.1) + attackInterval(this.effAttackSpeed); // carry remainder: no frame-rate bias
           this.swing = 1;
-          this.pendingHit = { t: this.rig.style === 'bow' ? 0.3 : this.rig.style === 'rifle' ? 0.04 : 0.16, target: engage };
+          // wind-up before the hit lands; never longer than ~60% of the attack interval, or a new swing would cancel it (max Flurry)
+          if (this.pendingHit) this.releaseAttack(this.pendingHit.target);
+          const wind = this.rig.style === 'bow' ? 0.3 : this.rig.style === 'rifle' ? 0.04 : 0.16;
+          this.pendingHit = { t: Math.min(wind, attackInterval(this.effAttackSpeed) * 0.6), target: engage };
         }
       } else {
         goal = engage.isBase ? g.baseClosestPoint(this, engage.team) : engage.pos;

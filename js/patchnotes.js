@@ -7,6 +7,14 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.31.5', date: '2026-10-26T23:25:00+08:00', title: 'Fast-attack fix', author: 'AyatoAishi',
+    sections: [
+      { title: 'Bug fixes', items: [
+        'Very fast attackers (e.g. Rangers with max <b>Flurry</b>) kept starting a new draw before the last arrow left, so they shook their hands and never fired. The wind-up now shrinks to fit the attack speed, and an unreleased attack always fires before the next one starts.',
+      ] },
+    ],
+  },
+  {
     version: '0.31.4', date: '2026-10-26T23:15:00+08:00', title: 'Ranger, Fury and Rambo buffs', author: 'AyatoAishi',
     sections: [
       { title: 'Changes', items: [
