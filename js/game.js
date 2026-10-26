@@ -791,12 +791,14 @@ export class Game {
       this.shells.splice(i, 1);
     }
   }
+  /** Area damage skips neutral camps that never fought this team, but only for structure/base-sourced AoE; troop-cast AoE (Catapult, Acid Spray) always hits and provokes them. */
+  aoeSpares(o, team, src) { return o.team === NEUTRAL_TEAM && o.aggroTeam !== team && (!src || src.structure || src.tower); }
   /** Splash: 100% damage at the center, 50% at the edge. Ground troops only (flying units are safe). Ignores evasion. */
   explodeShell(p) {
     const src = p.src, R = p.splash;
     for (const o of this.units) {
       if (o.dead || o.tower || o.team === p.team || (p.groundOnly && o.flying)) continue;
-      if (o.team === NEUTRAL_TEAM && o.aggroTeam !== p.team) continue;   // artillery leaves peaceful camps alone
+      if (this.aoeSpares(o, p.team, src)) continue;   // tower artillery leaves peaceful camps alone; Catapult boulders do not
       const d = Math.max(0, Math.hypot(o.pos.x - p.end.x, o.pos.z - p.end.z) - o.radius);
       if (d > R) continue;
       const f = 1 - 0.5 * (d / R);
@@ -835,7 +837,7 @@ export class Game {
       if (F.tick <= 0) {
         F.tick = 0.5;
         for (const o of this.units) {
-          if (o.dead || o.tower || o.flying || o.team === F.team || (o.team === NEUTRAL_TEAM && o.aggroTeam !== F.team)) continue;
+          if (o.dead || o.tower || o.flying || o.team === F.team || this.aoeSpares(o, F.team, F.src)) continue;
           if (o.structure && F.structures === false) continue;   // Advanced Catapult fire: troops only (Heavy burns buildings)
           if (Math.hypot(o.pos.x - F.x, o.pos.z - F.z) - o.radius > F.r) continue;
           const dealt = o.takeDamage(F.dps * 0.5, F.src, 'magic', { splash: true });
@@ -876,7 +878,7 @@ export class Game {
         if (o.dead || o.tower || o.flying) continue;
         let best = null, bd = 0;
         for (const P of A) {
-          if (o.team === P.team || (o.team === NEUTRAL_TEAM && o.aggroTeam !== P.team)) continue;
+          if (o.team === P.team || this.aoeSpares(o, P.team, P.src)) continue;
           if (Math.hypot(o.pos.x - P.x, o.pos.z - P.z) - o.radius > P.r) continue;
           const d = P.dps * (1 + P.ramp * P.age);
           if (d > bd) { bd = d; best = P; }

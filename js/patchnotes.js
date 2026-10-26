@@ -7,6 +7,16 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.29.2', date: '2026-10-26T19:20:00+08:00', title: 'Catapult and Acid Spray now hurt neutrals', author: 'AyatoAishi',
+    sections: [
+      { title: 'Bug fixes', items: [
+        '<b>Catapult</b> boulders, Advanced/Heavy Catapult <b>fire</b> and Batrider <b>Acid Spray</b> did nothing to a neutral camp that had not been provoked yet. They now damage neutrals and pull the camp onto you like any other hit.',
+        'Tower and structure splash (Hwacha, bunkers, etc.) still leaves peaceful camps alone, as before.',
+        'Balance note: Catapults can now open camps from 16 range, which makes jungling with them strong. Watch it.',
+      ] },
+    ],
+  },
+  {
     version: '0.29.1', date: '2026-10-26T18:08:00+08:00', title: 'Sturdier bases and towers', author: 'AyatoAishi',
     sections: [
       { title: 'Bases', items: [
