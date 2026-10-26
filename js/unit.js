@@ -457,7 +457,7 @@ export class Unit {
       const iw = this.ability('ironWill');
       if (iw && !iw.st.broken) { if (fromStruct) { if (type === 'physical') raw *= 1 - iw.def.structPhys; } else raw *= 1 + iw.def.fromUnits; }
       const gw = this.ability('goldWill');
-      if (gw && !gw.st.broken) raw *= fromStruct ? 1 + gw.def.fromStructs : 1 - gw.def.fromUnits;
+      if (gw && !gw.st.broken) { if (fromStruct) raw *= 1 + gw.def.fromStructs; else if (type === 'physical') raw *= 1 - gw.def.fromUnits; }
     }
     const fz = this.fury;   // Fury: more damage from the troop type that stacked it (Vikings), any damage type
     if (fz && fz.t > 0 && fz.stacks > 0 && source && source.team === fz.team && source.def?.id === fz.unit) raw *= 1 + fz.stacks * fz.per;

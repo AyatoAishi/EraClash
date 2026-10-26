@@ -7,6 +7,27 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.31.1', date: '2026-10-26T23:10:00+08:00', title: 'Balance follow-up', author: 'AyatoAishi',
+    sections: [
+      { title: 'Changes', items: [
+        '<b>Bulwark</b> frontal reduction 80% → <b>60%</b>, and it <b>can be Broken</b> now (Break shuts off Bulwark and Gold Will, so Break is the Juggernaut counter).',
+        '<b>Gold Will</b> (Juggernaut): the 80% reduction from troops now applies to <b>physical damage only</b>.',
+        '<b>Viking Warrior</b> HP 105 → <b>110</b>. Test fights: 5 Police beat 5 Vikings 10/10, but 1 Viking beats 1 Police 10/10, so the Police only win as a pack.',
+        '<b>Lightning Viking</b> Chain Lightning 50 → <b>35</b>. <b>Storm Viking</b> 80 + 5% → <b>55 + 3%</b> max HP.',
+        '<b>Dual Wielder / Desperado</b> damage +20 → <b>+4</b>.',
+        '<b>Boomstick</b> max bonus +300% → <b>+200%</b>.',
+        '<b>Mercenary</b> damage -6 → <b>-1</b>.',
+        '<b>Rapid Fire</b> armor stacks last 4s → <b>8s</b>.',
+        '<b>Rogue</b> attack speed +40 → <b>+50</b> (now wins 1v1 against Hunter 16/16).',
+      ] },
+      { title: 'Balance watch', items: [
+        'Storm Viking still beat 6 Hitmen and 6 Peacekeepers 10/10 in tests. Lightning beat Frenzy 10/10. Chaotic lost to Peacekeeper 10/10. The Lightning line is far ahead of the Frenzy line.',
+        'Juggernaut still beats 3x its gold in Vikings with no Break on the field.',
+        'Desperado (+4) now loses to Rambo 10/10. Mercenary loses short 2v2 duels to Rambo and Shotgunner (its Fervor needs time to ramp).',
+      ] },
+    ],
+  },
+  {
     version: '0.31.0', date: '2026-10-26T22:45:00+08:00', title: 'Big balance pass + Flay and Relentless', author: 'AyatoAishi',
     sections: [
       { title: 'Viking', items: [

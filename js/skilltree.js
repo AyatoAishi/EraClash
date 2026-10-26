@@ -74,7 +74,7 @@ export const SKILL_TREES = {
     },
     storm: {
       name: 'Storm Viking', from: 'lightning', level: 15,
-      stats: { attackSpeed: 20, moveSpeed: 0.3 }, abilityMods: { chainLightning: { damage: 80, chance: 0.3, pctMaxHp: 0.05 } },
+      stats: { attackSpeed: 20, moveSpeed: 0.3 }, abilityMods: { chainLightning: { damage: 55, chance: 0.3, pctMaxHp: 0.03 } },
       look: { eyes: 0xffffff, hair: { 0xc8642a: 0x5a7bd8, 0xa84f1e: 0x3e5ab0 }, colors: { 0x7a2e22: 0x24345e }, gear: ['stormAxe', 'wingHelm', 'sparks'] },
       desc: 'Stronger, more frequent lightning.',
     },
@@ -100,7 +100,7 @@ export const SKILL_TREES = {
     },
     rogue: {
       name: 'Rogue', from: 'stray', level: 15,
-      stats: { attackSpeed: 40 }, abilities: ['tumble'],
+      stats: { attackSpeed: 50 }, abilities: ['tumble'],
       look: { eyes: 0xd070ff, hair: { 0x2a1d14: 0x5a2a7a, 0x8a3b1e: 0x7a3aa0 }, colors: { 0x3d5a24: 0x3a2050, 0x34501f: 0x2a1840 }, gear: ['faceMask', 'beltDaggers'] },
       desc: 'Very fast draw + Tumble roll.',
     },
@@ -299,7 +299,7 @@ export const SKILL_TREES = {
     },
     mercenary: {
       name: 'Mercenary', from: 'machineGunner', level: 15,
-      cost: 10, stats: { attackSpeed: 100, damage: -6 }, abilities: ['relentless'], abilityMods: { fervor: { pctPerStack: 0.1, maxStacks: 0 } },
+      cost: 10, stats: { attackSpeed: 100, damage: -1 }, abilities: ['relentless'], abilityMods: { fervor: { pctPerStack: 0.1, maxStacks: 0 } },
       look: { colors: { 0x7fd4ff: 0xff3b2f, 0x3b4652: 0x5a4a2a, 0x2b3540: 0x8a1a1a }, gear: ['lmg', 'bandolier'] },
       desc: 'Bullet hose: endless Fervor, sprays the crowd.',
     },
@@ -335,13 +335,13 @@ export const SKILL_TREES = {
     },
     dualWielder: {
       name: 'Dual Wielder', from: null, level: 5,
-      stats: { range: -1, attackSpeed: 20, damage: 20 }, abilities: ['flick'],
+      stats: { range: -1, attackSpeed: 20, damage: 4 }, abilities: ['flick'],
       look: { colors: { 0x7fd4ff: 0xd070ff }, gear: ['pistols'] },
       desc: 'Flick back when attacked.',
     },
     desperado: {
       name: 'Desperado', from: 'dualWielder', level: 15,
-      stats: { range: -1, attackSpeed: 30, damage: 20 }, abilityMods: { flick: { onAttack: true } },
+      stats: { range: -1, attackSpeed: 30, damage: 4 }, abilityMods: { flick: { onAttack: true } },
       look: { colors: { 0x7fd4ff: 0xd070ff, 0x3b4652: 0x8a5a2b }, gear: ['pistols', 'cowboyHat', 'poncho'] },
       desc: 'Flick when attacking too.',
     },
