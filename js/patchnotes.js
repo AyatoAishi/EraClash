@@ -7,6 +7,14 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.31.3', date: '2026-10-26T23:35:00+08:00', title: 'Gold Will rework', author: 'AyatoAishi',
+    sections: [
+      { title: 'Riot Skirmisher', items: [
+        '<b>Gold Will</b> (Juggernaut): the 80% reduction from troops now applies to <b>magic</b> damage instead of physical. Juggernaut becomes the anti-caster tank, and basic attacks hurt it normally again (Bulwark still covers the front). Still takes 50% more damage from buildings, towers and bases.',
+      ] },
+    ],
+  },
+  {
     version: '0.31.2', date: '2026-10-26T23:25:00+08:00', title: 'Dev Lab: spawn skill-tree forms', author: 'AyatoAishi',
     sections: [
       { title: 'Dev Lab', items: [

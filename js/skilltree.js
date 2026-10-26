@@ -414,7 +414,7 @@ export const SKILL_TREES = {
       name: 'Juggernaut', from: 'breaker', level: 15,
       stats: { hp: 300, ward: 3 }, abilities: ['goldWill'],
       look: { colors: { 0x232c40: 0xb08a3a, 0x1c2436: 0x5a4a2a, 0x1a1f2a: 0x8a6a2a }, gear: ['igniteCore', 'goldPlates'] },
-      desc: 'Frontline tank: shrugs off troops, weak to buildings.',
+      desc: 'Anti-caster tank: shrugs off magic, weak to buildings.',
     },
     striker: {
       name: 'Striker', from: 'breaker', level: 15,

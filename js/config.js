@@ -651,7 +651,7 @@ Object.assign(ABILITIES, {
   breaker: { id: 'breaker', kind: 'passive', name: 'Breaker', icon: 'p-breaker', radius: 10, healRadius: 8, heal: 4, t: 8,
     text: (A) => `Every time an enemy within ${A.radius} range casts an ability or uses an item, he ignites: +1 stack for ${A.t}s that heals him and allies within ${A.healRadius} range ${A.heal} HP per second. Stacks without limit; each stack has its own timer.` },
   goldWill: { id: 'goldWill', kind: 'passive', name: 'Gold Will', icon: 'p-goldwill', fromUnits: 0.8, fromStructs: 0.5,
-    text: (A, P) => `Takes ${P(A.fromUnits)} less <b>physical</b> damage from troops, but ${P(A.fromStructs)} more damage from buildings, towers and bases.` },
+    text: (A, P) => `Takes ${P(A.fromUnits)} less <b>magic</b> damage from troops, but ${P(A.fromStructs)} more damage from buildings, towers and bases.` },
   combust: { id: 'combust', kind: 'passive', name: 'Combust', icon: 'p-combust', threshold: 100, damage: 150, radius: 10, shield: 100, shieldT: 5, cooldown: 20,
     text: (A) => `Stores the magic damage he takes. At ${A.threshold} stored he explodes: ${A.damage} magic damage to enemies within ${A.radius} range, and he and allies within ${A.radius} range get a <b>${A.shield} shield</b> for ${A.shieldT}s (absorbs damage before HP). ${A.cooldown}s cooldown after it goes off.` },
   // ----- Recon Drone -----
