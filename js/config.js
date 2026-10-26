@@ -391,8 +391,9 @@ export const ABILITIES = {
   },
   blueLine: {
     id: 'blueLine', kind: 'passive', name: 'Thin Blue Line', icon: 'p-blueline',
-    radius: 10, damagePerAlly: 3.5, maxStacks: 3,         // capped: uncapped made 6+ officer packs unbeatable. null = uncapped
-    desc: 'Gains +3.5 damage for every other Police Officer within 10 range (max 3 officers, +10.5). Weak alone, dangerous as a pack.',
+    radius: 10, damagePerAlly: 2, maxStacks: 5,           // capped: uncapped made 6+ officer packs unbeatable. null = uncapped
+    text: (A) => `Gains +${A.damagePerAlly} damage for every other Police Officer within ${A.radius} range (max ${A.maxStacks} officers, +${A.damagePerAlly * A.maxStacks}). Weak alone, dangerous as a pack.`,
+    desc: 'Gains +2 damage for every other Police Officer within 10 range (max 5 officers, +10). Weak alone, dangerous as a pack.',
   },
   eagleEye: {
     id: 'eagleEye', kind: 'passive', name: 'Eagle Eye', icon: 'p-eye',
@@ -433,13 +434,13 @@ export const ABILITIES = {
   },
   // ---------- actives ----------
   snipeStance: {
-    id: 'snipeStance', kind: 'active', name: 'Snipe Stance', icon: 'a-scope', toggle: true,
+    id: 'snipeStance', kind: 'active', autocast: false, name: 'Snipe Stance', icon: 'a-scope', toggle: true,
     cooldown: 1, channel: 1, standUp: 1, standCooldown: 5, bonusRange: 6, bonusDamage: 3, armorPierce: 2, damageTakenMult: 2,
     ai: { dangerRadius: 5, standAfter: 3 },
     desc: 'Channels for 1s (S cancels), then lies prone: move speed 0, +6 range, +3 damage and attacks ignore 2 armor — but takes DOUBLE damage. Recast to stand up (1s channel), then 5s cooldown.',
   },
   splatter: {
-    id: 'splatter', kind: 'active', affectsFlying: false, name: 'Splatter', icon: 'a-splatter',
+    id: 'splatter', kind: 'active', autocast: false, affectsFlying: false, name: 'Splatter', icon: 'a-splatter',
     cooldown: 0, radius: 2.2, damage: 70, damageType: 'magic', selfDestruct: true,
     aiCast: { minTargets: 2, lowHpPct: 0.35 },          // when the AI uses it
     desc: 'Sacrifices itself in an organic explosion, dealing 70 magic damage to every enemy within 2.2 range (bases included). Can\'t be evaded.',
@@ -456,8 +457,8 @@ export const ABILITIES = {
   // ---------- neutral creep abilities ----------
   resentment: { id: 'resentment', kind: 'passive', name: 'Resentment', icon: 'a-resent', threshold: 30, bonusDamage: 5, bonusAS: 30, duration: 3,
     desc: 'After taking 30 damage, gains +5 damage and +30 attack speed for 3 seconds.' },
-  immaterial: { id: 'immaterial', kind: 'passive', name: 'Immaterial', icon: 'a-immaterial', unbreakable: true, static: { bonusEvasion: 30 }, desc: '30% chance to evade attacks. Can\'t be broken.' },
-  brainwash: { id: 'brainwash', kind: 'active', name: 'Brainwash', icon: 'a-brainwash', cooldown: 20, castRange: 8, duration: 15, castChance: 0.25,
+  immaterial: { id: 'immaterial', kind: 'passive', name: 'Immaterial', icon: 'a-immaterial', static: { bonusEvasion: 30 }, desc: '30% chance to evade attacks.' },
+  brainwash: { id: 'brainwash', kind: 'active', autocast: false, name: 'Brainwash', icon: 'a-brainwash', cooldown: 20, castRange: 8, duration: 15, castChance: 0.25,
     desc: 'Each fight (and each time the 20s cooldown ends mid-fight) the Banshee has a 25% chance to cast it, a few seconds in: one enemy troop it is fighting loses its will for 15s — it switches sides, attacks its former allies, then despawns (no bounty).' },
   moraleAura: { id: 'moraleAura', kind: 'passive', name: 'Morale Aura', icon: 'a-morale', aura: { radius: 4, bonusArmor: 2 },
     desc: 'Allies within 4 range (including itself) gain +2 armor.' },
@@ -556,6 +557,8 @@ export const ABILITIES = {
 /** Exact, current text for an ability definition (form overrides already merged in): `text(A, pct)` if it has one, else `desc`. */
 const fmtN = (x) => Math.round(x * 100) / 100;
 const pct = (x) => fmtN(x * 100) + '%';
+/** Player autocast (right-click an active): only actives the AI knows how to use, minus the ones opted out (autocast: false). */
+export const canAutocast = (A) => !!A && A.kind === 'active' && !!(A.ai || A.aiCast) && A.autocast !== false;
 export function abilityText(A) { try { return typeof A.text === 'function' ? A.text(A, pct) : A.desc; } catch { return A.desc || ''; } }
 
 // sanity check: no troop may exceed the ability cap

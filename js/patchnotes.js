@@ -7,6 +7,33 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.26.0', date: '2026-10-26T17:16:00+08:00', title: 'Exp from bounties, autocast, buff bar',
+    sections: [
+      { title: 'Skill tree exp', items: [
+        'Troops now level from <b>exp</b>, not kill count: every kill gives that troop type exp equal to the victim\'s <b>gold bounty</b> (40% of its cost). Killing <b>enemy troops</b> gives <b>+20%</b> on top, creeps give the plain amount.',
+        'Exp per level: <b>50</b> for Lv 1, then +20 per level (50, 70, 90…). Lv 5 = 450 exp, Lv 15 = 2850. A Dire Bear (60 exp) is worth far more than a Police Officer (24), so big kills level you fast.',
+        'Higher-tier troops need more: Tier 2 +25%, Tier 3 +50%… (all current troops are Tier 1).',
+        'AI difficulty exp bonuses still apply. Chat command: <b>/xp</b> &lt;unit&gt; &lt;exp&gt;.',
+      ] },
+      { title: 'Autocast', items: [
+        '<b>Right-click an active ability</b> to toggle autocast: the troop uses it on its own when it would help (same logic as the AI). Applies to every selected troop that has that ability, so select your elves and right-click once.',
+        'Autocast slots get a marching gold border. Splatter (all variants) and Snipe Stance can\'t be autocast; their tooltip says so.',
+      ] },
+      { title: 'Buffs & debuffs', items: [
+        'A <b>status row</b> above the selection panel shows everything on the selected troop: stun, fear, slow, burn, break, disarm, armor loss (with stacks), Fury exposure, weaken, curses, Death Mark, plus buffs like invulnerable, true strike, Galewinds, Fervor and Thin Blue Line stacks, item buffs and every aura it\'s standing in.',
+        'Green frame = buff, red = debuff; the number is the time left. Hover for exact values.',
+      ] },
+      { title: 'Balance', items: [
+        '<b>Immaterial</b> (Banshee) can now be <b>broken</b> (Javelin and other break effects remove its 30% evasion).',
+        '<b>Thin Blue Line</b>: max officers 3 → <b>5</b>, damage per officer 3.5 → <b>2</b> (max +10.5 → +10, but packs need to be bigger to get there).',
+        'Brimstone Imp and Boomstick were checked against your notes and already work that way: Brimstone burns harder and its blast deals +30%; Boomstick gives no bonus beyond 5 range.',
+      ] },
+      { title: 'Fixes', items: [
+        '<b>/spawn &lt;unit&gt; &lt;n&gt; neutral</b> crashed the game. Fixed.',
+      ] },
+    ],
+  },
+  {
     version: '0.25.1', date: '2026-10-26T15:40:00+08:00', title: 'Howitzer models overhauled',
     sections: [
       { title: 'Howitzer', items: [

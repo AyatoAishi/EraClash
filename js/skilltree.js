@@ -26,17 +26,21 @@
 import { UNITS, ABILITIES } from './config.js';
 
 export const LEVELING = {
-  // kills needed to go from level L-1 to L: 3, 5, 7, 9 ... (+2 per level; Lv 5 = 35 kills, Lv 15 = 255)
-  killsFor: (L) => 3 + 2 * (L - 1),
+  // Exp: a kill gives exp equal to the victim's gold bounty (enemy troops x enemyMult, creeps x1).
+  // Exp needed to go from level L-1 to L: 50, 70, 90 ... (+20 per level; Lv 5 = 450, Lv 15 = 2850),
+  // times (1 + tierStep x (tier - 1)): Tier 2 troops need 25% more, Tier 3 50% more...
+  xpFor: (L, tier = 1) => Math.round((50 + 20 * (L - 1)) * (1 + LEVELING.tierStep * (tier - 1))),
+  enemyMult: 1.2,
+  tierStep: 0.25,
   maxLevel: 30,
 };
 
-/** Level reached with `kills` kills, plus progress toward the next one. */
-export function levelInfo(kills) {
+/** Level reached with `xp` exp (for a troop of `tier`), plus progress toward the next one. */
+export function levelInfo(xp, tier = 1) {
   let L = 0, spent = 0;
-  while (L < LEVELING.maxLevel && kills >= spent + LEVELING.killsFor(L + 1)) { spent += LEVELING.killsFor(L + 1); L++; }
-  const need = L >= LEVELING.maxLevel ? 0 : LEVELING.killsFor(L + 1);
-  return { level: L, into: kills - spent, need, max: L >= LEVELING.maxLevel };
+  while (L < LEVELING.maxLevel && xp >= spent + LEVELING.xpFor(L + 1, tier)) { spent += LEVELING.xpFor(L + 1, tier); L++; }
+  const need = L >= LEVELING.maxLevel ? 0 : LEVELING.xpFor(L + 1, tier);
+  return { level: L, into: Math.floor(xp - spent), need, max: L >= LEVELING.maxLevel };
 }
 
 // Scout Ranger / Stalker: Eagle Eye becomes 30% chance for a TRUE STRIKE (can't miss or be evaded) with +30% damage + 5 magic

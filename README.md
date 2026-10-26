@@ -25,6 +25,7 @@ Opening index.html directly via file:// will NOT work (ES modules need a server)
 | F | select whole army |
 | Ctrl+1-9 / Alt+1-9 | control groups (double-tap = jump) |
 | 1-6 | use the selected troop's item in that slot (right-click an item: Use / Discard) |
+| right-click ability | toggle autocast for every selected troop with it |
 | Space | camera to base |
 | Edge / arrows / middle-drag / wheel | camera |
 | Esc | pause |

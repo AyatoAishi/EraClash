@@ -7,7 +7,7 @@ import { ABILITIES, ITEMS } from './config.js';
 import { NEUTRAL_TEAM, CAMP_RULES, CAMPS, CREEP_GROUPS, dropChanceForTier, creepTierOf } from './neutrals.js';
 import { boxGeo, sharedMat, buildArrow, buildBullet, buildWisp, buildLoot, buildCastle, buildHQ, buildCannonball, buildShell, buildRocket, CASTLE_TIERS, HQ_TIERS } from './models.js';
 import { sfx } from './audio.js';
-import { SKILL_TREES, levelInfo, formDef } from './skilltree.js';
+import { SKILL_TREES, LEVELING, levelInfo, formDef } from './skilltree.js';
 import { Vision } from './vision.js';
 import { nextSteps } from './buildtree.js';
 
@@ -57,7 +57,7 @@ export class Game {
       unitMods: {},      // unitId -> flat stat bonuses from stat upgrades
       costAdd: {},       // unitId -> extra hiring cost
       grants: {},        // unitId -> [abilityId] added by upgrades
-      troopKills: {},    // unitId -> kills by that troop type this match (skill tree level, js/skilltree.js)
+      troopXp: {},       // unitId -> exp earned by that troop type this match (skill tree level, js/skilltree.js)
       forms: {},         // unitId -> picked skill-tree form (new hires come out as it)
       research: null,    // { id, t, total, price, level } — the one running now
       rqueue: [],        // queued research: [{ id, price, level }] (paid up front, like training)
@@ -345,7 +345,7 @@ export class Game {
     u.spawnAt(sx, (Math.random() - 0.5) * 6);
     this.units.push(u);
     this.scene.add(u.obj);
-    this.teams[team].stats.trained++;
+    if (this.teams[team]) this.teams[team].stats.trained++;   // neutral spawns (/spawn ... neutral) have no team record
     if (team === this.playerTeam) sfx('train');
     this.emit('spawn', u);
     return u;
@@ -364,11 +364,12 @@ export class Game {
   }
 
   // ---------------- skill trees (js/skilltree.js) ----------------
-  troopLevel(team, unitId) { return levelInfo(this.teams[team]?.troopKills[unitId] || 0); }
-  addTroopKill(team, unitId) {
-    const T = this.teams[team]; if (!T) return;
+  troopLevel(team, unitId) { return levelInfo(this.teams[team]?.troopXp[unitId] || 0, UNITS[unitId]?.tier || 1); }
+  /** Skill-tree exp for a troop type. `xp` is already the kill's exp (bounty-based); AI difficulty multiplies it. */
+  addTroopXp(team, unitId, xp) {
+    const T = this.teams[team]; if (!T || !(xp > 0)) return;
     const before = this.troopLevel(team, unitId).level;
-    T.troopKills[unitId] = (T.troopKills[unitId] || 0) + (T.isAI && !this.sandbox ? this.diff.xpMult || 1 : 1);
+    T.troopXp[unitId] = (T.troopXp[unitId] || 0) + xp * (T.isAI && !this.sandbox ? this.diff.xpMult || 1 : 1);
     const now = this.troopLevel(team, unitId).level;
     if (now > before) this.emit('troopLevel', team, unitId, now);
   }
@@ -1283,9 +1284,11 @@ export class Game {
     if (killer && !killer.brainwashed && this.teams[killer.team] && killer.team !== u.team) {   // brainwashed killers earn nobody gold
       const T = this.teams[killer.team];
       T.stats.kills++;
-      this.addTroopKill(killer.team, killer.def.id);
       // kill bounty: % of what the victim cost (what was paid; camp creeps / free spawns = their listed cost)
-      const bounty = Math.round((u.paid ?? u.def.cost) * GAME.bountyPct * (T.isAI && !this.sandbox ? this.diff.goldMult : 1));
+      const raw = (u.paid ?? u.def.cost) * GAME.bountyPct;
+      // skill-tree exp = the raw bounty (no AI gold bonus); enemy troops are worth 20% more than creeps
+      this.addTroopXp(killer.team, killer.def.id, raw * (u.team === NEUTRAL_TEAM ? 1 : LEVELING.enemyMult));
+      const bounty = Math.round(raw * (T.isAI && !this.sandbox ? this.diff.goldMult : 1));
       T.gold += bounty; T.stats.bounty = (T.stats.bounty || 0) + bounty;
       this.emit('bounty', u.pos, bounty, killer.team);
     }

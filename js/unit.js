@@ -1,6 +1,6 @@
 // A single troop: brain (orders/targeting), body (movement/separation), visuals (anim/hp bar/ring).
 import * as THREE from 'three';
-import { UNITS, GAME, ITEMS, ABILITIES, DAMAGE_TYPES, defenseMult, attackInterval } from './config.js';
+import { UNITS, GAME, ITEMS, ABILITIES, DAMAGE_TYPES, defenseMult, attackInterval, canAutocast, abilityText } from './config.js';
 import { UPGRADES, STAT_BOOST } from './upgrades.js';
 import { NEUTRAL_TEAM, CAMP_RULES } from './neutrals.js';
 import { UNIT_BUILDERS, buildZzz, applyLook, animateFx } from './models.js';
@@ -245,6 +245,56 @@ export class Unit {
   get effRange() { return this.stats.range + (this.pas.bonusRange || 0) + (this.towerRange || 0); }
   get rangeRadius() { return this.effRange + this.radius; }
   /** Snipe Stance state: 'stand' | 'channel' | 'prone' (null if the troop has no stance) */
+  /**
+   * Buffs & debuffs currently on this unit (Dota-style status row). Each: { id, icon, name, kind: 'buff'|'debuff', t?, stacks?, text }.
+   * Add a status: push one entry here, reading whatever field the effect already keeps. Nothing else to wire.
+   */
+  statusList() {
+    const now = this.game.time || 0, L = [], f1 = (x) => Math.round(x * 10) / 10;
+    const add = (id, icon, name, kind, text, t, stacks) => L.push({ id, icon, name, kind, text, t: t > 0 ? t : null, stacks: stacks > 1 ? stacks : null });
+    // ---- debuffs ----
+    if (this.stunT > 0) add('stun', 's-stun', 'Stunned', 'debuff', "Can't move, attack or cast.", this.stunT);
+    if (this.fearT > 0) add('fear', 's-fear', 'Feared', 'debuff', "Runs away; can't attack or cast.", this.fearT);
+    if (this.silenceT > 0) add('silence', 's-silence', 'Silenced', 'debuff', `Can't cast abilities${this.silenceSpell ? `; deals ${Math.round(this.silenceSpell * 100)}% less spell damage` : ''}.`, this.silenceT);
+    if (this.disarmT > 0) add('disarm', 's-disarm', 'Disarmed', 'debuff', "Can't attack.", this.disarmT);
+    if (this.breakT > 0) add('break', 's-break', 'Broken', 'debuff', 'Passive abilities are disabled.', this.breakT);
+    const sl = this.slows.reduce((m, x) => (x.pct > m.pct ? x : m), { pct: 0, t: 0 });
+    if (sl.pct > 0) add('slow', 's-slow', 'Slowed', 'debuff', `Moves ${Math.round(sl.pct)}% slower.`, sl.t);
+    if (this.burnT > 0) add('burn', 's-burn', 'Burning', 'debuff', `Takes ${f1(this.burnDps)} ${this.burnType || 'true'} damage per second.`, this.burnT);
+    if (this.poisonT > 0) add('poison', 's-poison', 'Poisoned', 'debuff', `Takes ${f1(this.poisonDps)} magic damage per second.`, this.poisonT);
+    if (this.acidT > 0) add('acid', 's-poison', 'Acid', 'debuff', 'Standing in acid: magic damage that grows every second.', this.acidT);
+    const ad = this.armorDebuffs ? Object.values(this.armorDebuffs).filter((d) => d.until > now) : [];
+    const shred = (this.shredT > 0 ? this.shred : 0) + ad.reduce((v, d) => v + d.v, 0);
+    if (shred > 0) add('armor', 's-armor', 'Armor reduced', 'debuff', `-${f1(shred)} armor.`, Math.max(this.shredT || 0, ...ad.map((d) => d.until - now)), ad.find((d) => d.stacks)?.stacks);
+    if (this.fury && this.fury.t > 0 && this.fury.stacks) add('fury', 's-expose', 'Exposed', 'debuff', `Takes ${Math.round(this.fury.stacks * this.fury.per * 100)}% more damage from ${UNITS[this.fury.unit]?.name || 'the attacker'}s.`, this.fury.t, this.fury.stacks);
+    if (this.weakenUntil > now) add('weaken', 's-weaken', 'Weakened', 'debuff', `Deals ${Math.round(this.weakenPct * 100)}% less damage.`, this.weakenUntil - now);
+    if (this.curse && this.curse.t > 0) add('curse', 's-curse', 'Banshee Curse', 'debuff', 'If it dies while cursed, it rises for the Banshee\'s side.', this.curse.t);
+    if (this.dkMark && this.dkMark.until > now) add('dkmark', 's-mark', 'Death Mark', 'debuff', `Enemy attackers heal ${this.dkMark.heal} HP per hit on it.`, this.dkMark.until - now);
+    if (this.brainwashed) add('brainwash', 'a-brainwash', 'Brainwashed', 'debuff', 'Fights for the other side, then despawns.', this.brainwashed.t);
+    if (this.auraDebuff) for (const [id, a] of Object.entries(this.auraDebuff)) add('aurad-' + id, ABILITIES[id]?.icon || 's-armor', ABILITIES[id]?.name || id, 'debuff', a.text, 0);
+    // ---- buffs ----
+    if (this.invulnT > 0) add('invuln', 's-shield', 'Invulnerable', 'buff', "Can't be damaged.", this.invulnT);
+    if (this.invisible) add('invis', 's-invis', 'Invisible', 'buff', 'Enemies can\'t see it.', 0);
+    if (this.trueStrikeT > 0) add('truestrike', 's-strike', 'True Strike', 'buff', 'Next attack can\'t miss or be evaded.', this.trueStrikeT);
+    if (this.galeUntil > now) add('gale', 'p-gale', 'Galewinds', 'buff', `+${this.galeBonus} move speed.`, this.galeUntil - now);
+    if (this.apBuff && this.apBuff.until > now) add('apbuff', 'u-piercer', 'Arrow Piercer', 'buff', `+${this.apBuff.as} attack speed.`, this.apBuff.until - now, this.apBuff.left);
+    if (this.curseHasteT > 0) add('cursehaste', 's-aspd', 'Haunting Haste', 'buff', `+${this.curseHaste} attack speed.`, this.curseHasteT);
+    if (this.grudgeT > 0) add('grudge', 's-aspd', 'Grudge', 'buff', `+${this.grudgeAS} attack speed.`, this.grudgeT);
+    if (this.helmetT > 0) add('helmet', 's-shield', 'Riot Helmet', 'buff', `+${this.helmetArmor} armor.`, this.helmetT);
+    if (this.rallyT > 0) add('rally', 's-haste', 'Barding Rally', 'buff', `+${this.rallyBonus} move speed on the trail.`, 0);
+    if (this.giveUpHealT > 0) add('regen', 's-regen', 'Regrouping', 'buff', `Heals ${Math.round(CAMP_RULES.giveUpHeal.pct * 100)}% max HP per second.`, this.giveUpHealT);
+    for (const { def: A, st } of this.abil) {
+      if (st.buffT > 0 && A.kind === 'active') add('ab-' + A.id, A.icon, A.name, 'buff', abilityText(A), st.buffT);
+      if (A.id === 'fervor' && st.stacks > 0) add('fervor', A.icon, A.name, 'buff', `+${f1(st.bonusAS)} attack speed.`, 0, st.stacks);
+      if (A.id === 'blueLine' && st.stacks > 0) add('blueline', A.icon, A.name, 'buff', `+${f1(st.bonusDamage)} damage${st.bonusArmor ? `, +${f1(st.bonusArmor)} armor` : ''} from ${st.stacks} nearby officer${st.stacks > 1 ? 's' : ''}.`, 0, st.stacks);
+    }
+    for (const id of this.auras || []) {
+      const A = ABILITIES[id]; if (!A) continue;
+      const parts = Object.entries(this.auraBonus ? (A.aura || {}) : {}).filter(([k]) => k !== 'radius').map(([k, v]) => `+${v} ${k.replace('bonus', '').replace('AS', 'attack speed').toLowerCase()}`);
+      add('aura-' + id, A.icon, A.name + ' (aura)', 'buff', parts.join(', ') || 'Aura from a nearby ally.', 0);
+    }
+    return L;
+  }
   get stance() { return this.ability('snipeStance')?.st.mode || null; }
   get immobile() { const m = this.stance; return m === 'channel' || m === 'prone' || m === 'standup' || !!this.casting || !!this.leap || this.stunT > 0; }
   get effMoveSpeed() {
@@ -767,11 +817,12 @@ export class Unit {
     return cancelled;
   }
 
-  /** AI decides whether to use its actives. */
-  aiCast() {
+  /** AI decides whether to use its actives. onlyAuto: a player troop, so only the actives it has on autocast. */
+  aiCast(onlyAuto = false) {
     for (let i = 0; i < this.abil.length; i++) {
       const { def: A, st } = this.abil[i];
       if (A.kind !== 'active' || st.cd > 0 || !(A.aiCast || A.ai)) continue;
+      if (onlyAuto && !(st.auto && canAutocast(A))) continue;
       if ((A.id === 'flurry' || A.id === 'suppressiveFire') && this.target && !this.target.dead && this.aimT > 0) { this.castAbility(i); continue; }
       if (A.id === 'snipeStance') {
         // go prone when enemies are inside the extended range but nobody is in our face; stand up to advance or flee
@@ -871,6 +922,7 @@ export class Unit {
       else if (this.edgeDist(Q.target) <= (a.def.castRange || 0)) { this.queuedCast = null; this.castAbility(Q.i, { unit: Q.target, x: Q.target.pos.x, z: Q.target.pos.z }); }
     }
     if (g.teams[this.team].isAI) { this.aiT = (this.aiT || 0) - dt; if (this.aiT <= 0) { this.aiT = 0.3; if (this.abil.length) this.aiCast(); if (this.dead) return false; this.aiItems(); } }
+    else if (this.abil.some((a) => a.st.auto)) { this.aiT = (this.aiT || 0) - dt; if (this.aiT <= 0) { this.aiT = 0.3; this.aiCast(true); if (this.dead) return false; } }   // player autocast
     const regen = this.stats.hpRegen + this.pas.bonusRegen;
     if (regen && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + regen * dt);
 

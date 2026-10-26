@@ -1,6 +1,6 @@
 // All DOM UI: menus, options, help, HUD, shop, selection panel + inventory, minimap, toasts.
 import * as THREE from 'three';
-import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS, abilityText } from './config.js';
+import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS, abilityText, canAutocast } from './config.js';
 import { UNIT_BUILDERS, buildCastle, buildHQ, CASTLE_TIERS, HQ_TIERS, applyLook, animateFx } from './models.js';
 import { TERRAIN } from './terrain.js';
 import { SKILL_TREES, formDef, levelInfo, nextForms, formPath } from './skilltree.js';
@@ -225,9 +225,13 @@ export class UI {
       const status = entry && !u.dead ? this.abilityStatus(u, entry) : null;
       const dmg = typeof A.damage === 'number' ? fmt(A.damage * (A.dmgMult || 1)) : null;
       const meta = A.kind === 'active'
-        ? `<div class="tip-m">${A.cooldown ? `Cooldown ${A.cooldown}s` : 'No cooldown'}${A.radius ? ` · Radius ${A.radius}` : ''}${A.castRange ? ` · Cast range ${A.castRange}` : ''}${A.leap ? ` · Leap range ${A.leap.range}` : ''}${dmg ? ` · ${dmg} ${DAMAGE_TYPES[A.damageType].name.toLowerCase()} dmg` : ''}${A.affectsFlying !== undefined ? ` · Affects flying: ${A.affectsFlying ? 'yes' : 'no'}` : ''}${A.manaCost ? ` · ${A.manaCost} mana` : ''}${el.dataset.key ? ` · Key <kbd>${el.dataset.key}</kbd>` : ''}</div>` : '';
+        ? `<div class="tip-m">${A.cooldown ? `Cooldown ${A.cooldown}s` : 'No cooldown'}${A.radius ? ` · Radius ${A.radius}` : ''}${A.castRange ? ` · Cast range ${A.castRange}` : ''}${A.leap ? ` · Leap range ${A.leap.range}` : ''}${dmg ? ` · ${dmg} ${DAMAGE_TYPES[A.damageType].name.toLowerCase()} dmg` : ''}${A.affectsFlying !== undefined ? ` · Affects flying: ${A.affectsFlying ? 'yes' : 'no'}` : ''}${A.manaCost ? ` · ${A.manaCost} mana` : ''}${el.dataset.key ? ` · Key <kbd>${el.dataset.key}</kbd>` : ''}</div>${el.dataset.key ? `<div class="tip-m">${canAutocast(A) ? `Right-click: autocast ${entry?.st.auto ? '<b>ON</b>' : 'off'}` : 'No autocast'}</div>` : ''}` : '';
       html = `<div class="tip-h"><svg class="ico"><use href="#${A.icon}"/></svg><b>${A.name}</b><small class="${A.kind}">${A.kind.toUpperCase()}</small></div>
         <p>${abilityText(A)}</p>${meta}${status ? `<div class="tip-s ${status.on ? 'on' : ''}">${status.text}</div>` : ''}`;
+    } else if (kind === 'status') {
+      const x = el._st; if (!x) return this.hideTip();
+      html = `<div class="tip-h"><svg class="ico"><use href="#${x.icon}"/></svg><b>${x.name}</b><small class="${x.kind === 'buff' ? 'passive' : 'active'}">${x.kind.toUpperCase()}</small></div>
+        <p>${x.text}</p>${x.t || x.stacks ? `<div class="tip-m">${x.t ? `${fmt(x.t)}s left` : ''}${x.t && x.stacks ? ' · ' : ''}${x.stacks ? `${x.stacks} stacks` : ''}</div>` : ''}`;
     } else if (kind === 'autoloot') {
       const on = this.app.game?.teams[this.app.playerTeam]?.autoLoot;
       html = `<div class="tip-h"><svg class="ico"><use href="#i-autoloot"/></svg><b>Auto-loot</b><small>TOGGLE</small></div>
@@ -705,19 +709,19 @@ export class UI {
     if (!roster.includes(this.skillSel)) this.skillSel = roster.find((id) => SKILL_TREES[id]) || roster[0];
     // left: every troop you can hire, its level and kill progress
     $('#sk-troops').innerHTML = roster.map((id) => {
-      const d = formDef(id, T.forms[id]), L = levelInfo(T.troopKills[id] || 0);
+      const d = formDef(id, T.forms[id]), L = g.troopLevel(this.app.playerTeam, id);
       const ready = Object.keys(SKILL_TREES[id] || {}).some((f) => !g.formBlock(pt, id, f));
       return `<button class="sk-t frame${id === this.skillSel ? ' on' : ''}${SKILL_TREES[id] ? '' : ' none'}${ready ? ' ready' : ''}" data-id="${id}">
         <img src="${portraitOf(d).face}" alt=""><span class="sk-lv">Lv ${L.level}</span>
-        <span class="sk-tn"><b>${d.name}</b><small>${L.max ? 'max level' : `${L.into} / ${L.need} kills`}${SKILL_TREES[id] ? '' : ' · no tree yet'}</small>
+        <span class="sk-tn"><b>${d.name}</b><small>${L.max ? 'max level' : `${L.into} / ${L.need} exp`}${SKILL_TREES[id] ? '' : ' · no tree yet'}</small>
         <i class="sk-xp"><i style="width:${L.max ? 100 : (L.into / L.need * 100)}%"></i></i></span>${ready ? '<em>!</em>' : ''}</button>`;
     }).join('');
     $$('#sk-troops .sk-t').forEach((b) => (b.onclick = () => { sfx('click'); this.skillSel = b.dataset.id; this.renderSkills(); }));
     // right: the selected troop's tree, base on the left, branches to the right
-    const id = this.skillSel, tree = SKILL_TREES[id], cur = T.forms[id] || null, L = levelInfo(T.troopKills[id] || 0);
+    const id = this.skillSel, tree = SKILL_TREES[id], cur = T.forms[id] || null, L = g.troopLevel(this.app.playerTeam, id);
     const box = $('#sk-pan');
     $('#sk-tree').classList.toggle('empty', !tree);
-    if (!tree) { box.innerHTML = `<div class="sk-empty">${UNITS[id].name} has no skill tree yet. It still levels up from kills, so it's ready when one is added.</div>`; return; }
+    if (!tree) { box.innerHTML = `<div class="sk-empty">${UNITS[id].name} has no skill tree yet. It still earns exp from kills, so it's ready when one is added.</div>`; return; }
     const path = formPath(id, cur);
     const card = (formId) => {
       const d = formDef(id, formId), n = formId ? tree[formId] : null;
@@ -1102,7 +1106,7 @@ export class UI {
       const pe = $('.price b', el); if (pe) pe.textContent = Math.round(cost * 10) / 10;
     });
     this.renderBarracks();
-    { const T = this.app.game.teams[this.app.playerTeam], k = JSON.stringify(T.troopKills) + JSON.stringify(T.forms);   // kills/forms changed -> refresh the tree
+    { const T = this.app.game.teams[this.app.playerTeam], k = JSON.stringify(T.troopXp, (_, v) => typeof v === 'number' ? Math.floor(v) : v) + JSON.stringify(T.forms);   // kills/forms changed -> refresh the tree
       if (k !== this._skKey) { this._skKey = k; this.renderSkills(); } }
     this.renderRepair();
     this.renderAutoLoot();
@@ -1165,12 +1169,12 @@ export class UI {
 
   refreshSelection(force = false) {
     const ctl = this.app.controls;
-    if (ctl.selectedBase) return this.renderBaseSelection(ctl.selectedBase, force);
+    if (ctl.selectedBase) { this.renderStatus(null); return this.renderBaseSelection(ctl.selectedBase, force); }
     const sel = this.app.controls.selection;
     const key = sel.map((u) => u.id).join(',');
     const panel = $('#selpanel');
     if (!sel.length) {
-      panel.classList.add('empty');
+      panel.classList.add('empty'); this.renderStatus(null);
       $('#sp-hint').innerHTML = `Drag a box over your troops to select them · <kbd>${keyLabel(settings.keys.selectAll)}</kbd> selects your whole army`;
       this.lastSelKey = key;
       return;
@@ -1207,6 +1211,7 @@ export class UI {
       this.renderAbilityBar(p, isEnemy);
     }
     this.updateAbilityBar(p);
+    this.renderStatus(p);
     if (single) this.renderInventory(p);   // item cooldowns / used-up items
     const f = p.hp / p.maxHp;
     $('#sp-hpfill').style.width = (f * 100) + '%';
@@ -1234,6 +1239,21 @@ export class UI {
     });
   }
 
+  /** Buff / debuff row above the selection panel (Unit.statusList). Rebuilt only when the set changes; timers tick in place. */
+  renderStatus(p) {
+    const box = $('#sp-buffs'); if (!box) return;
+    const L = p && !p.dead ? p.statusList() : [];
+    const key = (p?.id ?? '') + '|' + L.map((x) => x.id + ':' + (x.stacks || '')).join(',');
+    if (box._k !== key) {
+      box._k = key;
+      box.innerHTML = L.map((x, i) => `<div class="buff ${x.kind}" data-tip="status:${i}"><svg><use href="#${x.icon}"/></svg><i class="bt"></i>${x.stacks ? `<em>${x.stacks}</em>` : ''}</div>`).join('');
+    }
+    box._list = L;
+    const sp = $('#selpanel');   // sits just above the selection panel (outside it: the panel clips its overflow)
+    box.style.left = (sp.offsetLeft + 6) + 'px'; box.style.bottom = (sp.offsetHeight + 6) + 'px';
+    $$('.buff', box).forEach((el, i) => { const x = L[i]; if (!x) return; el._st = x; $('.bt', el).textContent = x.t ? (x.t >= 10 ? Math.ceil(x.t) : x.t.toFixed(1)) : ''; });
+    if (this.tipEl && this.tipEl.parentNode === box) this.renderTip();
+  }
   /** Up to 4 ability slots (Dota-style). Actives are clickable and show their hotkey. */
   renderAbilityBar(p, isEnemy) {
     const bar = $('#sp-abil');
@@ -1246,6 +1266,19 @@ export class UI {
     $$('.aslot', bar).forEach((el) => {
       el._unit = p;
       if (el.classList.contains('active') && !isEnemy) el.onclick = () => { sfx('click'); this.app.controls.castSlot(+el.dataset.slot); };
+      // right-click: toggle autocast for every selected troop of ours that has this ability
+      el.oncontextmenu = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const A = p.abil[+el.dataset.slot]?.def;
+        if (isEnemy || !A) return;
+        if (!canAutocast(A)) { this.toast(`${A.name} can't be autocast`, 'err'); return; }
+        const pt = this.app.playerTeam, sel = this.app.controls.selection.filter((u) => !u.dead && u.team === pt && u.ability(A.id));
+        const list = sel.length ? sel : [p], on = !list[0].ability(A.id).st.auto;
+        for (const u of list) u.ability(A.id).st.auto = on;
+        sfx('click');
+        this.toast(`${A.name} autocast ${on ? 'ON' : 'OFF'} (${list.length} troop${list.length > 1 ? 's' : ''})`);
+        this.updateAbilityBar(p);
+      };
     });
   }
   updateAbilityBar(p) {
@@ -1255,6 +1288,7 @@ export class UI {
       const { def: A, st } = entry;
       const on = A.id === 'snipeStance' ? ((st.mode === 'stand' || st.mode === 'prone' || !st.mode) && st.cd <= 0) : A.kind === 'active' ? st.cd <= 0 : (A.id === 'eagleEye' || A.id === 'bullsEye' || st.active);
       el.classList.toggle('toggled', A.id === 'snipeStance' && st.mode === 'prone');
+      el.classList.toggle('auto', !!st.auto);
       el.classList.toggle('on', on && !st.broken);
       el.classList.toggle('broken', !!st.broken);
       el.classList.toggle('nomana', A.kind === 'active' && (A.manaCost || 0) > p.mana);

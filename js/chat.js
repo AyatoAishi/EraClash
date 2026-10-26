@@ -71,12 +71,12 @@ export const COMMANDS = {
     },
   },
   xp: {
-    args: '<unit> <kills>', help: 'add kills to a troop type (skill tree levels), e.g. /xp viking 75',
+    args: '<unit> <exp>', help: 'add skill-tree exp to a troop type, e.g. /xp viking 3000',
     run: ({ g, me }, [q, n]) => {
       const id = findId(UNITS, q); if (!id) return `unknown unit "${q || ''}"`;
-      const add = Math.max(1, Math.min(10000, +n || 5));
-      for (let k = 0; k < add; k++) g.addTroopKill(me, id);
-      return `${UNITS[id].name}: ${g.teams[me].troopKills[id]} kills → level ${g.troopLevel(me, id).level}`;
+      const add = Math.max(1, Math.min(1e6, +n || 100));
+      g.addTroopXp(me, id, add / (g.teams[me].isAI && !g.sandbox ? g.diff.xpMult || 1 : 1));
+      return `${UNITS[id].name}: ${Math.floor(g.teams[me].troopXp[id])} exp → level ${g.troopLevel(me, id).level}`;
     },
   },
   ai: { args: '', help: "show the enemy AI's difficulty and personality", run: ({ g, me }) => { const T = g.teams[1 - me], P = T.persona; return P ? `AI level ${g.diffId} (${g.diff.name}), ${P.name}: greed ${P.greed.toFixed(2)}, aggro ${P.aggro.toFixed(2)}, caution ${P.caution.toFixed(2)}, smart ${P.smart.toFixed(2)}, sloppy ${P.sloppy.toFixed(2)}` : 'no AI'; } },

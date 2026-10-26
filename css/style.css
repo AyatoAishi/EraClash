@@ -388,6 +388,12 @@ body.hurt #hurt { animation: hurt .5s steps(5); }
 .aslot.active.on { box-shadow: 0 0 0 calc(var(--p) * .5) #000, inset 0 0 0 calc(var(--p) * .6) var(--hp); }
 .aslot.active.on:hover { filter: brightness(1.25); }
 .aslot.active.on:active { transform: translateY(var(--p)); }
+/* autocast on: marching pixel border (Dota-style) */
+.aslot.auto::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 3;
+  background: linear-gradient(90deg, var(--gold) 50%, transparent 0) top / 8px 3px repeat-x, linear-gradient(90deg, var(--gold) 50%, transparent 0) bottom / 8px 3px repeat-x,
+    linear-gradient(0deg, var(--gold) 50%, transparent 0) left / 3px 8px repeat-y, linear-gradient(0deg, var(--gold) 50%, transparent 0) right / 3px 8px repeat-y;
+  animation: autocast .6s steps(4) infinite; }
+@keyframes autocast { to { background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px; } }
 .aslot kbd { position: absolute; top: 0; left: 0; font-size: .8rem; padding: 0 .2rem; z-index: 2; }
 .aslot .badge { position: absolute; right: 0; bottom: 0; font-style: normal; font-size: 1rem; line-height: 1; padding: 0 .15rem; background: #000; color: var(--gold); z-index: 2; }
 .aslot .badge:empty { display: none; }
@@ -793,3 +799,13 @@ body.placing #view canvas { cursor: copy; }
   .sp-info { min-width: 6rem !important; }
   #sp-main { gap: .35rem !important; }
 }
+
+/* buff / debuff row (sits on top of the selection panel, Dota-style) */
+#sp-buffs { position: absolute; left: 0; bottom: 100%; display: flex; flex-wrap: wrap-reverse; gap: .25rem; max-width: 40rem; pointer-events: auto; }
+#sp-buffs:empty { display: none; }
+#sp-buffs .buff { position: relative; width: 2rem; height: 2rem; padding: .2rem; background: #07090d; cursor: help;
+  box-shadow: 0 0 0 calc(var(--p) * .5) #000, inset 0 0 0 calc(var(--p) * .5) var(--hp); }
+#sp-buffs .buff.debuff { box-shadow: 0 0 0 calc(var(--p) * .5) #000, inset 0 0 0 calc(var(--p) * .5) var(--bad); }
+#sp-buffs .buff svg { width: 100%; height: 100%; display: block; }
+#sp-buffs .bt { position: absolute; left: 0; right: 0; bottom: -.1rem; text-align: center; font-style: normal; font-size: .75rem; line-height: 1; color: #fff; text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; }
+#sp-buffs em { position: absolute; right: -.15rem; top: -.2rem; font-style: normal; font-size: .75rem; line-height: 1; padding: 0 .12rem; background: #000; color: var(--gold); }
