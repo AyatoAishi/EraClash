@@ -252,17 +252,21 @@ export class Unit {
     const now = this.game.time || 0, D = (this.armorDebuffs ||= {}), cur = D[key];
     D[key] = { v: cur && cur.until > now ? Math.max(cur.v, v) : v, until: now + t };
   }
-  /** Rapid Fire: stacking armor reduction; every new stack refreshes all of them. */
+  /** Rapid Fire: stacking armor reduction; every stack has its own timer (new hits don't refresh old stacks). */
   addRapidShred(per, t) {
     if (this.dead || this.tower) return;
-    const now = this.game.time || 0, D = (this.armorDebuffs ||= {}), cur = D.rapid;
-    const stacks = cur && cur.until > now ? cur.stacks + 1 : 1;
-    D.rapid = { stacks, v: Math.round(stacks * per * 100) / 100, until: now + t };
+    const now = this.game.time || 0, D = (this.armorDebuffs ||= {});
+    const list = (D.rapid?.list || []).filter((u) => u > now); list.push(now + t);
+    D.rapid = { list, per: Math.max(per, D.rapid?.per || 0), stacks: list.length, v: Math.round(list.length * per * 100) / 100, until: now + t };
   }
   get armorDebuff() {
     const D = this.armorDebuffs; if (!D) return 0;
     const now = this.game.time || 0; let v = 0;
-    for (const k in D) { if (D[k].until > now) v += D[k].v; else delete D[k]; }
+    for (const k in D) {
+      const d = D[k];
+      if (d.list) { d.list = d.list.filter((u) => u > now); d.stacks = d.list.length; d.v = Math.round(d.stacks * d.per * 100) / 100; d.until = d.stacks ? Math.max(...d.list) : 0; }
+      if (d.until > now) v += d.v; else delete D[k];
+    }
     return v;
   }
   get slowPct() { return this.slows.reduce((m, s) => Math.max(m, s.pct), 0); }
@@ -302,6 +306,7 @@ export class Unit {
     if (this.burnT > 0) add('burn', 's-burn', 'Burning', 'debuff', `Takes ${f1(this.burnDps)} ${this.burnType || 'true'} damage per second.`, this.burnT);
     if (this.poisonT > 0) add('poison', 's-poison', 'Poisoned', 'debuff', `Takes ${f1(this.poisonDps)} magic damage per second.`, this.poisonT);
     if (this.acidT > 0) add('acid', 's-poison', 'Acid', 'debuff', 'Standing in acid: magic damage that grows every second.', this.acidT);
+    void this.armorDebuff;   // prunes expired Rapid Fire stacks
     const ad = this.armorDebuffs ? Object.values(this.armorDebuffs).filter((d) => d.until > now) : [];
     const shred = (this.shredT > 0 ? this.shred : 0) + ad.reduce((v, d) => v + d.v, 0);
     if (shred > 0) add('armor', 's-armor', 'Armor reduced', 'debuff', `-${f1(shred)} armor.`, Math.max(this.shredT || 0, ...ad.map((d) => d.until - now)), ad.find((d) => d.stacks)?.stacks);
@@ -348,7 +353,8 @@ export class Unit {
   get effMoveSpeed() {
     if (this.immobile) return 0;
     const gale = this.galeUntil > (this.game.time || 0) ? this.galeBonus : 0;   // Galewinds
-    return (this.stats.moveSpeed + gale + (this.pas.bonusMS || 0)) * (1 - this.slowPct / 100) * (1 + (this.rallyT > 0 ? this.rallyBonus : 0));
+    const ven = this.vendettaT > 0 ? this.ability('vendetta')?.def.moveSpeed || 0 : 0;   // Vendetta
+    return (this.stats.moveSpeed + gale + ven + (this.pas.bonusMS || 0)) * (1 - this.slowPct / 100) * (1 + (this.rallyT > 0 ? this.rallyBonus : 0));
   }
   /** Boomstick (Operator / Shotgunner): damage multiplier vs a target at its current distance. */
   boomMult(t) {
@@ -446,8 +452,13 @@ export class Unit {
     if (source && source.weakenUntil > (this.game.time || 0)) raw *= 1 - source.weakenPct;   // Mediator: the attacker deals less
     if (source && source.silenceT > 0 && source.silenceSpell && !opts?.attack) raw *= 1 - source.silenceSpell;   // Silencer: silenced casters' spells hit softer
     if (type === 'physical' && source?.team === NEUTRAL_TEAM) { const ng = this.ability('naturesGrace'); if (ng && !ng.st.broken) raw *= 1 - ng.def.creepPhys; }   // Dryad
-    if (type === 'physical' && (source?.structure || source?.tower || source?.isBase)) { const iw = this.ability('ironWill'); if (iw && !iw.st.broken) raw *= 1 - iw.def.structPhys; }   // Warden
-    if (type === 'physical' && this.structure) { const gw = source?.ability?.('goldWill'); if (gw && !gw.st.broken) raw *= 1 + gw.def.vsStructPhys; }   // Juggernaut
+    if (source) {   // Warden (Iron Will) / Juggernaut (Gold Will): tanky against one kind of attacker, weak to the other
+      const fromStruct = !!(source.structure || source.tower || source.isBase);
+      const iw = this.ability('ironWill');
+      if (iw && !iw.st.broken) { if (fromStruct) { if (type === 'physical') raw *= 1 - iw.def.structPhys; } else raw *= 1 + iw.def.fromUnits; }
+      const gw = this.ability('goldWill');
+      if (gw && !gw.st.broken) raw *= fromStruct ? 1 + gw.def.fromStructs : 1 - gw.def.fromUnits;
+    }
     const fz = this.fury;   // Fury: more damage from the troop type that stacked it (Vikings), any damage type
     if (fz && fz.t > 0 && fz.stacks > 0 && source && source.team === fz.team && source.def?.id === fz.unit) raw *= 1 + fz.stacks * fz.per;
     if (opts?.attack) {
@@ -499,7 +510,7 @@ export class Unit {
     if (this.ccd || this.dead) return;
     const cs = this.ability('counterstrike');
     if (cs && !cs.st.broken && !src.flying && this.edgeDist(src) <= this.effRange + 0.6 && Math.random() < cs.def.chance) {
-      const raw = this.rollDamage(true), shot = this.lastShot; shot.extra = true;
+      const raw = this.rollDamage(true, src), shot = this.lastShot; shot.extra = true;
       const dodge = shot.trueStrike ? null : src.dodgeCheck(this);
       if (dodge) this.game.onDodge(this, src, dodge);
       else {
@@ -647,7 +658,7 @@ export class Unit {
           s.stacks = Math.min(n, P.maxStacks); s.active = s.stacks > 0;
           s.bonusDamage = s.stacks * P.damage; s.bonusArmor = s.stacks * P.armor; s.bonusAS = s.stacks * P.as; s.bonusMS = Math.round(s.stacks * P.moveSpeed * 100) / 100;
         }
-      } else if (P.id === 'steadyAim' || P.id === 'execution' || P.id === 'fortress' || P.id === 'ironWill' || P.id === 'absorb' || P.id === 'goldWill' || P.id === 'miniDrones') {
+      } else if (P.id === 'steadyAim' || P.id === 'relentless' || P.id === 'execution' || P.id === 'fortress' || P.id === 'ironWill' || P.id === 'absorb' || P.id === 'goldWill' || P.id === 'miniDrones') {
         s.active = true;                    // handled on hit / in takeDamage / in projectiles / updateMiniDrones
       } else if (P.id === 'counterstrike' || P.id === 'dkCurse' || P.id === 'zealot' || P.id === 'galewinds' || P.id === 'disrupt' || P.id === 'flick' || P.id === 'boomstick'
         || P.id === 'naturesGrace' || P.id === 'silenceStrike' || P.id === 'splitshot' || P.id === 'siegeBonus' || P.id === 'homingStone' || P.id === 'grudge') {
@@ -771,7 +782,7 @@ export class Unit {
   fervorAS({ def: P, st }) { return P.pctPerStack ? Math.round(st.stacks * P.pctPerStack * this.stats.attackSpeed * 100) / 100 : st.stacks * P.perStack; }
 
   /** Damage for one hit: base + items + passives, ±variance, maybe a crit. Sets this.lastCrit. */
-  rollDamage(extra = false) {
+  rollDamage(extra = false, tg = null) {
     let d = this.effDamage + Math.round((Math.random() * 2 - 1) * GAME.dmgVariance);
     this.lastCrit = false;
     // per-shot extras, carried by the projectile / melee swing: true strike (can't miss/evade), bonus magic, break
@@ -788,11 +799,10 @@ export class Unit {
     const be = this.ability('bullsEye');
     if (be) {
       const L = this.upLevel('hollowPoints'), HP = UPGRADES.hollowPoints;     // Hollow Points upgrade
-      const every = L >= HP.max ? 3 : be.def.every;
+      const need = L >= HP.max ? HP.values.fullHpPctAtMax : be.def.fullHpPct;   // crits on (nearly) full-HP targets
       const crit = be.def.critBonus + (L ? HP.values.critBonus[L - 1] : 0);
-      be.st.stacks = (be.st.stacks || 0) + 1;
-      if (be.st.stacks >= every) {
-        be.st.stacks = 0; d = Math.round(d * (1 + crit)); this.lastCrit = true;
+      if (!be.st.broken && tg && !tg.dead && tg.maxHp > 0 && tg.hp >= tg.maxHp * need - 1e-6) {
+        d = Math.round(d * (1 + crit)); this.lastCrit = true;
         if (!be.st.broken && be.def.curHpPct) { shot.curHpPct = be.def.curHpPct; shot.breakT = Math.max(shot.breakT, be.def.breakT || 0); }   // Assassin forms
       }
     }
@@ -1011,6 +1021,7 @@ export class Unit {
         if (close && this.hp / this.maxHp < 0.7) this.castAbility(i);
         continue;
       }
+      if (A.id === 'flay' && this.game.enemiesInRadius(this, A.radius, A).some((o) => this.isFoe(o))) { this.castAbility(i); continue; }
       if (A.id === 'shieldStomp' && this.aimT > 0 && this.game.enemiesInRadius(this, A.radius + 0.3).length) { this.castAbility(i); continue; }
       if (A.id === 'splatter' && A.leap) {   // Fire Splatter: leap onto the biggest clump in reach
         let best = null, bn = 0;
@@ -1064,7 +1075,15 @@ export class Unit {
           hm.st.cd = M.cooldown;
           g.fireProjectile(this, tg, false, { missile: { magic: M.magic, radius: M.radius }, mesh: 'rocket' });
           for (let k = 0; k < (M.extra || 0); k++) g.fireProjectile(this, others.length ? others[Math.floor(Math.random() * others.length)] : tg, true, { extra: true, missile: { magic: M.magic, radius: M.radius }, mesh: 'rocket' });
-        } else g.fireProjectile(this, tg);
+        } else {
+          let shotAt = tg;
+          const rl = !tg.isBase && this.ability('relentless');   // Mercenary: half the shots spray at someone near the target
+          if (rl && !rl.st.broken && Math.random() < rl.def.chance) {
+            const near = g.units.filter((o) => o !== tg && this.isFoe(o) && !(o.flying && !this.hitsAir) && g.canSee(this.team, o) && Math.hypot(o.pos.x - tg.pos.x, o.pos.z - tg.pos.z) - o.radius <= rl.def.radius);
+            if (near.length) shotAt = near[Math.floor(Math.random() * near.length)];
+          }
+          g.fireProjectile(this, shotAt);
+        }
         this.onAttackDone();
         const sp = this.ability('splitshot');     // Relentless / Split Dryad: extra spears at the nearest other enemies
         if (sp && !sp.st.broken && !tg.isBase) {
@@ -1081,9 +1100,9 @@ export class Unit {
       if (this.rig.muzzle) this.muzzleT = 0.06;
       return;
     }
-    if (tg.isBase) g.damageBase(tg.team, this.rollDamage(), this);
+    if (tg.isBase) g.damageBase(tg.team, this.rollDamage(false, tg), this);
     else if (!tg.dead && this.edgeDist(tg) <= this.effRange + 0.6) {
-      const raw = this.rollDamage(), shot = this.lastShot, crit = this.lastCrit;
+      const raw = this.rollDamage(false, tg), shot = this.lastShot, crit = this.lastCrit;
       const dodge = shot.trueStrike ? null : tg.dodgeCheck(this);   // true strike: can't miss or be evaded
       if (dodge) { g.onDodge(this, tg, dodge); this.onAttackDone(); return; }
       const dealt = tg.takeDamage(raw, this, this.def.damageType || 'physical', { attack: true, ranged: false });

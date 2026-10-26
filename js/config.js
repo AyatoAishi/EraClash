@@ -129,7 +129,7 @@ export const UNITS = {
   viking: {
     id: 'viking', name: 'Viking Warrior', theme: 'medieval', family: 'melee', role: 'Melee bruiser', type: 'melee',
     cost: 50, trainTime: 1.5,
-    hp: 115, hpRegen: 1, damage: 15, damageType: 'physical', attackSpeed: 54,
+    hp: 105, hpRegen: 1, damage: 15, damageType: 'physical', attackSpeed: 54,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 3.0, range: 1.3, vision: [30, 16], aggro: 9, radius: 0.5,
     abilities: ['loneWolf'],
@@ -138,7 +138,7 @@ export const UNITS = {
   archer: {
     id: 'archer', name: 'Ranger', theme: 'medieval', family: 'marksman', role: 'Ranged marksman', type: 'ranged',
     cost: 75, trainTime: 2.0,
-    hp: 70, hpRegen: 0.5, damage: 16, damageType: 'physical', attackSpeed: 45,
+    hp: 70, hpRegen: 0.5, damage: 14, damageType: 'physical', attackSpeed: 45,
     armor: 0, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 3.0, range: 9, vision: [30, 16], aggro: 12, radius: 0.45,
     projectile: { kind: 'arrow', speed: 20, arc: 0.18 },
@@ -148,8 +148,8 @@ export const UNITS = {
   imp: {
     id: 'imp', name: 'Imp Warrior', theme: 'medieval', family: 'melee', role: 'Suicide skirmisher', type: 'melee',
     cost: 90, trainTime: 1,
-    hp: 40, hpRegen: 0.1, damage: 20, damageType: 'physical', attackSpeed: 65,
-    armor: 2, ward: 1, evasion: 0, missChance: 0,
+    hp: 65, hpRegen: 0.1, damage: 23, damageType: 'physical', attackSpeed: 65,
+    armor: 3, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 4.5, range: 1.2, vision: [30, 16], aggro: 9, radius: 0.4,
     abilities: ['splatter', 'swiftStep'],          // Splatter first -> Q
     lore: 'A cackling little demon bound to the Keep. Fast, slippery while it runs, and more than happy to pop itself over a crowd.',
@@ -157,7 +157,7 @@ export const UNITS = {
   police: {
     id: 'police', name: 'Police Officer', theme: 'modern', family: 'melee', role: 'Melee skirmisher', type: 'melee',
     cost: 50, trainTime: 1.5,
-    hp: 117, hpRegen: 1, damage: 9, damageType: 'physical', attackSpeed: 81,
+    hp: 117, hpRegen: 1, damage: 12, damageType: 'physical', attackSpeed: 81,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 3.3, range: 1.3, vision: [30, 16], aggro: 9, radius: 0.5,
     abilities: ['blueLine'],
@@ -176,7 +176,7 @@ export const UNITS = {
   sniper: {
     id: 'sniper', name: 'Sniper', theme: 'modern', family: 'marksman', role: 'Long-range specialist', type: 'ranged',
     cost: 120, trainTime: 2.5,
-    hp: 40, hpRegen: 0.1, damage: 24, damageType: 'physical', attackSpeed: 30,
+    hp: 40, hpRegen: 0.1, damage: 40, damageType: 'physical', attackSpeed: 30,
     armor: 1, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 2, range: 12, vision: [30, 16], aggro: 14, radius: 0.45,
     projectile: { kind: 'sniper', speed: 90, arc: 0 },
@@ -271,7 +271,7 @@ Object.assign(UNITS, {
   lancer: {
     id: 'lancer', name: 'Lancer', theme: 'medieval', family: 'melee', role: 'Cavalry lancer', type: 'melee',
     cost: 160, trainTime: 5,
-    hp: 200, hpRegen: 1.2, damage: 18, damageType: 'physical', attackSpeed: 45,
+    hp: 200, hpRegen: 1.2, damage: 20, damageType: 'physical', attackSpeed: 45,
     armor: 4, ward: 1, evasion: 0, missChance: 0,
     moveSpeed: 4.1, range: 2.2, vision: [30, 16], aggro: 10, radius: 0.7,
     abilities: ['courageAura', 'bardingRally'],
@@ -292,7 +292,7 @@ Object.assign(UNITS, {
     id: 'riotSkirmisher', name: 'Riot Skirmisher', theme: 'modern', family: 'melee', role: 'Shield bearer', type: 'melee',
     cost: 150, trainTime: 2.5,
     hp: 120, hpRegen: 1, damage: 19, damageType: 'physical', attackSpeed: 45,
-    armor: 3, ward: 4, evasion: 0, missChance: 0,
+    armor: 6, ward: 4, evasion: 0, missChance: 0,
     moveSpeed: 2.9, range: 2, vision: [30, 16], aggro: 9, radius: 0.55,
     abilities: ['bulwark'],
     lore: 'Heavier than a patrol officer and twice as stubborn. The riot shield never drops: whatever comes from the front hits the polycarbonate first.',
@@ -300,8 +300,8 @@ Object.assign(UNITS, {
   reconDrone: {
     id: 'reconDrone', name: 'Recon Drone', theme: 'modern', family: 'marksman', role: 'Flying harasser', type: 'ranged', flying: true,
     cost: 160, trainTime: 4.5,
-    hp: 45, hpRegen: 0.1, damage: 20, damageType: 'physical', attackSpeed: 40,
-    armor: 2, ward: 0, evasion: 0, missChance: 0,
+    hp: 60, hpRegen: 0.1, damage: 22, damageType: 'physical', attackSpeed: 40,
+    armor: 2, ward: 1, evasion: 0, missChance: 0,
     moveSpeed: 3.3, range: 2, vision: [30, 16], aggro: 10, radius: 0.5,
     projectile: { kind: 'bullet', speed: 60, arc: 0 },
     abilities: ['penetration'],
@@ -429,8 +429,8 @@ export const ABILITIES = {
   },
   bullsEye: {
     id: 'bullsEye', kind: 'passive', name: "Bull's Eye", icon: 'p-bullseye',
-    every: 4, critBonus: 0.7,
-    desc: 'Every 4th attack is a critical strike dealing 70% bonus damage.',
+    critBonus: 0.7, fullHpPct: 1,   // crits on targets at (or above) this fraction of max HP
+    desc: 'Always a critical strike (+70% damage) against targets at full health.',
   },
   // ---------- actives ----------
   snipeStance: {
@@ -473,9 +473,9 @@ export const ABILITIES = {
   },
   chainLightning: {
     id: 'chainLightning', kind: 'passive', name: 'Chain Lightning', icon: 'p-chain',
-    chance: 0.2, damage: 25, damageType: 'magic', jump: 2, targets: 4, bounceDelay: 0.3,
-    desc: '20% chance on hit to zap the target with lightning for 25 magic damage. Every 0.3s it jumps to a random enemy within 2 range of the last one, up to 4 enemies.',
-    text: (A, P) => `${P(A.chance)} chance on hit to zap the target with lightning for ${A.damage} magic damage. Every ${A.bounceDelay}s it jumps to a random enemy within ${A.jump} range of the last one, up to ${A.targets} enemies.`,
+    chance: 0.2, damage: 50, pctMaxHp: 0, damageType: 'magic', jump: 2, targets: 4, bounceDelay: 0.3,
+    desc: '20% chance on hit to zap the target with lightning for 50 magic damage. Every 0.3s it jumps to a random enemy within 2 range of the last one, up to 4 enemies.',
+    text: (A, P) => `${P(A.chance)} chance on hit to zap the target with lightning for ${A.damage}${A.pctMaxHp ? ` + ${P(A.pctMaxHp)} of its max HP as` : ''} magic damage (each enemy it jumps to takes the same). Every ${A.bounceDelay}s it jumps to a random enemy within ${A.jump} range of the last one, up to ${A.targets} enemies.`,
   },
   // ---------- granted by Barracks upgrades (not on any troop by default) ----------
   flurry: {
@@ -486,9 +486,9 @@ export const ABILITIES = {
   },
   suppressiveFire: {
     id: 'suppressiveFire', kind: 'active', name: 'Suppressive Fire', icon: 'u-suppress', granted: true,
-    cooldown: 16, duration: 4, bonusDamage: [2, 4, 6, 8, 10], knockback: [0.3, 0.35, 0.4, 0.45, 0.5],
+    cooldown: 16, duration: 4, bonusDamage: [4, 7, 10, 13, 16], knockback: [0.5, 0.575, 0.65, 0.725, 0.8],
     ai: { whenAttacking: true },
-    desc: 'For 4 seconds, shots deal bonus damage and knock the target back (both scale with the upgrade). 16s cooldown.',
+    desc: 'For 4 seconds, shots deal +4/7/10/13/16 bonus damage and knock the target back 0.5–0.8 (by upgrade level). 16s cooldown.',
   },
   deathSplatter: {
     id: 'deathSplatter', kind: 'passive', name: 'Death Splatter', icon: 'u-deathsplat', granted: true,
@@ -515,8 +515,8 @@ export const ABILITIES = {
     castTime: 0.3, cooldown: 20, radius: 2, damage: [80, 120, 160, 200, 240], damageType: 'magic', knockback: 2.5, affectsFlying: false,
     ai: { whenAttacking: true },
     desc: 'Slams the shield down: 80/120/160/200/240 magic damage to enemies within 2 range and knocks them 2.5 away.' },
-  bulwark: { id: 'bulwark', kind: 'passive', name: 'Bulwark', icon: 'a-bulwark', unbreakable: true, reduction: 0.3, arc: Math.PI * 2 / 3,
-    desc: 'Basic attacks from the front (120°) deal 30% less damage, crits included. On-hit extras are not reduced. Can\'t be broken.' },
+  bulwark: { id: 'bulwark', kind: 'passive', name: 'Bulwark', icon: 'a-bulwark', unbreakable: true, reduction: 0.8, arc: Math.PI * 2 / 3,
+    text: (A, P) => `Basic attacks from the front (120°) deal ${P(A.reduction)} less damage, crits included. On-hit extras are not reduced. Can't be broken.` },
   penetration: { id: 'penetration', kind: 'passive', name: 'Penetration', icon: 'a-penetration', shred: [2, 4, 6, 8, 10, 12], duration: 3, maxBonusAS: 20,
     desc: 'Attacks reduce the target\'s armor by 2 (4–12 with the Penetration upgrade) for 3s. Max upgrade: +20 attack speed.' },
   // ---------- skill-tree abilities, v0.23 (Imp, Lancer, Elf, Police, Gunner trees) ----------
@@ -543,13 +543,18 @@ export const ABILITIES = {
     text: (A, P) => `Screams: enemy troops within ${A.radius} range deal ${P(A.weaken)} less damage for ${A.duration}s. Several Mediators don't stack (it only refreshes). ${A.cooldown}s cooldown.` },
   doubleTap: { id: 'doubleTap', kind: 'passive', name: 'Double Tap', icon: 'p-doubletap', cooldown: 6, delay: 0.12,
     text: (A) => `His next attack fires twice in quick succession. Recharges ${A.cooldown}s after it triggers.` },
-  boomstick: { id: 'boomstick', kind: 'passive', name: 'Boomstick', icon: 'p-boomstick', far: 5, near: 1, minPct: 0.1, maxPct: 1,
+  boomstick: { id: 'boomstick', kind: 'passive', name: 'Boomstick', icon: 'p-boomstick', far: 8, near: 1, minPct: 0.1, maxPct: 3,
     text: (A, P) => `Shots hit harder the closer the target is: +${P(A.minPct)} damage at ${A.far} range, rising to +${P(A.maxPct)} at ${A.near} range or closer. No bonus beyond ${A.far}.` },
-  scattershot: { id: 'scattershot', kind: 'active', name: 'Scattershot', icon: 'a-scatter', cast: 'line', cooldown: 11, flat: 10, adPct: 1,
+  scattershot: { id: 'scattershot', kind: 'active', name: 'Scattershot', icon: 'a-scatter', cast: 'line', cooldown: 11, flat: 10, adPct: 2.5, boom: true,
     width: 2.4, speed: 20, range: 8, affectsFlying: true, ai: { whenAttacking: true },
     text: (A, P) => `Fires a wide blast in a straight line (${A.range} range, ${A.width} wide): ${A.flat} + ${P(A.adPct)} of his attack damage as magic damage to every enemy it passes. ${A.cooldown}s cooldown.` },
   rapidFire: { id: 'rapidFire', kind: 'passive', name: 'Rapid Fire', icon: 'p-rapid', attacks: 8, bonusAS: 40, shred: 1, shredTime: 4, cooldown: 15,
     text: (A) => `His next ${A.attacks} attacks get +${A.bonusAS} attack speed and each one lowers the target's armor by ${A.shred} for ${A.shredTime}s (stacks; every hit refreshes all stacks). Recharges ${A.cooldown}s after the last of them.` },
+  relentless: { id: 'relentless', kind: 'passive', name: 'Relentless', icon: 'p-relentless', chance: 0.5, radius: 5,
+    text: (A, P) => `Each shot has a ${P(A.chance)} chance to fly at a random other enemy within ${A.radius} range of his target instead. If the target is alone, every shot goes to it.` },
+  flay: { id: 'flay', kind: 'active', name: 'Flay', icon: 'a-flay', cooldown: 3, radius: 2.5, adPct: 1.5, damageType: 'physical', affectsFlying: false,
+    ai: { minTargets: 1 },
+    text: (A, P) => `Swings his pike all around him: ${P(A.adPct)} of his attack damage as physical damage to every ground enemy within ${A.radius} range. ${A.cooldown}s cooldown.` },
   flick: { id: 'flick', kind: 'passive', name: 'Flick', icon: 'p-flick', chance: 0.3, slow: 60, slowTime: 1, onAttack: false,
     text: (A, P) => `When ${A.onAttack ? 'he attacks or is attacked' : 'he is attacked'}, ${P(A.chance)} chance to fire an extra shot at a random enemy in range that slows it by ${A.slow}% for ${A.slowTime}s.` },
 };export const PASSIVES = ABILITIES;   // back-compat alias
@@ -573,11 +578,11 @@ Object.assign(UNITS, {
   catapult: {
     id: 'catapult', name: 'Catapult', theme: 'medieval', family: 'marksman', role: 'Mobile siege', type: 'ranged', tier: 2,
     cost: 250, trainTime: 8,
-    hp: 400, hpRegen: 0, damage: 80, damageType: 'physical', attackSpeed: 10,
+    hp: 400, hpRegen: 0, damage: 60, damageType: 'physical', attackSpeed: 10,
     armor: 10, ward: -8, evasion: 0, missChance: 0,
-    moveSpeed: 1.8, range: 16, minRange: 3, groundOnly: true, vision: [22, 14], aggro: 17, radius: 0.85,
+    moveSpeed: 1.8, range: 14, minRange: 3, groundOnly: true, vision: [22, 14], aggro: 17, radius: 0.85,
     // ground-targeted boulder (Game.fireShell): lands where the target WAS, splash 1, can be dodged
-    siege: { shell: 'ball', flight: 1.6, arc: 0.35, splash: 1, groundOnly: true, marker: true },
+    siege: { shell: 'ball', flight: 1.6, arc: 0.35, splash: 2.4, groundOnly: true, marker: true },
     abilities: ['siegeBonus', 'homingStone'],
     lore: 'A wheeled throwing-arm with one very brave operator. Slow, blind up close and helpless against anything that flies, but walls hate it.',
   },
@@ -607,7 +612,7 @@ Object.assign(ABILITIES, {
   // ----- Catapult -----
   siegeBonus: { id: 'siegeBonus', kind: 'passive', name: 'Siege', icon: 'p-siege', unbreakable: true, vsBuildings: 2,
     text: (A, P) => `All of its damage is +${P(A.vsBuildings)} against buildings and bases.` },
-  homingStone: { id: 'homingStone', kind: 'passive', name: 'Homing Stone', icon: 'p-stone', unbreakable: true, splash: 1,
+  homingStone: { id: 'homingStone', kind: 'passive', name: 'Homing Stone', icon: 'p-stone', unbreakable: true, splash: 2.4,
     text: (A) => `Boulders land where the target was when thrown (fast troops can dodge) and splash ${A.splash} around the impact. Can't hit flying units or anything within 3 range.${A.fire ? ` Leaves fire for ${A.fire.t}s: ${A.fire.dps} magic damage per second${A.fire.buildings ? ', burning buildings and bases too' : ''}.` : ''} Can't be broken.` },
   // ----- Batrider -----
   acidSpray: { id: 'acidSpray', kind: 'active', name: 'Acid Spray', icon: 'a-acid', cast: 'point', cooldown: 30, castRange: 10, radius: 4,
@@ -630,23 +635,23 @@ Object.assign(ABILITIES, {
     text: (A) => `Allies within ${A.aura.radius} range gain +${A.aura.bonusRange} attack range and +${A.aura.bonusDamage} attack damage. Doesn't affect the Sharpshooter himself; several auras don't stack.` },
   execution: { id: 'execution', kind: 'passive', name: 'Execution', icon: 'p-execution', radius: 8, maxBounces: 4,
     text: (A) => `When his bullet kills a unit, it bounces to the nearest ally of the victim within ${A.radius} range for the same damage (a Bull's Eye stays a Bull's Eye). Bounce kills bounce again, up to ${A.maxBounces} times.` },
-  vendetta: { id: 'vendetta', kind: 'active', name: 'Vendetta', icon: 'a-vendetta', cooldown: 100, duration: 20, range: 3, bonusPct: 5, structPct: 1,
+  vendetta: { id: 'vendetta', kind: 'active', name: 'Vendetta', icon: 'a-vendetta', cooldown: 100, duration: 20, range: 3, moveSpeed: 5, bonusPct: 5, structPct: 1,
     ai: { whenAttacking: true },
-    text: (A, P) => `Turns <b>invisible</b> for ${A.duration}s, walks through trees and walls, and fights up close (attack range fixed at ${A.range}). His next attack ends it and deals <b>+${P(A.bonusPct)}</b> physical damage (+${P(A.structPct)} against buildings and bases). ${A.cooldown}s cooldown.` },
+    text: (A, P) => `Turns <b>invisible</b> for ${A.duration}s with +${A.moveSpeed} move speed, walks through trees and walls, and fights up close (attack range fixed at ${A.range}). His next attack ends it and deals <b>+${P(A.bonusPct)}</b> physical damage (+${P(A.structPct)} against buildings and bases). ${A.cooldown}s cooldown.` },
   assassinate: { id: 'assassinate', kind: 'active', name: 'Assassinate', icon: 'a-assassinate', cast: 'unit', castTime: 1, castRange: 22, castRangeBonus: 10, cooldown: 60,
     flat: 100, missingPct: 0.3, damageType: 'magic', ai: { whenAttacking: true },
     text: (A, P) => `Target an enemy within his attack range +${A.castRangeBonus}. Aims for ${A.castTime}s (works prone), then fires a deadly shot: ${A.flat} + ${P(A.missingPct)} of the target's missing HP as magic damage. Can't be evaded. ${A.cooldown}s cooldown.` },
   // ----- Riot Skirmisher -----
   fortress: { id: 'fortress', kind: 'passive', name: 'Fortress', icon: 'p-fortress',
     text: () => 'Enemy ranged attacks aimed at an ally behind him that pass through him are redirected into him instead.' },
-  ironWill: { id: 'ironWill', kind: 'passive', name: 'Iron Will', icon: 'p-ironwill', structPhys: 0.75,
-    text: (A, P) => `Takes ${P(A.structPhys)} less physical damage from buildings, towers and bases.` },
+  ironWill: { id: 'ironWill', kind: 'passive', name: 'Iron Will', icon: 'p-ironwill', structPhys: 0.8, fromUnits: 0.5,
+    text: (A, P) => `Takes ${P(A.structPhys)} less physical damage from buildings, towers and bases, but ${P(A.fromUnits)} more damage from troops.` },
   absorb: { id: 'absorb', kind: 'passive', name: 'Absorb', icon: 'p-absorb', radius: 10,
     text: (A) => `Damage that allies within ${A.radius} range would take goes to him instead (their debuffs still land on them). He takes it before mitigation, so his own armor and ward apply. With several Dires, the nearest one takes it; Dires never pass damage to each other.` },
   breaker: { id: 'breaker', kind: 'passive', name: 'Breaker', icon: 'p-breaker', radius: 10, healRadius: 8, heal: 4, t: 8,
     text: (A) => `Every time an enemy within ${A.radius} range casts an ability or uses an item, he ignites: +1 stack for ${A.t}s that heals him and allies within ${A.healRadius} range ${A.heal} HP per second. Stacks without limit; each stack has its own timer.` },
-  goldWill: { id: 'goldWill', kind: 'passive', name: 'Gold Will', icon: 'p-goldwill', vsStructPhys: 0.75,
-    text: (A, P) => `Deals ${P(A.vsStructPhys)} more physical damage to buildings and bases.` },
+  goldWill: { id: 'goldWill', kind: 'passive', name: 'Gold Will', icon: 'p-goldwill', fromUnits: 0.8, fromStructs: 0.5,
+    text: (A, P) => `Takes ${P(A.fromUnits)} less damage from troops, but ${P(A.fromStructs)} more damage from buildings, towers and bases.` },
   combust: { id: 'combust', kind: 'passive', name: 'Combust', icon: 'p-combust', threshold: 100, damage: 150, radius: 10, shield: 100, shieldT: 5, cooldown: 20,
     text: (A) => `Stores the magic damage he takes. At ${A.threshold} stored he explodes: ${A.damage} magic damage to enemies within ${A.radius} range, and he and allies within ${A.radius} range get a <b>${A.shield} shield</b> for ${A.shieldT}s (absorbs damage before HP). ${A.cooldown}s cooldown after it goes off.` },
   // ----- Recon Drone -----
@@ -658,7 +663,7 @@ Object.assign(ABILITIES, {
     text: (A) => `For every other Swarm or Hive drone within ${A.radius} range: +${A.damage} damage, +${A.armor} armor, +${A.moveSpeed} move speed and +${A.as} attack speed, up to ${A.maxStacks} drones.` },
 });
 // Bull's Eye text (Assassin forms add % current HP + Break)
-ABILITIES.bullsEye.text = (A, P) => `Every ${A.every}th attack is a critical strike dealing ${P(A.critBonus)} bonus damage${A.curHpPct ? `, plus <b>${P(A.curHpPct)} of the target's current HP</b> as physical damage, and Breaks it for ${A.breakT}s` : ''}.`;
+ABILITIES.bullsEye.text = (A, P) => `Always a critical strike dealing ${P(A.critBonus)} bonus damage against targets at full health${A.curHpPct ? `, plus <b>${P(A.curHpPct)} of the target's current HP</b> as physical damage, and Breaks it for ${A.breakT}s` : ''}.`;
 
 /** Troop tier (UNITS[id].tier, default 1). Tier N needs a level N base to hire. */
 export const tierOf = (id) => UNITS[id]?.tier || 1;

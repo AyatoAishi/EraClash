@@ -1044,7 +1044,7 @@ export class Game {
     this.scene.add(mesh);
     const end = this.projectileAim(target, src);
     const dist0 = Math.max(0.5, start.distanceTo(end));
-    let dmg = src.rollDamage(extra); const crit = src.lastCrit, shot = src.lastShot;
+    let dmg = src.rollDamage(extra, target); const crit = src.lastCrit, shot = src.lastShot;
     if (mods) Object.assign(shot, mods);                                               // Flick slow / extra-shot flag
     if (mods?.dmgMult) dmg *= mods.dmgMult;                                             // Splitshot spears: 75%
     if (src.structure?.flyingBonus && target.flying) dmg *= 1 + src.structure.flyingBonus;   // Skypiercer
@@ -1109,8 +1109,9 @@ export class Game {
         if (Math.hypot(o.pos.x - (x0 + S.dx * t), o.pos.z - (z0 + S.dz * t)) > S.width / 2 + o.radius) continue;
         S.hit.add(o);
         const src = S.src.dead ? null : S.src;
-        let dealt = o.takeDamage(S.phys * S.mult, src, 'physical');
-        dealt += o.takeDamage(S.magic * S.mult, src, 'magic');
+        const bm = S.boom && src?.boomMult ? src.boomMult(o) : 1;   // Shotgunner: Scattershot benefits from Boomstick
+        let dealt = o.takeDamage(S.phys * S.mult * bm, src, 'physical');
+        dealt += o.takeDamage(S.magic * S.mult * bm, src, 'magic');
         if (src) src.damageDealt += dealt;
         if (S.slow) o.addSlow(S.slow, S.slowTime);
         S.mult *= 1 - S.falloff;                       // each enemy hit weakens the arrow by 10% of its current value
@@ -1183,10 +1184,19 @@ export class Game {
       mesh.position.set(u.pos.x, 1.3 + (u.pos.y || 0), u.pos.z); mesh.rotation.y = Math.atan2(dx, dz);
       this.scene.add(mesh);
       this.skillshots.push({ src: u, team: u.team, x: u.pos.x, z: u.pos.z, dx, dz, speed: A.speed, left: A.range, width: A.width,
-        phys: 0, magic: A.flat + A.adPct * u.effDamage, mult: 1, falloff: 0, slow: 0, slowTime: 0, air: A.affectsFlying !== false, hit: new Set(), mesh, fx: [0xffd040, 0xff8a20] });
+        phys: 0, magic: A.flat + A.adPct * u.effDamage, mult: 1, falloff: 0, slow: 0, slowTime: 0, air: A.affectsFlying !== false, hit: new Set(), mesh, fx: [0xffd040, 0xff8a20], boom: !!A.boom });
       u.muzzleT = 0.1; u.swing = 1;
       this.burst({ x: u.pos.x + dx, z: u.pos.z + dz }, 10, [0xffd040, 0xffffff, 0x8a8a8a], 4, 0.4, 0.8);
       if (this.audible(u.pos.x)) sfx('gun', 30);
+      return true;
+    }
+    if (A.id === 'flay') {   // Crusader line: spin attack around him
+      const hits = this.enemiesInRadius(u, A.radius, A).filter((o) => u.isFoe(o));
+      for (const t of hits) { const d = t.takeDamage(A.adPct * u.effDamage, u, A.damageType || 'physical', { splash: true }); u.damageDealt += d; if (d > 0) this.emit('hitDmg', t.pos, d, false, u.team); }
+      u.swing = 1;
+      this.ring(u.pos, A.radius, 0xd8d8d8);
+      this.burst(u.pos, 10, [0xd8d8d8, 0xb8c0c8, 0xffffff], 3.5, 0.4, 0.8);
+      if (this.audible(u.pos.x)) sfx('whiff', 50);
       return true;
     }
     if (A.id === 'enforce') {   // fear everything close
@@ -1520,7 +1530,6 @@ export class Game {
     if (this.cheat?.god && team === this.playerTeam) return;
     const debuff = (b.armorDebuff && b.armorDebuff.until > this.time ? b.armorDebuff.v : 0)   // Cursed Splatter
       + (b.auraDebuff && b.auraDebuff.until > this.time ? b.auraDebuff.v : 0);                 // Guardian Aura
-    const gw = src?.ability?.('goldWill'); if (gw && !gw.st.broken) raw *= 1 + gw.def.vsStructPhys;   // Juggernaut
     const dmg = raw * defenseMult(b.armor - debuff) * this.dmgMult(src?.team, team);
     b.hp = Math.max(0, b.hp - dmg);
     b.shake = 0.18;
@@ -1825,7 +1834,7 @@ export class Game {
     (this.chains ||= []).push(c);
   }
   zap(c, t) {
-    const dmg = t.takeDamage(c.def.damage, c.src.dead ? null : c.src, c.def.damageType || 'magic');
+    const dmg = t.takeDamage(c.def.damage + (c.def.pctMaxHp && !t.isBase ? c.def.pctMaxHp * (t.maxHp || 0) : 0), c.src.dead ? null : c.src, c.def.damageType || 'magic');   // Storm: + % max HP
     if (!c.src.dead) c.src.damageDealt += dmg;
     if (dmg > 0) this.emit('hitDmg', t.pos, dmg, false, c.team);
     this.burst(t.pos, 4, [0x9ad8ff, 0xffffff], 2, 0.3, 0.7);

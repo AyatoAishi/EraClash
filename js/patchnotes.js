@@ -7,6 +7,54 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.31.0', date: '2026-10-26T22:45:00+08:00', title: 'Big balance pass + Flay and Relentless', author: 'AyatoAishi',
+    sections: [
+      { title: 'Viking', items: [
+        '<b>Viking Warrior</b> HP 115 → <b>105</b>.',
+        '<b>Lightning Viking</b>: +0.3 move speed. Chain Lightning 25 → <b>50</b> magic.',
+        '<b>Storm Viking</b>: Chain Lightning 40 → <b>80</b>, plus <b>5% of the target\'s max HP</b> per zap.',
+        '<b>Chaotic Viking</b>: Fury is capped at <b>20</b> stacks (was unlimited).',
+      ] },
+      { title: 'Ranger', items: [
+        '<b>Ranger</b> damage 16 → <b>14</b>.',
+        '<b>Scout Ranger / Stalker</b>: Eagle Eye chance 30% → <b>40%</b>. <b>Stalker</b> loses the +100 mana / +1 mana regen it never used.',
+        '<b>Hunter</b> attack speed +20 → <b>+40</b>.',
+      ] },
+      { title: 'Imp, Lancer, Elf', items: [
+        '<b>Imp Warrior</b>: HP 40 → <b>65</b>, armor 2 → <b>3</b>, ward 1 → <b>0</b>, damage 20 → <b>23</b>.',
+        '<b>Lancer</b> damage 18 → <b>20</b>.',
+        '<b>Crusader</b> (and Legion Commander / Death Knight): new active <b>Flay</b>. Spins the pike for 150% of his attack damage to every ground enemy within 2.5. 3s cooldown, can autocast.',
+        '<b>High Elf</b> (and Drow / Eladrin): after Arrow Piercer, +50 → <b>+70</b> attack speed for 3 → <b>5</b> attacks (window 4s → 6s so all 5 fit).',
+      ] },
+      { title: 'Catapult', items: [
+        'Damage 80 → <b>60</b>. Range 16 → <b>14</b>. Boulder splash radius 1 → <b>2.4</b>.',
+      ] },
+      { title: 'Police & Gunner', items: [
+        '<b>Police Officer</b> damage 9 → <b>12</b>. <b>Riot Training</b>: 0.5–2 → <b>0.6–3</b> armor per nearby officer.',
+        '<b>Suppressive Fire</b>: bonus damage +2–10 → <b>+4–16</b>, knockback 0.3–0.5 → <b>0.5–0.8</b>.',
+        '<b>Mercenary</b>: cost +10, damage -5 → <b>-6</b>, no more 60% miss chance. New passive <b>Relentless</b>: each shot has a 50% chance to fly at a random other enemy within 5 of the target (if the target is alone, every shot hits it).',
+        '<b>Rambo</b>: <b>+5 damage</b>. <b>Operator</b>: armor +2 → <b>+4</b>. <b>Boomstick</b>: +10% at 8 range rising to <b>+300%</b> at 1 range (was 5 → 1, +10% → +100%).',
+        '<b>Shotgunner</b>: Scattershot 10 + 100% → <b>10 + 250%</b> of his attack damage, and it now gets the Boomstick bonus per target.',
+        '<b>Rifleman / Advanced Rifleman</b>: Rapid Fire armor stacks now each have their own timer (new hits no longer refresh old stacks).',
+        '<b>Dual Wielder / Desperado</b>: <b>+20 damage</b>.',
+      ] },
+      { title: 'Sniper', items: [
+        '<b>Sniper</b> damage 24 → <b>40</b>.',
+        '<b>Bull\'s Eye</b> reworked: instead of every 4th attack, <b>always a critical strike against full-health targets</b>. Hollow Points max level now also crits at 90%+ HP (the old "every 3rd shot" bonus is gone).',
+        '<b>Marksman / Sharpshooter / High Marksman</b>: <b>+5 attack speed</b>. <b>Vendetta</b>: damage +15 → <b>+30</b>, and the active gives <b>+5 move speed</b>. <b>Dead Eye</b>: damage +30 → <b>+50</b>.',
+      ] },
+      { title: 'Riot Skirmisher & Recon Drone', items: [
+        '<b>Riot Skirmisher</b> armor 3 → <b>6</b>. <b>Bulwark</b> frontal reduction 30% → <b>80%</b>.',
+        '<b>Warden</b>: HP +200 → <b>+300</b>. <b>Iron Will</b>: 80% less physical damage from buildings, towers and bases, but <b>50% more damage from troops</b>.',
+        '<b>Juggernaut</b>: HP +200 → <b>+300</b>. <b>Gold Will</b> reworked: <b>80% less damage from troops</b>, but 50% more damage from buildings, towers and bases (the +75% siege damage is gone).',
+        '<b>Recon Drone</b>: damage 20 → <b>22</b>, HP 45 → <b>60</b>, ward 0 → <b>1</b>.',
+      ] },
+      { title: 'Balance watch', items: [
+        'In equal-gold test fights: 3 Juggernauts beat 9 Vikings and lost almost no HP. 6 Storm Vikings beat 6 Police without a loss. 2 Desperados beat 2 Hunters in 2.5s. 6 base Police beat 6 base Vikings without a loss. Expect follow-up nerfs/buffs there.',
+      ] },
+    ],
+  },
+  {
     version: '0.30.0', date: '2026-10-26T20:20:00+08:00', title: 'Modern skill trees: Sniper, Riot Skirmisher, Recon Drone', author: 'AyatoAishi',
     sections: [
       { title: 'Sniper', items: [

@@ -44,8 +44,8 @@ export function levelInfo(xp, tier = 1) {
 }
 
 // Scout Ranger / Stalker: Eagle Eye becomes 30% chance for a TRUE STRIKE (can't miss or be evaded) with +30% damage + 5 magic
-const EAGLE_EYE_SCOUT = { chance: 0.3, bonusDamage: 0, bonusPct: 0.3, bonusMagic: 5, trueStrike: true,
-  desc: '30% chance on each shot to be a true strike (can\'t miss or be evaded) that deals +30% damage and 5 bonus magic damage.' };
+const EAGLE_EYE_SCOUT = { chance: 0.4, bonusDamage: 0, bonusPct: 0.3, bonusMagic: 5, trueStrike: true,
+  desc: '40% chance on each shot to be a true strike (can\'t miss or be evaded) that deals +30% damage and 5 bonus magic damage.' };
 
 // Imp recolors: skin, belly, ears, wings
 const IMP_SKIN = (skin, belly, ears, wing) => ({ 0xb8342a: skin, 0xd0503e: belly, 0xa02a22: ears, 0x6a1a20: wing });
@@ -62,19 +62,19 @@ export const SKILL_TREES = {
     },
     lightning: {
       name: 'Lightning Viking', from: null, level: 5,
-      stats: { attackSpeed: 10 }, abilities: ['chainLightning'],
+      stats: { attackSpeed: 10, moveSpeed: 0.3 }, abilities: ['chainLightning'],
       look: { eyes: 0x6fe3ff, hair: { 0xc8642a: 0xe8e2c8, 0xa84f1e: 0xc9c2a2 }, gear: ['stormAxe'] },
       desc: 'Hits arc lightning through crowds.',
     },
     chaotic: {
       name: 'Chaotic Viking', from: 'frenzy', level: 15,
-      stats: { hpRegen: 2 }, abilityMods: { fury: { maxStacks: 0 } },
+      stats: { hpRegen: 2 }, abilityMods: { fury: { maxStacks: 20 } },
       look: { eyes: 0xffe14a, hair: { 0xc8642a: 0x2a0a0a, 0xa84f1e: 0x1a0505 }, gear: ['warpaint', 'chaosAxe', 'spikedHelm', 'embers'] },
-      desc: 'Fury without a cap.',
+      desc: 'Fury stacks up to 20.',
     },
     storm: {
       name: 'Storm Viking', from: 'lightning', level: 15,
-      stats: { attackSpeed: 20, moveSpeed: 0.3 }, abilityMods: { chainLightning: { damage: 40, chance: 0.3 } },
+      stats: { attackSpeed: 20, moveSpeed: 0.3 }, abilityMods: { chainLightning: { damage: 80, chance: 0.3, pctMaxHp: 0.05 } },
       look: { eyes: 0xffffff, hair: { 0xc8642a: 0x5a7bd8, 0xa84f1e: 0x3e5ab0 }, colors: { 0x7a2e22: 0x24345e }, gear: ['stormAxe', 'wingHelm', 'sparks'] },
       desc: 'Stronger, more frequent lightning.',
     },
@@ -88,7 +88,7 @@ export const SKILL_TREES = {
     },
     stalker: {
       name: 'Stalker', from: 'scout', level: 15,
-      cost: 5, stats: { damage: 2, range: 1, mana: 100, manaRegen: 1 }, abilities: ['cutThroat'], abilityMods: { eagleEye: EAGLE_EYE_SCOUT },
+      cost: 5, stats: { damage: 2, range: 1 }, abilities: ['cutThroat'], abilityMods: { eagleEye: EAGLE_EYE_SCOUT },
       look: { eyes: 0xff3b2f, hair: { 0x2a1d14: 0x14141a, 0x8a3b1e: 0x24242e }, colors: { 0x3d5a24: 0x1e1e26, 0x34501f: 0x16161c, 0x4e6b2e: 0x2a2a34 }, gear: ['faceMask', 'backDaggers'] },
       desc: 'Longer reach, untouchable after kills.',
     },
@@ -106,7 +106,7 @@ export const SKILL_TREES = {
     },
     hunter: {
       name: 'Hunter', from: 'stray', level: 15,
-      stats: { attackSpeed: 20, moveSpeed: 0.5 }, abilityMods: { bowsling: { chance: 1 } },
+      stats: { attackSpeed: 40, moveSpeed: 0.5 }, abilityMods: { bowsling: { chance: 1 } },
       look: { eyes: 0xff9a2a, hair: { 0x2a1d14: 0xe8e8e8, 0x8a3b1e: 0xc8c8c8 }, gear: ['wolfPelt'] },
       desc: 'Every shot is a double shot.',
     },
@@ -152,9 +152,9 @@ export const SKILL_TREES = {
   lancer: {
     crusader: {
       name: 'Crusader', from: null, level: 5,
-      stats: { damage: 5, hp: 50, moveSpeed: 0.4 },
+      stats: { damage: 5, hp: 50, moveSpeed: 0.4 }, abilities: ['flay'],
       look: { colors: { 0x2f62b8: 0xf0f0f0, 0xffffff: 0xc0392b, 0xc0392b: 0xf0f0f0 }, gear: ['crusaderCross'] },
-      desc: 'Tougher, harder, faster.',
+      desc: 'Tougher, faster + Flay (spin attack).',
     },
     legion: {
       name: 'Legion Commander', from: 'crusader', level: 15,
@@ -172,7 +172,7 @@ export const SKILL_TREES = {
   elf: {
     highElf: {
       name: 'High Elf', from: null, level: 5,
-      stats: { damage: 8 }, abilityMods: { arrowPiercer: { postBuff: { as: 50, attacks: 3, t: 4 } } },
+      stats: { damage: 8 }, abilityMods: { arrowPiercer: { postBuff: { as: 70, attacks: 5, t: 6 } } },
       look: { colors: { 0xe8e2c8: 0xf7e7a0, 0x4aa3ff: 0xf2c94c, 0xd8c890: 0xf2c94c }, gear: ['goldCrown'] },
       desc: 'Arrow Piercer speeds up her draw.',
       needs: { grant: 'arrowPiercer', text: 'The Arrow Piercer boost needs the Arrow Piercer Barracks upgrade' },
@@ -299,19 +299,19 @@ export const SKILL_TREES = {
     },
     mercenary: {
       name: 'Mercenary', from: 'machineGunner', level: 15,
-      stats: { attackSpeed: 100, missChance: 60, damage: -5 }, abilityMods: { fervor: { pctPerStack: 0.1, maxStacks: 0 } },
+      cost: 10, stats: { attackSpeed: 100, damage: -6 }, abilities: ['relentless'], abilityMods: { fervor: { pctPerStack: 0.1, maxStacks: 0 } },
       look: { colors: { 0x7fd4ff: 0xff3b2f, 0x3b4652: 0x5a4a2a, 0x2b3540: 0x8a1a1a }, gear: ['lmg', 'bandolier'] },
-      desc: 'Bullet hose: endless Fervor, poor aim.',
+      desc: 'Bullet hose: endless Fervor, sprays the crowd.',
     },
     rambo: {
       name: 'Rambo', from: 'machineGunner', level: 15,
-      stats: { attackSpeed: 20, range: 1 }, abilities: ['doubleTap'],
+      stats: { attackSpeed: 20, range: 1, damage: 5 }, abilities: ['doubleTap'],
       look: { colors: { 0x7fd4ff: 0xff3b2f, 0x3b4652: 0x4a5a30 }, gear: ['lmg', 'headband', 'bandolier'] },
       desc: 'Double Tap every 6s.',
     },
     operator: {
       name: 'Operator', from: null, level: 5,
-      stats: { damage: 5, armor: 2 }, abilities: ['boomstick'],
+      stats: { damage: 5, armor: 4 }, abilities: ['boomstick'],
       look: { colors: { 0x7fd4ff: 0x5cff7a }, gear: ['shotgun'] },
       desc: 'Close shots hit harder.',
     },
@@ -335,13 +335,13 @@ export const SKILL_TREES = {
     },
     dualWielder: {
       name: 'Dual Wielder', from: null, level: 5,
-      stats: { range: -1, attackSpeed: 20 }, abilities: ['flick'],
+      stats: { range: -1, attackSpeed: 20, damage: 20 }, abilities: ['flick'],
       look: { colors: { 0x7fd4ff: 0xd070ff }, gear: ['pistols'] },
       desc: 'Flick back when attacked.',
     },
     desperado: {
       name: 'Desperado', from: 'dualWielder', level: 15,
-      stats: { range: -1, attackSpeed: 30 }, abilityMods: { flick: { onAttack: true } },
+      stats: { range: -1, attackSpeed: 30, damage: 20 }, abilityMods: { flick: { onAttack: true } },
       look: { colors: { 0x7fd4ff: 0xd070ff, 0x3b4652: 0x8a5a2b }, gear: ['pistols', 'cowboyHat', 'poncho'] },
       desc: 'Flick when attacking too.',
     },
@@ -350,19 +350,19 @@ export const SKILL_TREES = {
   sniper: {
     marksman: {
       name: 'Marksman', from: null, level: 5,
-      stats: { range: 1 }, abilities: ['steadyAim'],
+      stats: { range: 1, attackSpeed: 5 }, abilities: ['steadyAim'],
       look: { colors: { 0x3f4d2a: 0x6b5a3a, 0x2f3a26: 0x4a3e28 }, gear: ['scopeGlint'] },
       desc: 'Shots pierce evasion.',
     },
     sharpshooter: {
       name: 'Sharpshooter', from: 'marksman', level: 15,
-      stats: { range: 2, vision: [8, 4] }, abilities: ['precisionAura'],
+      stats: { range: 2, attackSpeed: 5, vision: [8, 4] }, abilities: ['precisionAura'],
       look: { colors: { 0x3f4d2a: 0x8a7a4a, 0x2f3a26: 0x5a4a2a, 0x4a5a3a: 0x5a5a3a }, gear: ['scopeGlint', 'spotterFlag'] },
       desc: 'Aura: allies +1 range, +6 damage.',
     },
     highMarksman: {
       name: 'High Marksman', from: 'marksman', level: 15,
-      stats: { range: 1 }, abilities: ['execution'],
+      stats: { range: 1, attackSpeed: 5 }, abilities: ['execution'],
       look: { colors: { 0x3f4d2a: 0x2a2a2a, 0x2f3a26: 0x1a1a1a, 0x4a5a3a: 0x3a3a3a }, gear: ['scopeGlint', 'brassBelt'] },
       desc: 'Killing shots bounce to the next one.',
     },
@@ -374,13 +374,13 @@ export const SKILL_TREES = {
     },
     vendetta: {
       name: 'Vendetta', from: 'assassin', level: 15,
-      stats: { damage: 15 }, abilities: ['vendetta'],
+      stats: { damage: 30 }, abilities: ['vendetta'],
       look: { colors: { 0x3f4d2a: 0x16161c, 0x2f3a26: 0x0d0d10, 0x4a5a3a: 0x1e1e26, 0x3a4630: 0x16161a }, gear: ['redWrap', 'shadowWisps'] },
       desc: 'Invisible close-range ambush.',
     },
     deadEye: {
       name: 'Dead Eye', from: 'assassin', level: 15,
-      stats: { damage: 30, attackSpeed: -10 }, abilities: ['assassinate'],
+      stats: { damage: 50, attackSpeed: -10 }, abilities: ['assassinate'],
       look: { colors: { 0x3f4d2a: 0x3a1a1a, 0x2f3a26: 0x220e0e, 0x4a5a3a: 0x2a1a1a, 0x3a4630: 0x1e1010 }, gear: ['redWrap', 'redLaser'] },
       desc: 'Assassinate: long-range missing-HP shot.',
     },
@@ -394,9 +394,9 @@ export const SKILL_TREES = {
     },
     warden: {
       name: 'Warden', from: 'fortress', level: 15,
-      stats: { hp: 200, armor: 3 }, abilities: ['ironWill'],
+      stats: { hp: 300, armor: 3 }, abilities: ['ironWill'],
       look: { colors: { 0x232c40: 0x5a6a7a, 0x1a1f2a: 0x3a4a5a }, gear: ['shieldRim', 'wardenCrest'] },
-      desc: 'Shrugs off tower and base fire.',
+      desc: 'Siege tank: shrugs off buildings, weak to troops.',
     },
     dire: {
       name: 'Dire', from: 'fortress', level: 15,
@@ -412,9 +412,9 @@ export const SKILL_TREES = {
     },
     juggernaut: {
       name: 'Juggernaut', from: 'breaker', level: 15,
-      stats: { hp: 200, ward: 3 }, abilities: ['goldWill'],
+      stats: { hp: 300, ward: 3 }, abilities: ['goldWill'],
       look: { colors: { 0x232c40: 0xb08a3a, 0x1c2436: 0x5a4a2a, 0x1a1f2a: 0x8a6a2a }, gear: ['igniteCore', 'goldPlates'] },
-      desc: '+75% physical damage to buildings.',
+      desc: 'Frontline tank: shrugs off troops, weak to buildings.',
     },
     striker: {
       name: 'Striker', from: 'breaker', level: 15,
