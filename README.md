@@ -126,6 +126,7 @@ Systems are split so new features plug in without touching each other:
 - **A building is a unit** with a `structure` block in `UNITS` (cannon, howitzer): `buildTime, footprint, minRange, splash, shell, flight, knockback, groundOnly`. It never moves, doesn't count toward pop, registers its footprint with `terrain.addObstacle` (removed on death), and runs `Unit.updateStructure` (construction → aim → `Game.fireShell`).
 - **Rules** in `GAME.build` (maxPerSide, maxDist, clearance, refund) and `Game.canPlace(team, id, x, z)` (returns an error string or null). `Game.build` pays and starts construction; `Game.placeStructure(..., instant)` is also used by the Dev Lab sandbox.
 - **Shells**: `Game.fireShell / updateShells / explodeShell` — arc from the muzzle to the target's spot (no leading), splash 100% → 50% at the edge, howitzer shows a landing ring.
+- **Model check**: `node scripts/check-models.mjs [id ...]` builds every upgrade level of the buildings in `BUILD_TREES` in 5 poses (rest, full elevation, recoil, both, spinning parts turned) and lists boxes that float or dip below the ground. Exit code 1 on any problem.
 - **Upgrades** tweak buildings through the `structureMods` effect (`{ unit, perLevel: { minRange, splash } }` → `team.structMods`), plus normal `unitStats` (range). Buildings are included in `upgradesFor` like roster troops.
 - **AI**: `Game.aiBuild` sets `T.aiBuildGoal`, `aiSaving` holds troop purchases while it saves (unless threatened), then it places the building behind its front line.
 

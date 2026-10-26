@@ -89,14 +89,15 @@ All 16 artillery models across both factions (Levels 1–5, Paths A & B) have be
   * Cannon B3 (Twin Cannons): 49 boxes (< 95 max) — triple carriage cheeks, dual independent recoil barrels and touchholes.
   * Cannon B4 (Grapeshot Battery): 94 boxes (< 95 max) — 3-barrel radial fanned blunderbuss array (3.5° outward fan), flared bronze bells with polished brass rims and dark hollow bore openings (no colliding yellow bars), fortified embrasured timber mantlet, 8-faceted spoked wheels with felloes, elevation screw crank, open ammo chest with 2 tin canister shot rounds, and authentic quilted rope grapeshot stand with flank swab tool.
   * Cannon B5 (Thunder Organ): 137 boxes (< 140 max; 128 structure + 9 scaffold) — zero Z-fighting overhaul: sub-barrel steel cradle (no coplanar breeches), armored steel pavise mantlet with open barrel embrasure and observation vision slit, mortise-stepped 8-spoke artillery wheels with brass hubcaps, unified sloping oak trail with parented recoil spade shoe and lunette, 7 independent recoil iron barrels with bronze cascabels, drilled brass touchholes (registered in `r.touchholes` for synchronized sequential sparks), bronze astragals, brass muzzle mouth collars, dark hollow bore openings, continuous elevated brass powder train trough with black gunpowder core, and rich siege clutter (open ammo chest with tin canister shot round, oak sabot, paper powder cartridge, heavy banded powder keg with red bung, and gunner's linstock staff with glowing slow-match ember).
-  * Howitzer Lv 1 (Field Howitzer): 38 boxes (< 70 max) — concrete pad, sandbags, split trails with spade outriggers, periscope shield, hydraulic recuperator, ammo box with shell.
-  * Howitzer Lv 2 (Heavy Howitzer): 53 boxes (< 70 max) — sandbag bastions, serrated spades, armored wing mantlets, digital terminal with LED, dual hydraulic cylinders, ready-shell rack.
-  * Howitzer A3 (Long Tom): 34 boxes (< 95 max) — 4.4m barrel, counterweight stanchions, traverse gear, periscope, spent brass casing.
-  * Howitzer A4 (Guided Shells): 34 boxes (< 95 max) — rotating radar mast/dish, ballistic computer, optic laser sensor, muzzle velocity coils.
-  * Howitzer A5 (Railgun): 33 boxes (< 140 max) — twin rails, heavy capacitor blocks, diagnostic bars, side heatsinks, 6 glowing cyan acceleration coils (`r.glow`).
-  * Howitzer B3 (Autoloader): 29 boxes (< 95 max) — transit wheels, split trails, side-mounted revolving 6-round ammo drum magazine (`r.drum`).
-  * Howitzer B4 (MLRS): 34 boxes (< 95 max) — 6-wheel mobile chassis, armored cab, 6-tube rocket pod (3x2), rear exhaust vent (`r.exhaust`).
-  * Howitzer B5 (Thermobaric): 42 boxes (< 140 max) — heavy tracked chassis, road wheels, blast cab, quad-silo pod with hazard chevron stripes, heavy flame exhaust (`r.exhaust`).
+  * Howitzer Lv 1 (Field Howitzer): 69 boxes (< 70 max) — sandbag corners, towed carriage, shield halves + apron, recuperator over the tube, split trail with dug-in spades, ammo crate.
+  * Howitzer Lv 2 (Heavy Howitzer): 68 boxes (< 70 max) — front sandbag berm, bigger wheels, wing mantlets, twin recuperators, bore evacuator, double-baffle brake, ballistic terminal, ready rack.
+  * Howitzer A3 (Long Tom): 77 boxes (< 95 max) — concrete gun pit, octagonal turntable, pedestal + tall cheeks, equilibrators, 4.4 m tube, rear crew deck with rail, rangefinder, ready rack.
+  * Howitzer A4 (Guided Shells): 92 boxes (< 95 max) — Long Tom + braced radar mast with spinning dish (`r.radar`), fire-control computer cabled to it, laser designator, finned guided rounds, fuze setter.
+  * Howitzer A5 (Railgun): 91 boxes (< 140 max) — armoured turret with glacis, twin rails with 6 glowing coils + bore line, capacitor banks with glowing cells and power cables, cooling stack (`r.glow`).
+  * Howitzer B3 (Autoloader): 93 boxes (< 95 max) — Lv 2 carriage + 6-round drum magazine on an axle (`r.drum`), rear strut to the trail, hydraulic power pack, ammo pallet.
+  * Howitzer B4 (MLRS): 85 boxes (< 95 max) — static 6-wheel truck (cab, jacks, mudguards), launcher turntable on the bed (`r.yaw`), 6-rocket pod whose rockets pull into the tubes on fire (`r.recoil`), back-blast (`r.exhaust`).
+  * Howitzer B5 (Thermobaric): 104 boxes (< 140 max) — static tracked hull (road wheels, skirts, reactive armour, cupola), armoured 8-rocket launcher with hazard bands, beacon, back-blast.
+  * All Howitzer designs are one connected piece in every pose: `node scripts/check-models.mjs howitzer`.
 
 ### 2.4 Shared Architectural & Animation Standards Established
 1. **Flag & Stripe Lockstep Rig**:
@@ -179,31 +180,13 @@ The base structure rig in [`js/models.js`](file:///c:/Users/Admin/EraClash/js/mo
     * **B4 — Grapeshot Battery**: 3-barrel radial fanned blunderbuss array (3.5° outward fan), flared bronze bells with polished brass rims and dark hollow bore openings, fortified embrasured timber mantlet, 8-faceted spoked wheels, elevation screw crank, open ammo chest with tin canister rounds, and authentic quilted rope grapeshot stand.
     * **B5 — Thunder Organ (Overhauled — 137 boxes)**: 7-barrel ribauldequin spread horizontally across an armored broad cart with open-embrasure steel pavise mantlet, sub-barrel cradle, continuous elevated brass powder train trough, 7 independent recoil units with drilled touchholes and flash muzzles, and complete siege artillery field clutter (ammo chest, canister round, powder keg, glowing linstock staff).
 
-### 4.2 Howitzer (Modern Artillery)
-* **Upgrade Tree**:
-  * **Lv 1 — Field Howitzer (Baseline Complete — 38 boxes)**:
-    * Concrete firing pad with sandbag revetment corners.
-    * Split-trail tubular legs anchored with wide triangular spade outriggers that bite into the dirt.
-    * Pneumatic rubber tires with steel hubs on transit axle.
-    * Angled steel splinter shield with panoramic optical periscope sight slit.
-    * Rifled barrel with dual-cylinder hydraulic recuperator assembly mounted above the tube and perforated multi-baffle muzzle brake.
-    * Clutter: Open ammo crate with ready brass artillery shell.
-  * **Lv 2 — Heavy Howitzer (Baseline Complete — 53 boxes)**:
-    * Extended concrete pad with interlocking sandbag bastions.
-    * Heavy box-girder split-trail legs with serrated spade outriggers and anchoring pins.
-    * Widened angled armor shield with fold-out side wing mantlets and armored periscope hood.
-    * Gunner's ballistic computer terminal with glowing green LED status lights.
-    * Heavy dual hydraulic buffer cylinders (upper buffer + lower hydropneumatic recuperator).
-    * Heavy rifled barrel with thermal sleeve and massive double-baffle muzzle brake.
-    * Tactical shell carrier rack holding 2 brass artillery shells.
-  * **Path A (Precision & Direct Energy)**:
-    * **A3 — Long Tom**: Extra-long rifled barrel, counterweight breech block, 360° circular turn ring.
-    * **A4 — Guided Shells**: Targeting radome dish, ballistic mast, optic laser emitter box.
-    * **A5 — Railgun**: Twin magnetic rail stanchions, capacitive power conduits, glowing energy cells (`0x40e8ff`).
-  * **Path B (Saturation & Rocket Systems)**:
-    * **B3 — Autoloader**: Rear-mounted revolving cylinder magazine with visible heavy shells.
-    * **B4 — MLRS**: Boxed 6-tube or 12-tube rocket pod assembly mounted on a heavy turntable with rear back-blast exhaust.
-    * **B5 — Thermobaric**: Armored quad-missile silo pod with orange hazard stripes, heavy blast shields, and rear rocket exhaust.
+### 4.2 Howitzer (Modern Artillery) — overhauled v0.25.1
+* **Family look**: concrete pad, olive + steel, spades dug into the ground. Path A stays a fixed gun pit and grows taller and more high-tech; path B goes mobile.
+* **Rig rules**: the tube recoils inside a fixed cradle on `r.barrel`; the cradle hangs on a trunnion axle on the pitch axis, so nothing comes loose at any elevation or recoil. On B4/B5 the vehicle sits on `r.body` and only the launcher turns on `r.yaw`.
+* **Lv 1 — Field Howitzer**: towed M101-style gun, sandbag corners, split shield, recuperator, split trail.
+* **Lv 2 — Heavy Howitzer**: M198-style, front berm, wing mantlets, twin recuperators, bore evacuator, double-baffle brake.
+* **Path A (Precision)**: A3 Long Tom (gun pit, pedestal, 4.4 m tube, crew deck) → A4 Guided Shells (+ radar mast, fire-control computer, laser designator) → A5 Railgun (armoured turret, glowing rails and capacitor banks).
+* **Path B (Saturation)**: B3 Autoloader (drum magazine) → B4 MLRS (6-wheel truck, 6 rockets) → B5 Thermobaric (tracked hull, 8 rockets).
 
 ### 4.3 Archer Tower (Medieval Defense)
 * **Upgrade Tree**:

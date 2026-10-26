@@ -1486,6 +1486,88 @@ function buildBronzeCannon(r, m) {
 }
 
 // Howitzer: Lv1 Field, Lv2 Heavy, A3 Long Tom, A4 Guided Shells, A5 Railgun, B3 Autoloader, B4 MLRS, B5 Thermobaric.
+// Family look: concrete pad, olive + steel, dug-in spades. Path A stays a fixed gun pit and gets taller and more
+// high-tech; path B goes mobile (autoloader carriage → MLRS truck → tracked launcher, launcher turns on `r.yaw`).
+// Every design is one connected piece in every pose: `node scripts/check-models.mjs howitzer`. The tube recoils
+// inside a fixed cradle, and the cradle hangs on a trunnion axle that sits on the elevation axis.
+const HZ = {
+  OLIVE: 0x4a5a36, OLIVE_D: 0x36442a, OLIVE_L: 0x5f7246, STEEL: 0x3a3e45, GUN: 0x24272c, CHROME: 0x9aa2ac, TYRE: 0x1a1b1e,
+  BRASS: 0xc9a050, CONC: 0x8a8e94, CONC_D: 0x72767c, SAND: 0xa8956a, SAND_D: 0x8c7a52, GLASS: 0x4fa8e0, LED: 0x3ae35f,
+  RED: 0xd03020, YEL: 0xf2c94c, DK: 0x161719, CYAN: 0x40e8ff,
+};
+const GLASS_FX = { emissive: 0x0b2a44 };
+
+/** A box stretched from point a to point b (cross-section w × h): trails, braces, cables, struts. */
+function beam(parent, a, b, w, h, color, mats, extra) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.hypot(dx, dy, dz);
+  const mesh = B(parent, w, h, len, color, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, mats, extra);
+  mesh.rotation.order = 'YXZ';
+  mesh.rotation.y = Math.atan2(dx, dz);
+  mesh.rotation.x = -Math.atan2(dy, Math.hypot(dx, dz));
+  return mesh;
+}
+const lerp3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+
+/** Road wheel facing ±x: stepped tyre, steel rim, hub (`hub` false = 3 boxes for vehicles with many wheels). */
+function hzWheel(parent, x, y, z, D, w, mats, hub = true) {
+  B(parent, w, D, D * 0.6, HZ.TYRE, x, y, z, mats);
+  B(parent, w, D * 0.6, D, HZ.TYRE, x, y, z, mats);
+  B(parent, w + 0.04, D * 0.46, D * 0.46, HZ.STEEL, x, y, z, mats);
+  if (hub) B(parent, w + 0.1, D * 0.18, D * 0.18, HZ.OLIVE_D, x, y, z, mats);
+}
+/** Concrete pad (top at y = 0.14) and the turntable pivot on it. */
+function hzPad(r, m, s) {
+  B(r.body, s, 0.14, s, HZ.CONC, 0, 0.07, 0, m);
+}
+/** L-shaped sandbag corner at (x, z); sx/sz = which way the arms run (toward the pad centre). */
+function hzBagCorner(parent, m, x, z, sx, sz, y = 0.14) {
+  B(parent, 0.62, 0.22, 0.32, HZ.SAND, x + sx * 0.15, y + 0.11, z, m);
+  B(parent, 0.32, 0.22, 0.62, HZ.SAND_D, x, y + 0.11, z + sz * 0.15, m);
+  B(parent, 0.4, 0.2, 0.3, HZ.SAND, x + sx * 0.06, y + 0.31, z + sz * 0.06, m);
+}
+/** Split trail: two legs from the carriage to spades dug into the ground (yaw-local ground = -0.14). Returns the leg ends. */
+function hzTrails(r, m, o) {
+  const legs = [];
+  for (const s of [-1, 1]) {
+    const a = [s * o.x0, o.y0, o.z0], e = [s * (o.x0 + Math.sin(o.spread) * o.len), -0.14 + o.spadeH * 0.62, o.z0 - Math.cos(o.spread) * o.len];
+    const leg = beam(r.yaw, a, e, o.w, o.h, o.color || HZ.OLIVE_D, m);
+    const sp = B(r.yaw, o.spadeW, o.spadeH, 0.1, HZ.STEEL, e[0], -0.14 + o.spadeH / 2, e[2], m);   // spade blade, bottom on the ground
+    sp.rotation.y = leg.rotation.y;
+    legs.push({ a, e, rotY: leg.rotation.y });
+  }
+  const [L, R] = legs, t = o.brace ?? 0.4;
+  beam(r.yaw, lerp3(L.a, L.e, t), lerp3(R.a, R.e, t), 0.09, 0.09, HZ.STEEL, m);                   // cross brace
+  return legs;
+}
+/**
+ * Elevating mass. On `r.barrel` (pitch only): trunnion axle + cradle (+ recuperators via o.extra).
+ * On `r.recoil`: tube, breech, bands, bore evacuator, muzzle brake with side ports, hidden muzzle flash.
+ */
+function hzGun(r, m, o) {
+  r.barrel = pivot(r.yaw, 0, o.y, o.z);
+  r.recoil = pivot(r.barrel, 0, 0, 0); r.recoils = [r.recoil];
+  const c = o.cradle, t = o.tube, br = o.breech, k = o.brake;
+  B(r.barrel, o.axleW, 0.18, 0.18, HZ.GUN, 0, 0, 0, m);                                              // trunnion axle (on the pitch axis)
+  B(r.barrel, c.w, c.h, c.z1 - c.z0, HZ.OLIVE_D, 0, 0, (c.z0 + c.z1) / 2, m);                        // cradle the tube slides in
+  B(r.recoil, t.d, t.d, t.z1 - t.z0, t.color || HZ.OLIVE, 0, 0, (t.z0 + t.z1) / 2, m);               // tube
+  B(r.recoil, br.w, br.h, br.l, HZ.GUN, 0, 0, t.z0 - br.l / 2 + 0.02, m);                              // breech ring
+  B(r.recoil, 0.06, 0.06, br.l * 0.8, HZ.CHROME, br.w / 2 + 0.03, br.h * 0.2, t.z0 - br.l / 2, m);    // breech lever
+  for (const z of t.bands || []) B(r.recoil, t.d + 0.06, t.d + 0.06, 0.12, HZ.OLIVE_D, 0, 0, z, m);
+  if (t.evac) B(r.recoil, t.d + 0.14, t.d + 0.14, t.evac[1], HZ.OLIVE_L, 0, 0, t.evac[0], m);          // bore evacuator
+  const bz = t.z1 + k.l / 2 - 0.08, seg = k.l / (k.ports * 2 + 1);
+  B(r.recoil, k.w, k.h, k.l, HZ.STEEL, 0, 0, bz, m);                                                  // muzzle brake
+  for (let i = 0; i < k.ports; i++) for (const s of [-1, 1]) B(r.recoil, 0.05, k.h * 0.6, seg, HZ.DK, s * (k.w / 2 + 0.015), 0, bz - k.l / 2 + (2 * i + 1.5) * seg, m);
+  const mz = B(r.recoil, k.w + 0.15, k.w + 0.15, k.w + 0.15, 0xffc860, 0, 0, bz + k.l / 2 + (k.w + 0.15) / 2, m, { emissive: 0xff8a00 });
+  mz.castShadow = false; r.muzzle = mz; r.muzzles = [mz];
+  r.rest = o.rest; r.barrel.rotation.x = o.rest;
+  return bz;
+}
+/** Brass shell lying along z (body + steel nose). */
+function hzShell(parent, m, x, y, z, l = 0.36, d = 0.11) {
+  B(parent, d, d, l, HZ.BRASS, x, y, z, m);
+  B(parent, d * 0.7, d * 0.7, 0.08, HZ.STEEL, x, y, z + l / 2 + 0.03, m);
+}
+
 export function buildHowitzer(level = 1, path = null) {
   const r = structureRig(), m = r.mats;
   r.rigType = 'howitzer';
@@ -1501,423 +1583,426 @@ export function buildHowitzer(level = 1, path = null) {
   return buildFieldHowitzer(r, m);
 }
 
-/** Howitzer A3: Long Tom - Ultra-long 4.4m barrel, counterweight stanchions, traverse gear, and periscope. */
-function buildLongTom(r, m) {
-  const OLIVE = 0x3d4b30, DARK_OLIVE = 0x2a3520, STEEL = 0x34373d, GUNMETAL = 0x1e2024, CHROME = 0x9aa2ac, BRASS = 0xc9a050;
-  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
-  r.yaw = pivot(r.body, 0, 0.16, 0);
-  B(r.yaw, 2.4, 0.16, 2.4, GUNMETAL, 0, 0.08, 0, m);
-  B(r.yaw, 2.5, 0.06, 2.5, STEEL, 0, 0.16, 0, m);
-
-  // Split-trail legs with wide spade outriggers
-  for (const s of [-1, 1]) {
-    const leg = B(r.yaw, 0.22, 0.2, 2.1, DARK_OLIVE, s * 0.55, 0.34, -1.05, m);
-    leg.rotation.y = s * 0.32;
-    B(r.yaw, 0.44, 0.24, 0.32, STEEL, s * 0.92, 0.18, -2.0, m);
-  }
-  // Heavy road wheels
-  B(r.yaw, 2.1, 0.18, 0.18, GUNMETAL, 0, 0.45, 0.1, m);
-  for (const s of [-1, 1]) {
-    B(r.yaw, 0.24, 0.9, 0.9, 0x1c1e22, s * 1.1, 0.45, 0.1, m);
-    B(r.yaw, 0.26, 0.45, 0.45, STEEL, s * 1.1, 0.45, 0.1, m);
-  }
-
-  // Turntable stanchions & Counterweight block
-  for (const s of [-1, 1]) B(r.yaw, 0.26, 0.9, 0.6, GUNMETAL, s * 0.55, 0.7, 0, m);
-  B(r.yaw, 1.2, 0.6, 1.1, DARK_OLIVE, 0, 0.55, -1.2, m);
-  // Traverse gear & periscope
-  B(r.yaw, 0.16, 0.28, 0.28, STEEL, 0.65, 0.8, 0.1, m);
-  B(r.yaw, 0.18, 0.4, 0.18, GUNMETAL, -0.65, 1.1, 0.15, m);
-  B(r.yaw, 0.14, 0.08, 0.08, 0x4fa8e0, -0.65, 1.25, 0.24, m, { emissive: 0x0b2a44 });
-
-  r.barrel = pivot(r.yaw, 0, 1.15, 0.1);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  r.recoils = [r.recoil];
-
-  B(r.recoil, 0.6, 0.56, 1.0, GUNMETAL, 0, 0, -0.4, m);
-  B(r.recoil, 0.42, 0.24, 2.0, STEEL, 0, 0.36, 0.8, m);
-  B(r.recoil, 0.32, 0.18, 0.8, CHROME, 0, 0.36, 1.9, m);
-  B(r.recoil, 0.32, 0.32, 4.4, OLIVE, 0, 0, 2.2, m);
-  B(r.recoil, 0.48, 0.38, 0.6, STEEL, 0, 0, 4.4, m);
-  const mz = B(r.recoil, 0.65, 0.65, 0.65, 0xffc860, 0, 0, 4.75, m, { emissive: 0xff8a00 });
-  mz.castShadow = false;
-  r.muzzle = mz; r.muzzles = [mz];
-
-  // Spent brass casing on deck
-  B(r.yaw, 0.14, 0.14, 0.55, BRASS, 0.35, 0.24, -0.7, m);
-
-  r.rest = -0.3; r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
-  r.barY = 2.6;
-  return finishStructure(r);
-}
-
-/** Howitzer A4: Guided Shells - Radar mast + rotating dish, ballistic computer, and optical laser sensor. */
-function buildGuidedShells(r, m) {
-  const OLIVE = 0x3d4b30, DARK_OLIVE = 0x2a3520, STEEL = 0x34373d, GUNMETAL = 0x1e2024;
-  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
-  r.yaw = pivot(r.body, 0, 0.16, 0);
-  B(r.yaw, 2.4, 0.16, 2.4, GUNMETAL, 0, 0.08, 0, m);
-
-  for (const s of [-1, 1]) {
-    const leg = B(r.yaw, 0.24, 0.22, 1.9, OLIVE, s * 0.5, 0.32, -0.9, m);
-    leg.rotation.y = s * 0.3;
-    B(r.yaw, 0.42, 0.24, 0.3, STEEL, s * 0.82, 0.16, -1.8, m);
-  }
-  B(r.yaw, 2.0, 0.18, 0.18, GUNMETAL, 0, 0.44, 0.1, m);
-  for (const s of [-1, 1]) {
-    B(r.yaw, 0.24, 0.9, 0.9, 0x1c1e22, s * 1.05, 0.44, 0.1, m);
-    B(r.yaw, 0.26, 0.45, 0.45, STEEL, s * 1.05, 0.44, 0.1, m);
-  }
-
-  // Splinter shield with optic laser sensor box
-  const sh = B(r.yaw, 2.0, 1.1, 0.14, OLIVE, 0, 1.15, 0.5, m);
-  sh.rotation.x = -0.14;
-  B(r.yaw, 0.3, 0.2, 0.2, GUNMETAL, 0.55, 1.35, 0.55, m);
-  B(r.yaw, 0.14, 0.14, 0.06, 0xff2020, 0.55, 1.35, 0.65, m, { emissive: 0xaa0000 });
-
-  // Rotating fire-control radar mast + dish
-  const mast = pivot(r.yaw, -1.05, 0.2, -0.7);
-  B(mast, 0.14, 2.4, 0.14, STEEL, 0, 1.2, 0, m);
-  const dish = B(mast, 0.18, 0.9, 1.3, 0xd8dce2, 0.1, 2.4, 0, m);
-  dish.rotation.z = 0.28;
-  r.radar = mast;
-
-  // Ballistic computer cabinet
-  B(r.yaw, 0.7, 0.7, 0.5, 0x22252a, 1.05, 0.55, -0.7, m);
-  B(r.yaw, 0.5, 0.35, 0.06, 0x4fa8e0, 1.05, 0.65, -0.44, m, { emissive: 0x0b2a44 });
-  B(r.yaw, 0.12, 0.12, 0.06, 0x3ae35f, 1.05, 0.35, -0.44, m, { emissive: 0x168a28 });
-
-  r.barrel = pivot(r.yaw, 0, 1.15, 0.1);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  r.recoils = [r.recoil];
-
-  B(r.recoil, 0.58, 0.52, 0.95, GUNMETAL, 0, 0, -0.35, m);
-  B(r.recoil, 0.38, 0.24, 1.8, STEEL, 0, 0.34, 0.7, m);
-  B(r.recoil, 0.32, 0.32, 4.0, OLIVE, 0, 0, 2.0, m);
-  // Velocity radar measurement coils on muzzle
-  B(r.recoil, 0.44, 0.44, 0.25, 0x2a2d32, 0, 0, 3.5, m);
-  B(r.recoil, 0.46, 0.36, 0.55, STEEL, 0, 0, 4.05, m);
-  const mz = B(r.recoil, 0.65, 0.65, 0.65, 0xffc860, 0, 0, 4.35, m, { emissive: 0xff8a00 });
-  mz.castShadow = false;
-  r.muzzle = mz; r.muzzles = [mz];
-
-  r.rest = -0.3; r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
-  r.barY = 2.6;
-  return finishStructure(r);
-}
-
-/** Howitzer A5: Railgun - Twin magnetic rails, capacitor banks, power cables, and glowing capacitive coils. */
-function buildRailgun(r, m) {
-  const DK = 0x22252a, STEEL = 0x34373d, CYAN = 0x40e8ff, GLOW_CYAN = 0x0090c0;
-  B(r.body, 3.4, 0.18, 3.4, 0x82868c, 0, 0.09, 0, m);
-  r.yaw = pivot(r.body, 0, 0.18, 0);
-
-  // Turntable and heavy capacitor housing
-  B(r.yaw, 2.6, 0.3, 2.6, STEEL, 0, 0.15, 0, m);
-  B(r.yaw, 1.6, 1.0, 1.8, DK, 0, 0.8, -0.4, m);
-  for (const s of [-0.4, 0.4]) B(r.yaw, 0.15, 0.5, 0.04, CYAN, s, 0.85, 0.52, m, { emissive: GLOW_CYAN });
-  for (const s of [-1, 1]) {
-    B(r.yaw, 0.4, 0.7, 1.4, 0x2a2d32, s * 1.1, 0.65, -0.7, m);
-    B(r.yaw, 0.12, 0.12, 1.2, 0x181a1e, s * 0.85, 0.4, 0.2, m);
-  }
-
-  r.barrel = pivot(r.yaw, 0, 1.3, 0.2);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  r.recoils = [r.recoil];
-
-  for (const s of [-1, 1]) B(r.recoil, 0.2, 0.45, 4.8, 0x8a8f96, s * 0.24, 0, 2.1, m);
-  const glowCoils = [];
-  for (let k = 0; k < 6; k++) {
-    B(r.recoil, 0.82, 0.82, 0.18, 0x1e2024, 0, 0, 0.3 + k * 0.75, m);
-    const coil = B(r.recoil, 0.65, 0.14, 0.2, CYAN, 0, 0.4, 0.3 + k * 0.75, m, { emissive: GLOW_CYAN });
-    coil.castShadow = false;
-    glowCoils.push(coil);
-  }
-  r.glow = glowCoils;
-
-  const mz = B(r.recoil, 0.8, 0.8, 0.8, 0xa0f0ff, 0, 0, 4.6, m, { emissive: 0x60d0ff });
-  mz.castShadow = false;
-  r.muzzle = mz; r.muzzles = [mz];
-
-  r.rest = -0.04; r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, 1.7, 2.6, m);
-  r.barY = 2.8;
-  return finishStructure(r);
-}
-
-/** Howitzer B3: Autoloader - Revolving 6-round ammo drum magazine beside breech. */
-function buildAutoloader(r, m) {
-  const OLIVE = 0x3d4b30, STEEL = 0x34373d, GUNMETAL = 0x1e2024, BRASS = 0xc9a050;
-  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
-  r.yaw = pivot(r.body, 0, 0.16, 0);
-
-  for (const s of [-1, 1]) {
-    const leg = B(r.yaw, 0.24, 0.22, 1.9, OLIVE, s * 0.5, 0.32, -0.9, m);
-    leg.rotation.y = s * 0.3;
-    B(r.yaw, 0.42, 0.24, 0.3, STEEL, s * 0.82, 0.16, -1.8, m);
-  }
-  B(r.yaw, 1.9, 0.16, 0.16, GUNMETAL, 0, 0.42, 0.1, m);
-  for (const s of [-1, 1]) B(r.yaw, 0.24, 0.9, 0.9, 0x1c1e22, s * 1.05, 0.42, 0.1, m);
-
-  // Side-mounted revolving cylinder drum (6 rounds)
-  const drum = pivot(r.yaw, 0.82, 1.1, -0.35);
-  B(drum, 0.75, 0.75, 0.75, STEEL, 0, 0, 0, m);
-  for (let k = 0; k < 6; k++) {
-    const a = k / 6 * Math.PI * 2;
-    B(drum, 0.15, 0.15, 0.85, BRASS, Math.cos(a) * 0.32, Math.sin(a) * 0.32, 0, m);
-  }
-  r.drum = drum;
-  r.radar = drum;
-
-  r.barrel = pivot(r.yaw, 0, 1.15, 0.15);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  r.recoils = [r.recoil];
-
-  B(r.recoil, 0.54, 0.5, 0.9, GUNMETAL, 0, 0, -0.25, m);
-  B(r.recoil, 0.36, 0.24, 1.6, STEEL, 0, 0.3, 0.6, m);
-  B(r.recoil, 0.3, 0.3, 3.4, OLIVE, 0, 0, 1.7, m);
-  B(r.recoil, 0.45, 0.35, 0.5, STEEL, 0, 0, 3.4, m);
-  const mz = B(r.recoil, 0.6, 0.6, 0.6, 0xffc860, 0, 0, 3.7, m, { emissive: 0xff8a00 });
-  mz.castShadow = false;
-  r.muzzle = mz; r.muzzles = [mz];
-
-  r.rest = -0.45; r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
-  r.barY = 2.6;
-  return finishStructure(r);
-}
-
-/** Howitzer B4: MLRS - 6-wheel mobile artillery truck chassis with 6-tube rocket pod and rear back-blast. */
-function buildMLRS(r, m) {
-  const OLIVE = 0x485834, DK = 0x303c22;
-  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
-  r.yaw = pivot(r.body, 0, 0.16, 0);
-
-  // Heavy 6-wheel chassis
-  B(r.yaw, 1.8, 0.55, 3.3, OLIVE, 0, 0.55, -0.2, m);
-  for (const z of [-1.3, -0.3, 0.8]) {
-    for (const s of [-1, 1]) B(r.yaw, 0.3, 0.65, 0.65, 0x222428, s * 0.95, 0.32, z, m);
-  }
-  // Armored cab with tinted windows
-  B(r.yaw, 1.6, 0.85, 1.0, DK, 0, 1.25, 1.15, m);
-  B(r.yaw, 1.4, 0.32, 0.1, 0x4fa8e0, 0, 1.4, 1.66, m, { emissive: 0x0b2a44 });
-
-  // Boxed 6-tube rocket pod assembly (3x2)
-  r.barrel = pivot(r.yaw, 0, 1.25, -0.6);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  r.recoils = [r.recoil];
-
-  B(r.recoil, 1.5, 1.05, 2.2, OLIVE, 0, 0.35, 0.2, m);
-  for (let i = 0; i < 3; i++) {
-    for (let j = 0; j < 2; j++) {
-      const x = (i - 1) * 0.45, y = 0.35 + (j - 0.5) * 0.45;
-      B(r.recoil, 0.38, 0.38, 0.1, 0x1a1a1e, x, y, 1.32, m);
-      B(r.recoil, 0.24, 0.24, 0.12, 0xd8d8d8, x, y, 1.28, m);
-    }
-  }
-  const mz = B(r.recoil, 1.4, 0.9, 0.5, 0xffb040, 0, 0.35, 1.55, m, { emissive: 0xff7a00 });
-  mz.castShadow = false;
-  r.muzzle = mz; r.muzzles = [mz];
-
-  // Rear back-blast exhaust vent
-  const ex = B(r.recoil, 1.4, 0.9, 0.5, 0xff7020, 0, 0.35, -1.15, m, { emissive: 0xdd4000 });
-  ex.castShadow = false;
-  r.exhaust = ex;
-
-  r.rest = -0.5; r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
-  r.barY = 2.9;
-  return finishStructure(r);
-}
-
-/** Howitzer B5: Thermobaric - Heavy tracked vehicle chassis with quad thermobaric missile pod and hazard chevrons. */
-function buildThermobaric(r, m) {
-  const DK = 0x2e3034, STEEL = 0x42464c, HAZARD_Y = 0xf2c94c, HAZARD_B = 0x1a1a1a, RED = 0xd03020;
-  B(r.body, 3.4, 0.18, 3.4, 0x82868c, 0, 0.09, 0, m);
-  r.yaw = pivot(r.body, 0, 0.18, 0);
-
-  // Heavy tracked chassis
-  B(r.yaw, 1.9, 0.6, 3.4, DK, 0, 0.6, -0.2, m);
-  for (const s of [-1, 1]) {
-    B(r.yaw, 0.4, 0.55, 3.5, 0x202226, s * 1.05, 0.38, -0.2, m);
-    for (let z = -1.4; z <= 1.4; z += 0.7) B(r.yaw, 0.44, 0.35, 0.35, STEEL, s * 1.05, 0.38, z, m);
-  }
-  // Heavy armored cab with blast deflection shield
-  B(r.yaw, 1.7, 0.9, 1.1, 0x24262a, 0, 1.35, 1.15, m);
-  B(r.yaw, 1.4, 0.32, 0.1, 0x4fa8e0, 0, 1.5, 1.72, m, { emissive: 0x0b2a44 });
-
-  // Armored quad-missile silo pod (2x2 massive tubes)
-  r.barrel = pivot(r.yaw, 0, 1.35, -0.6);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  r.recoils = [r.recoil];
-
-  B(r.recoil, 1.7, 1.25, 2.3, DK, 0, 0.4, 0.2, m);
-  for (let i = 0; i < 2; i++) {
-    for (let j = 0; j < 2; j++) {
-      const x = (i - 0.5) * 0.72, y = 0.4 + (j - 0.5) * 0.72;
-      B(r.recoil, 0.6, 0.6, 0.12, 0x161618, x, y, 1.36, m);
-      B(r.recoil, 0.42, 0.42, 0.15, RED, x, y, 1.32, m);
-    }
-  }
-  // Black and yellow hazard chevron stripes across launcher face
-  for (let k = 0; k < 6; k++) {
-    B(r.recoil, 0.28, 0.08, 2.32, k % 2 ? HAZARD_B : HAZARD_Y, -0.7 + k * 0.28, 0.4 + 0.68, 0.2, m);
-  }
-  const mz = B(r.recoil, 1.6, 1.1, 0.6, 0xffa030, 0, 0.4, 1.65, m, { emissive: 0xff6000 });
-  mz.castShadow = false;
-  r.muzzle = mz; r.muzzles = [mz];
-
-  // Heavy rear flame exhaust
-  const ex = B(r.recoil, 1.6, 1.1, 0.6, 0xff5010, 0, 0.4, -1.2, m, { emissive: 0xee3000 });
-  ex.castShadow = false;
-  r.exhaust = ex;
-
-  r.rest = -0.5; r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, 1.7, 2.6, m);
-  r.barY = 3.0;
-  return finishStructure(r);
-}
-
-/** Howitzer Lv 1: Field Howitzer with split-trail carriage, spade outriggers, hydraulic recuperator, and ammo box. */
-function buildFieldHowitzer(r, m) {
-  const OLIVE = 0x425232, DARK_OLIVE = 0x303d24, STEEL = 0x383c44, GUNMETAL = 0x222428, SAND = 0xa8956a, CHROME = 0x88929e;
-  // 1. Concrete Firing Pad (within 3x3 footprint)
-  B(r.body, 2.8, 0.14, 2.8, 0x8a8e94, 0, 0.07, 0, m);
-  for (const [bx, bz] of [[-1.1, -1.1], [1.1, -1.1], [-1.1, 1.1], [1.1, 1.1]]) {
-    B(r.body, 0.65, 0.28, 0.45, SAND, bx, 0.21, bz, m);
-  }
-
-  // 2. Turntable Mount
+// ---------- towed carriage (Lv1, Lv2, B3) ----------
+/** Wheels, saddle, cheeks, crew shield and split trail. `heavy` = the Lv2 / B3 version. Returns the trail legs. */
+function hzCarriage(r, m, heavy) {
+  const D = heavy ? 1.0 : 0.9, wx = heavy ? 1.08 : 0.98, cx = heavy ? 0.4 : 0.36;
   r.yaw = pivot(r.body, 0, 0.14, 0);
-  B(r.yaw, 1.6, 0.14, 1.6, GUNMETAL, 0, 0.07, 0, m);
-
-  // 3. Split-trail tubular legs with triangular ground spades
+  B(r.yaw, 1.3, 0.08, 1.3, HZ.GUN, 0, 0.04, 0, m);                                  // firing baseplate
+  B(r.yaw, 0.3, 0.34, 0.3, HZ.STEEL, 0, 0.24, 0, m);                                // firing jack
+  B(r.yaw, wx * 2 - 0.1, 0.14, 0.14, HZ.GUN, 0, D / 2, 0.05, m);                    // axle
+  for (const s of [-1, 1]) hzWheel(r.yaw, s * wx, D / 2, 0.05, D, heavy ? 0.26 : 0.22, m);
+  B(r.yaw, cx * 2 + 0.2, 0.3, 0.72, HZ.OLIVE_D, 0, 0.56, 0, m);                     // saddle
+  for (const s of [-1, 1]) B(r.yaw, 0.12, 0.62, 0.58, HZ.OLIVE, s * cx, 0.98, 0, m); // cheeks (trunnion at y 1.15)
+  // crew shield: two halves leave a slot for the tube, an apron joins them under it
+  const hx = cx + 0.27, sw = heavy ? 0.6 : 0.52, sz = 0.29 + 0.04;
   for (const s of [-1, 1]) {
-    const leg = B(r.yaw, 0.18, 0.18, 1.8, DARK_OLIVE, s * 0.45, 0.32, -0.9, m);
-    leg.rotation.y = s * 0.28;
-    B(r.yaw, 0.38, 0.22, 0.28, STEEL, s * 0.78, 0.16, -1.75, m);
+    B(r.yaw, sw, heavy ? 1.0 : 0.9, 0.08, HZ.OLIVE, s * (cx - 0.05 + sw / 2), heavy ? 1.17 : 1.12, sz, m);
+    B(r.yaw, sw, 0.06, 0.2, HZ.OLIVE_D, s * (cx - 0.05 + sw / 2), heavy ? 1.7 : 1.6, sz - 0.08, m);   // folded top lip
   }
-
-  // 4. Wheels on transit axle
-  B(r.yaw, 1.9, 0.16, 0.16, GUNMETAL, 0, 0.42, 0.1, m);
-  for (const s of [-1, 1]) {
-    B(r.yaw, 0.22, 0.85, 0.85, 0x1c1e22, s * 0.98, 0.42, 0.1, m);
-    B(r.yaw, 0.24, 0.42, 0.42, STEEL, s * 0.98, 0.42, 0.1, m);
+  B(r.yaw, (cx - 0.05 + sw) * 2, 0.3, 0.08, HZ.OLIVE, 0, 0.56, sz, m);                                // apron
+  if (heavy) for (const s of [-1, 1]) {                                                                  // wing mantlets, angled back
+    const ox = cx - 0.05 + sw, w = B(r.yaw, 0.42, 0.8, 0.07, HZ.OLIVE_D, s * (ox + 0.17), 1.12, sz - 0.09, m);
+    w.rotation.y = s * 0.5;
   }
+  B(r.yaw, 0.16, 0.1, 0.05, HZ.GLASS, -(cx + 0.2), 1.32, sz + 0.06, m, GLASS_FX);                      // sight window
+  B(r.yaw, 0.14, 0.24, 0.14, HZ.GUN, -cx, 1.39, -0.12, m);                                             // panoramic sight
+  B(r.yaw, 0.18, 0.08, 0.22, HZ.STEEL, -cx, 1.55, -0.12, m);
+  B(r.yaw, 0.06, 0.26, 0.26, HZ.STEEL, -(cx + 0.09), 0.86, -0.06, m);                                  // elevation handwheel
+  B(r.yaw, 0.06, 0.2, 0.2, HZ.STEEL, cx + 0.09, 0.86, -0.06, m);                                       // traverse handwheel
+  return hzTrails(r, m, heavy
+    ? { x0: 0.32, y0: 0.52, z0: -0.28, len: 2.0, spread: 0.32, w: 0.22, h: 0.26, spadeW: 0.56, spadeH: 0.42, brace: 0.35 }
+    : { x0: 0.3, y0: 0.5, z0: -0.28, len: 1.75, spread: 0.3, w: 0.16, h: 0.2, spadeW: 0.42, spadeH: 0.36, brace: 0.4 });
+}
 
-  // 5. Trunnion stanchions & Angled Armor Splinter Shield
-  for (const s of [-1, 1]) {
-    B(r.yaw, 0.18, 0.75, 0.45, GUNMETAL, s * 0.42, 0.65, 0.1, m);
-  }
-  const sh = B(r.yaw, 1.85, 1.0, 0.12, OLIVE, 0, 1.05, 0.48, m);
-  sh.rotation.x = -0.15;
-  B(r.yaw, 0.22, 0.12, 0.16, GUNMETAL, -0.42, 1.25, 0.52, m);
-  B(r.yaw, 0.18, 0.06, 0.08, 0x4fa8e0, -0.42, 1.25, 0.58, m, { emissive: 0x0b2a44 });
-  B(r.yaw, 0.16, 0.28, 0.28, GUNMETAL, 0.46, 0.75, 0.18, m);
-
-  // 6. Barrel, Recuperator & Muzzle Assembly on recoil pivot
-  r.barrel = pivot(r.yaw, 0, 0.95, 0.1);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  r.recoils = [r.recoil];
-
-  B(r.recoil, 0.48, 0.44, 0.7, GUNMETAL, 0, 0, -0.25, m);
-  B(r.recoil, 0.38, 0.22, 1.4, STEEL, 0, 0.24, 0.5, m);
-  B(r.recoil, 0.32, 0.16, 0.6, CHROME, 0, 0.24, 1.3, m);
-  B(r.recoil, 0.26, 0.26, 2.7, OLIVE, 0, 0, 1.2, m);
-  B(r.recoil, 0.42, 0.34, 0.45, STEEL, 0, 0, 2.65, m);
-  const mz = B(r.recoil, 0.55, 0.55, 0.55, 0xffc860, 0, 0, 2.95, m, { emissive: 0xff8a00 });
-  mz.castShadow = false;
-  r.muzzle = mz;
-  r.muzzles = [mz];
-
-  // 7. Field Clutter: Open ammo box with ready shell
-  B(r.yaw, 0.45, 0.25, 0.6, DARK_OLIVE, -0.75, 0.22, -0.45, m);
-  B(r.yaw, 0.12, 0.12, 0.45, 0xc9a050, -0.75, 0.32, -0.45, m);
-
-  r.rest = -0.45;
-  r.barrel.rotation.x = r.rest;
+/** Howitzer Lv 1: towed field gun (M101 style). Sandbag corners, split trail, crew shield, recuperator over the tube. */
+function buildFieldHowitzer(r, m) {
+  hzPad(r, m, 2.8);
+  for (const [x, z] of [[-1.1, -1.1], [1.1, -1.1], [-1.1, 1.1], [1.1, 1.1]]) hzBagCorner(r.body, m, x, z, -Math.sign(x), -Math.sign(z));
+  hzCarriage(r, m, false);
+  hzGun(r, m, { y: 1.15, z: 0, axleW: 0.84, rest: -0.45,
+    cradle: { w: 0.4, h: 0.34, z0: -0.3, z1: 0.95 },
+    tube: { d: 0.24, z0: -0.3, z1: 2.5, bands: [1.7] },
+    breech: { w: 0.42, h: 0.4, l: 0.32 },
+    brake: { w: 0.4, h: 0.3, l: 0.45, ports: 2 } });
+  B(r.barrel, 0.26, 0.18, 1.3, HZ.STEEL, 0, 0.26, 0.4, m);          // recuperator
+  B(r.barrel, 0.28, 0.2, 0.08, HZ.CHROME, 0, 0.26, 1.09, m);
+  B(r.barrel, 0.1, 0.28, 0.5, HZ.GUN, 0, -0.3, 0.15, m);            // elevating arc
+  // ammo crate with two ready rounds
+  B(r.body, 0.5, 0.26, 0.34, HZ.OLIVE_D, -1.0, 0.27, -0.78, m);
+  for (const x of [-1.1, -0.9]) B(r.body, 0.1, 0.1, 0.32, HZ.BRASS, x, 0.45, -0.78, m);
   r.scaffold = scaffold(r.body, 1.45, 2.3, m);
   r.barY = 2.4;
   return finishStructure(r);
 }
 
-/** Howitzer Lv 2: Heavy Howitzer with reinforced shield wings, dual hydraulic buffers, and ready shell rack. */
+/** Howitzer Lv 2: heavy towed gun (M198 style). Sandbag berm, big wheels, wing mantlets, twin recuperators, long tube. */
 function buildHeavyHowitzer(r, m) {
-  const OLIVE = 0x3d4b30, DARK_OLIVE = 0x2a3520, STEEL = 0x34373d, GUNMETAL = 0x1e2024, SAND = 0xa8956a, CHROME = 0x9aa2ac, BRASS = 0xc9a050;
-  // 1. Reinforced concrete pad with corner sandbag bastions
-  B(r.body, 3.2, 0.16, 3.2, 0x82868c, 0, 0.08, 0, m);
-  for (let k = -1; k <= 1; k += 2) {
-    B(r.body, 0.8, 0.4, 0.5, SAND, k * 1.25, 0.28, -1.25, m);
-    B(r.body, 0.5, 0.4, 0.8, SAND, -1.25, 0.28, k * 1.25, m);
-    B(r.body, 0.5, 0.4, 0.8, SAND, 1.25, 0.28, k * 1.25, m);
-  }
-
-  // 2. Heavy Turntable Bearing Ring
-  r.yaw = pivot(r.body, 0, 0.16, 0);
-  B(r.yaw, 1.9, 0.16, 1.9, GUNMETAL, 0, 0.08, 0, m);
-  B(r.yaw, 2.0, 0.06, 2.0, STEEL, 0, 0.16, 0, m);
-
-  // 3. Heavy Box-Girder Split Trail with Serrated Outrigger Spades
-  for (const s of [-1, 1]) {
-    const leg = B(r.yaw, 0.24, 0.22, 2.0, DARK_OLIVE, s * 0.52, 0.34, -0.95, m);
-    leg.rotation.y = s * 0.32;
-    B(r.yaw, 0.46, 0.26, 0.34, STEEL, s * 0.88, 0.18, -1.9, m);
-    B(r.yaw, 0.12, 0.42, 0.12, GUNMETAL, s * 0.88, 0.28, -1.9, m);
-  }
-
-  // 4. Heavy military run-flat wheels with lug hubs
-  B(r.yaw, 2.1, 0.18, 0.18, GUNMETAL, 0, 0.46, 0.1, m);
-  for (const s of [-1, 1]) {
-    B(r.yaw, 0.26, 0.95, 0.95, 0x181a1d, s * 1.1, 0.46, 0.1, m);
-    B(r.yaw, 0.28, 0.48, 0.48, STEEL, s * 1.1, 0.46, 0.1, m);
-    B(r.yaw, 0.30, 0.20, 0.20, DARK_OLIVE, s * 1.1, 0.46, 0.1, m);
-  }
-
-  // 5. Heavy Armored Crew Splinter Shield with Side Wing Mantlets
-  for (const s of [-1, 1]) {
-    B(r.yaw, 0.22, 0.85, 0.5, GUNMETAL, s * 0.45, 0.72, 0.1, m);
-  }
-  const sh = B(r.yaw, 2.1, 1.15, 0.16, OLIVE, 0, 1.2, 0.55, m);
-  sh.rotation.x = -0.14;
-  for (const s of [-1, 1]) {
-    const wing = B(r.yaw, 0.48, 0.95, 0.12, DARK_OLIVE, s * 1.22, 1.15, 0.45, m);
-    wing.rotation.y = -s * 0.45;
-  }
-  B(r.yaw, 0.26, 0.16, 0.2, GUNMETAL, -0.5, 1.38, 0.58, m);
-  B(r.yaw, 0.20, 0.08, 0.08, 0x4fa8e0, -0.5, 1.38, 0.66, m, { emissive: 0x0b2a44 });
-  B(r.yaw, 0.38, 0.32, 0.18, 0x22252a, 0.55, 0.9, 0.25, m);
-  B(r.yaw, 0.28, 0.18, 0.04, 0x3ae35f, 0.55, 0.92, 0.35, m, { emissive: 0x168a28 });
-
-  // 6. Heavy Barrel, Dual-Cylinder Recuperator & Double-Baffle Muzzle Brake
-  r.barrel = pivot(r.yaw, 0, 1.05, 0.15);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  r.recoils = [r.recoil];
-
-  B(r.recoil, 0.56, 0.52, 0.85, GUNMETAL, 0, 0, -0.28, m);
-  B(r.recoil, 0.38, 0.24, 1.6, STEEL, 0, 0.32, 0.6, m);
-  B(r.recoil, 0.30, 0.18, 0.7, CHROME, 0, 0.32, 1.5, m);
-  B(r.recoil, 0.34, 0.20, 1.4, STEEL, 0, -0.30, 0.5, m);
-  B(r.recoil, 0.34, 0.34, 1.2, DARK_OLIVE, 0, 0, 0.5, m);
-  B(r.recoil, 0.30, 0.30, 2.6, OLIVE, 0, 0, 1.8, m);
-  B(r.recoil, 0.50, 0.38, 0.55, STEEL, 0, 0, 3.2, m);
-  const mz = B(r.recoil, 0.65, 0.65, 0.65, 0xffc860, 0, 0, 3.55, m, { emissive: 0xff8a00 });
-  mz.castShadow = false;
-  r.muzzle = mz;
-  r.muzzles = [mz];
-
-  // 7. Tactical Ready-Use Shell Carrier with 2 brass shells
-  B(r.yaw, 0.35, 0.45, 0.7, DARK_OLIVE, -0.85, 0.32, -0.4, m);
-  for (const z of [-0.55, -0.25]) {
-    B(r.yaw, 0.14, 0.14, 0.5, BRASS, -0.85, 0.46, z, m);
-    B(r.yaw, 0.12, 0.12, 0.15, STEEL, -0.85, 0.46, z + 0.26, m);
-  }
-
-  r.rest = -0.45;
-  r.barrel.rotation.x = r.rest;
-  r.scaffold = scaffold(r.body, 1.65, 2.5, m);
+  hzPad(r, m, 3.0);
+  hzBerm(r, m);
+  hzCarriage(r, m, true);
+  hzHeavyGun(r, m);
+  // ballistic terminal on the right cheek
+  B(r.yaw, 0.12, 0.36, 0.4, 0x22252a, 0.52, 1.0, -0.05, m);
+  B(r.yaw, 0.04, 0.2, 0.28, HZ.LED, 0.6, 1.04, -0.05, m, { emissive: 0x168a28 });
+  // ready-round rack
+  B(r.body, 0.36, 0.34, 0.62, HZ.OLIVE_D, -1.15, 0.31, -0.98, m);
+  hzShell(r.body, m, -1.15, 0.53, -1.01, 0.42);
+  r.scaffold = scaffold(r.body, 1.6, 2.5, m);
   r.barY = 2.6;
+  return finishStructure(r);
+}
+/** Sandbag berm across the front of a 3.0 pad with short returns (the trails need the back half), two layers. */
+function hzBerm(r, m) {
+  B(r.body, 2.6, 0.22, 0.34, HZ.SAND, 0, 0.25, 1.28, m);
+  for (const s of [-1, 1]) B(r.body, 0.34, 0.22, 0.6, HZ.SAND_D, s * 1.28, 0.25, 0.98, m);
+  B(r.body, 2.2, 0.2, 0.3, HZ.SAND_D, 0, 0.46, 1.28, m);
+  for (const s of [-1, 1]) B(r.body, 0.3, 0.2, 0.4, HZ.SAND, s * 1.28, 0.46, 1.03, m);
+}
+/** Lv2 / B3 gun: 3.3 m tube with bore evacuator, recuperators above and below, double-baffle brake. */
+function hzHeavyGun(r, m) {
+  hzGun(r, m, { y: 1.15, z: 0, axleW: 0.92, rest: -0.45,
+    cradle: { w: 0.46, h: 0.38, z0: -0.32, z1: 1.05 },
+    tube: { d: 0.28, z0: -0.32, z1: 3.0, bands: [2.5], evac: [1.75, 0.5] },
+    breech: { w: 0.48, h: 0.46, l: 0.34 },
+    brake: { w: 0.48, h: 0.36, l: 0.6, ports: 2 } });
+  B(r.barrel, 0.3, 0.2, 1.5, HZ.STEEL, 0, 0.29, 0.45, m);           // upper recuperator
+  B(r.barrel, 0.32, 0.22, 0.08, HZ.CHROME, 0, 0.29, 1.24, m);
+  B(r.barrel, 0.26, 0.18, 1.1, HZ.STEEL, 0, -0.28, 0.4, m);         // lower buffer
+}
+
+// ---------- path A: fixed gun pit ----------
+/** Concrete gun pit: 3.2 pad, low walls open at the front, octagonal turntable on `r.yaw`. */
+function hzPit(r, m) {
+  hzPad(r, m, 3.2);
+  B(r.body, 2.4, 0.36, 0.3, HZ.CONC_D, 0, 0.32, -1.45, m);
+  for (const s of [-1, 1]) {
+    B(r.body, 0.3, 0.36, 2.0, HZ.CONC_D, s * 1.45, 0.32, -0.3, m);
+    B(r.body, 0.5, 0.36, 0.3, HZ.CONC_D, s * 1.2, 0.32, 1.45, m);   // front corner stubs
+    B(r.body, 0.36, 0.06, 2.06, HZ.CONC, s * 1.45, 0.53, -0.3, m);  // wall coping
+  }
+  B(r.body, 2.46, 0.06, 0.36, HZ.CONC, 0, 0.53, -1.45, m);
+  r.yaw = pivot(r.body, 0, 0.14, 0);
+  B(r.yaw, 2.1, 0.1, 2.1, HZ.GUN, 0, 0.05, 0, m);
+  B(r.yaw, 2.1, 0.1, 2.1, HZ.GUN, 0, 0.05, 0, m).rotation.y = Math.PI / 4;
+  B(r.yaw, 1.9, 0.06, 1.9, HZ.STEEL, 0, 0.13, 0, m);
+}
+/** Long Tom mount on the pit turntable: pedestal, tall cheeks, equilibrators, rear crew deck. `deck` = railing too. */
+function hzLongMount(r, m) {
+  B(r.yaw, 1.4, 0.4, 1.6, HZ.OLIVE_D, 0, 0.36, -0.2, m);                       // pedestal
+  B(r.yaw, 0.5, 0.25, 0.12, HZ.STEEL, 0, 0.36, 0.66, m);                       // traverse gearbox
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.16, 1.05, 0.8, HZ.OLIVE, s * 0.44, 1.07, 0, m);                 // cheeks (trunnion y 1.45)
+    B(r.yaw, 0.1, 0.26, 0.26, HZ.STEEL, s * 0.57, 1.45, 0, m);                 // trunnion caps
+    B(r.yaw, 0.16, 0.7, 0.16, HZ.STEEL, s * 0.44, 0.9, 0.48, m);               // equilibrator cylinders
+    B(r.yaw, 0.2, 0.08, 0.2, HZ.CHROME, s * 0.44, 1.29, 0.48, m);
+  }
+  B(r.yaw, 0.06, 0.26, 0.26, HZ.STEEL, -0.55, 0.95, -0.25, m);                 // handwheels
+  B(r.yaw, 0.06, 0.2, 0.2, HZ.STEEL, 0.55, 0.95, -0.25, m);
+  // crew deck behind the gun with a rail
+  B(r.yaw, 1.8, 0.08, 0.72, HZ.STEEL, 0, 0.6, -1.24, m);
+  for (const x of [-0.86, 0, 0.86]) B(r.yaw, 0.05, 0.5, 0.05, HZ.GUN, x, 0.89, -1.56, m);
+  B(r.yaw, 1.78, 0.05, 0.05, HZ.YEL, 0, 1.16, -1.56, m);
+  B(r.yaw, 0.6, 0.06, 0.3, HZ.STEEL, 0, 0.38, -1.4, m);                         // step
+  // panoramic sight + rangefinder on the left cheek
+  B(r.yaw, 0.14, 0.3, 0.14, HZ.GUN, -0.44, 1.75, -0.2, m);
+  B(r.yaw, 0.7, 0.1, 0.12, HZ.STEEL, -0.44, 1.95, -0.2, m);
+  for (const s of [-1, 1]) B(r.yaw, 0.04, 0.09, 0.09, HZ.GLASS, -0.44 + s * 0.37, 1.95, -0.2, m, GLASS_FX);
+}
+/** The 4.4 m Long Tom tube (A3, A4). */
+function hzLongGun(r, m) {
+  const bz = hzGun(r, m, { y: 1.45, z: 0, axleW: 1.04, rest: -0.3,
+    cradle: { w: 0.5, h: 0.42, z0: -0.36, z1: 1.4 },
+    tube: { d: 0.3, z0: -0.4, z1: 4.2, bands: [2.2, 3.4], evac: [2.8, 0.5] },
+    breech: { w: 0.52, h: 0.5, l: 0.38 },
+    brake: { w: 0.56, h: 0.4, l: 0.7, ports: 3 } });
+  B(r.barrel, 0.32, 0.22, 1.8, HZ.STEEL, 0, 0.32, 0.5, m);          // recuperators
+  B(r.barrel, 0.34, 0.24, 0.08, HZ.CHROME, 0, 0.32, 1.44, m);
+  B(r.barrel, 0.28, 0.2, 1.4, HZ.STEEL, 0, -0.31, 0.4, m);
+  B(r.barrel, 0.3, 0.22, 0.08, HZ.CHROME, 0, -0.31, 1.14, m);
+  return bz;
+}
+
+/** Howitzer A3: Long Tom. Concrete gun pit, pedestal mount, 4.4 m tube, crew deck, shell rack. */
+function buildLongTom(r, m) {
+  hzPit(r, m);
+  hzLongMount(r, m);
+  hzLongGun(r, m);
+  // ready rack on the turntable (3 rounds standing)
+  B(r.yaw, 0.4, 0.46, 0.5, HZ.OLIVE_D, 0.9, 0.39, -0.3, m);
+  for (const z of [-0.45, -0.3, -0.15]) {
+    B(r.yaw, 0.11, 0.3, 0.11, HZ.BRASS, 0.9, 0.77, z, m);
+    B(r.yaw, 0.08, 0.08, 0.08, HZ.STEEL, 0.9, 0.96, z, m);
+  }
+  // pit clutter: shell stack and spent cases against the back wall
+  for (const [x, y] of [[-0.75, 0.2], [-0.62, 0.2], [-0.49, 0.2], [-0.68, 0.31], [-0.55, 0.31]]) hzShellBody(r.body, m, x, y, -1.15);
+  B(r.body, 0.12, 0.12, 0.34, HZ.BRASS, 0.95, 0.2, -1.15, m).rotation.y = 0.6;
+  B(r.body, 0.4, 0.22, 0.26, HZ.OLIVE_D, 0.55, 0.25, -1.17, m);     // tool box
+  r.scaffold = scaffold(r.body, 1.7, 2.6, m);
+  r.barY = 2.8;
+  return finishStructure(r);
+}
+/** Brass round lying across x (for stacks). */
+function hzShellBody(parent, m, x, y, z) { B(parent, 0.12, 0.12, 0.4, HZ.BRASS, x, y, z, m); }
+
+/** Howitzer A4: Guided Shells. Long Tom + spinning fire-control radar, fire-control computer, laser designator. */
+function buildGuidedShells(r, m) {
+  hzPit(r, m);
+  hzLongMount(r, m);
+  const bz = hzLongGun(r, m);
+  B(r.recoil, 0.18, 0.12, 0.24, 0x22252a, 0, 0.26, bz - 0.1, m);                       // muzzle-velocity radar
+  B(r.recoil, 0.12, 0.04, 0.04, HZ.GLASS, 0, 0.3, bz + 0.03, m, GLASS_FX);
+  B(r.recoil, 0.36, 0.1, 0.24, HZ.LED, 0, 0.29, -0.55, m, { emissive: 0x168a28 });      // fuze setter on the breech
+  // radar mast on the deck (left rear), braced to the deck
+  const mx = -0.7, mz = -1.3;
+  B(r.yaw, 0.14, 1.9, 0.14, HZ.STEEL, mx, 1.59, mz, m);
+  for (const s of [-1, 1]) beam(r.yaw, [mx + s * 0.4, 0.64, mz], [mx, 1.6, mz], 0.06, 0.06, HZ.GUN, m);
+  r.radar = pivot(r.yaw, mx, 2.54, mz);
+  B(r.radar, 0.18, 0.3, 0.18, HZ.GUN, 0, 0.15, 0, m);                                   // yoke (on the spin axis)
+  B(r.radar, 0.9, 0.6, 0.08, 0xd8dce2, 0, 0.4, 0.13, m);                                // dish, stepped round
+  B(r.radar, 0.6, 0.9, 0.08, 0xd8dce2, 0, 0.4, 0.13, m);
+  B(r.radar, 0.4, 0.4, 0.06, 0xb8bcc2, 0, 0.4, 0.2, m);
+  beam(r.radar, [0, 0.4, 0.2], [0, 0.4, 0.58], 0.04, 0.04, HZ.STEEL, m);                // feed arm + horn
+  B(r.radar, 0.12, 0.12, 0.1, HZ.GUN, 0, 0.4, 0.62, m);
+  // fire-control computer on the right of the pedestal, cabled to the mast
+  B(r.yaw, 0.5, 0.62, 0.56, 0x22252a, 0.95, 0.47, -0.3, m);
+  B(r.yaw, 0.04, 0.3, 0.4, HZ.GLASS, 1.22, 0.55, -0.3, m, GLASS_FX);
+  for (const [z, c] of [[-0.48, HZ.LED], [-0.36, HZ.RED], [-0.24, HZ.YEL]]) B(r.yaw, 0.04, 0.06, 0.06, c, 1.22, 0.32, z, m);
+  B(r.yaw, 0.03, 0.9, 0.03, HZ.GUN, 1.1, 1.23, -0.45, m);                               // whip antenna
+  beam(r.yaw, [0.95, 0.25, -0.58], [0.95, 0.25, -1.1], 0.07, 0.07, HZ.DK, m);           // cable to the deck...
+  beam(r.yaw, [0.95, 0.66, -1.24], [mx, 0.66, mz], 0.07, 0.07, HZ.DK, m);               // ...along it to the mast
+  // laser designator on the right cheek
+  B(r.yaw, 0.22, 0.2, 0.36, HZ.GUN, 0.63, 1.05, 0.15, m);
+  B(r.yaw, 0.12, 0.12, 0.04, HZ.RED, 0.63, 1.05, 0.35, m, { emissive: 0xaa0000 });
+  // guided rounds (finned) on the ready rack
+  B(r.yaw, 0.4, 0.3, 0.5, HZ.OLIVE_D, -0.95, 0.31, 0.3, m);
+  for (const z of [0.17, 0.43]) {
+    B(r.yaw, 0.11, 0.34, 0.11, 0x6d7a5a, -0.95, 0.63, z, m);
+    B(r.yaw, 0.2, 0.06, 0.03, HZ.GUN, -0.95, 0.5, z, m);
+    B(r.yaw, 0.03, 0.06, 0.2, HZ.GUN, -0.95, 0.5, z, m);
+  }
+  r.scaffold = scaffold(r.body, 1.7, 2.8, m);
+  r.barY = 3.3;
+  return finishStructure(r);
+}
+
+/** Howitzer A5: Railgun. Armoured turret in the pit, twin rails with glowing coils, capacitor banks, cooling stack. */
+function buildRailgun(r, m) {
+  const DKS = 0x22252a, ARM = 0x2c3036, GLOW = { emissive: 0x0090c0 };
+  hzPit(r, m);
+  for (const s of [-1, 1]) B(r.body, 0.04, 0.06, 1.8, HZ.CYAN, s * 1.29, 0.4, -0.3, m, GLOW);    // cyan guide lights on the pit walls
+  // turret housing with a sloped glacis
+  B(r.yaw, 1.6, 0.8, 1.9, ARM, 0, 0.56, -0.35, m);
+  const gl = B(r.yaw, 1.6, 0.12, 0.62, ARM, 0, 0.75, 0.75, m); gl.rotation.x = 0.55;
+  B(r.yaw, 1.64, 0.1, 1.94, DKS, 0, 0.98, -0.35, m);                                              // roof plate
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.22, 0.55, 0.7, ARM, s * 0.5, 1.29, -0.05, m);                                       // trunnion blocks (y 1.45)
+    B(r.yaw, 0.08, 0.3, 0.3, HZ.STEEL, s * 0.65, 1.45, -0.05, m);
+    B(r.yaw, 0.04, 0.4, 1.0, HZ.CYAN, s * 0.82, 0.56, -0.5, m, GLOW);                               // side status strip
+  }
+  B(r.yaw, 0.5, 0.18, 0.3, DKS, 0, 0.6, 0.98, m);                                                  // sensor head on the glacis
+  B(r.yaw, 0.3, 0.08, 0.04, HZ.RED, 0, 0.6, 1.14, m, { emissive: 0xaa0000 });
+  // capacitor banks either side, cells glow with the coils
+  const glow = [];
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.46, 0.7, 1.3, DKS, s * 1.03, 0.51, -0.45, m);
+    for (const z of [-0.85, -0.45, -0.05]) {
+      const c = B(r.yaw, 0.16, 0.36, 0.16, HZ.CYAN, s * 1.03, 1.04, z, m, GLOW); c.castShadow = false; glow.push(c);
+      B(r.yaw, 0.2, 0.06, 0.2, HZ.STEEL, s * 1.03, 1.25, z, m);
+    }
+    for (const z of [-0.95, -0.65, -0.35, -0.05]) B(r.yaw, 0.04, 0.5, 0.1, HZ.GUN, s * 1.27, 0.51, z, m);   // fins
+    beam(r.yaw, [s * 1.03, 0.86, -1.0], [s * 0.6, 1.1, -0.9], 0.12, 0.12, HZ.DK, m);               // power cables
+    beam(r.yaw, [s * 1.03, 0.86, 0.1], [s * 0.5, 1.03, -0.05], 0.12, 0.12, HZ.DK, m);
+  }
+  // cooling stack at the back
+  B(r.yaw, 1.3, 0.9, 0.34, DKS, 0, 1.0, -1.42, m);
+  for (const x of [-0.45, -0.15, 0.15, 0.45]) B(r.yaw, 0.12, 0.7, 0.06, HZ.GUN, x, 1.0, -1.62, m);
+  for (const s of [-1, 1]) B(r.yaw, 0.2, 0.3, 0.2, HZ.STEEL, s * 0.4, 1.6, -1.42, m);            // vents
+  // gun: breech housing on the cradle, rails + coils recoil
+  r.barrel = pivot(r.yaw, 0, 1.45, -0.05);
+  r.recoil = pivot(r.barrel, 0, 0, 0); r.recoils = [r.recoil];
+  B(r.barrel, 1.12, 0.2, 0.2, HZ.GUN, 0, 0, 0, m);                                                // trunnion axle
+  B(r.barrel, 0.84, 0.66, 1.5, ARM, 0, 0, 0.1, m);                                                // breech housing
+  B(r.barrel, 0.88, 0.1, 1.2, HZ.STEEL, 0, 0.36, 0.1, m);
+  const core = B(r.barrel, 0.3, 0.3, 0.06, HZ.CYAN, 0, 0, -0.67, m, GLOW); core.castShadow = false; glow.push(core);
+  for (const s of [-1, 1]) {
+    B(r.recoil, 0.16, 0.42, 4.7, 0xb4bac2, s * 0.27, 0, 2.25, m);                                  // rails
+    B(r.recoil, 0.04, 0.44, 4.7, 0x6a7078, s * 0.37, 0, 2.25, m);                                  // rail backing strip
+  }
+  B(r.recoil, 0.4, 0.14, 4.6, 0x1e2024, 0, -0.16, 2.2, m);                                        // insulator spine under the gap
+  const bore = B(r.recoil, 0.08, 0.06, 4.0, HZ.CYAN, 0, 0.06, 2.5, m, GLOW); bore.castShadow = false; glow.push(bore);
+  for (let k = 0; k < 6; k++) {
+    const z = 1.05 + k * 0.62;
+    B(r.recoil, 0.74, 0.7, 0.16, 0x1e2024, 0, 0, z, m);
+    const c = B(r.recoil, 0.56, 0.12, 0.18, HZ.CYAN, 0, 0.38, z, m, GLOW); c.castShadow = false; glow.push(c);
+  }
+  B(r.recoil, 0.82, 0.78, 0.26, HZ.STEEL, 0, 0, 4.5, m);                                          // muzzle collar
+  r.glow = glow;
+  const mz = B(r.recoil, 0.8, 0.8, 0.8, 0xa0f0ff, 0, 0, 5.0, m, { emissive: 0x60d0ff });
+  mz.castShadow = false; r.muzzle = mz; r.muzzles = [mz];
+  r.rest = -0.04; r.barrel.rotation.x = r.rest;
+  r.scaffold = scaffold(r.body, 1.75, 2.6, m);
+  r.barY = 2.8;
+  return finishStructure(r);
+}
+
+// ---------- path B: saturation ----------
+/** Howitzer B3: Autoloader. Heavy carriage with a 6-round drum magazine (spins on `r.drum`) and an ammo pallet. */
+function buildAutoloader(r, m) {
+  hzPad(r, m, 3.0);
+  hzBerm(r, m);
+  const [, R] = hzCarriage(r, m, true);
+  hzHeavyGun(r, m);
+  B(r.barrel, 0.36, 0.26, 0.5, HZ.GUN, 0.3, -0.12, -0.05, m);                       // rammer housing beside the breech
+  // drum magazine on the right, axle along z, carried by an arm off the cheek and a strut to the trail
+  const dx = 0.95, dy = 1.3, dz = -0.95;
+  B(r.yaw, 0.5, 0.16, 0.16, HZ.STEEL, 0.67, dy, -0.3, m);                            // arm from the right cheek
+  B(r.yaw, 0.12, 0.12, 1.1, HZ.GUN, dx, dy, dz + 0.1, m);                            // drum axle
+  beam(r.yaw, [dx, dy, dz - 0.4], lerp3(R.a, R.e, 0.55), 0.12, 0.12, HZ.STEEL, m);   // rear strut
+  r.drum = pivot(r.yaw, dx, dy, dz);
+  B(r.drum, 0.6, 0.6, 0.62, HZ.STEEL, 0, 0, 0, m);
+  for (const z of [-0.33, 0.33]) B(r.drum, 0.72, 0.72, 0.05, HZ.OLIVE_D, 0, 0, z, m); // end plates
+  for (let k = 0; k < 6; k++) {
+    const a = k / 6 * Math.PI * 2, x = Math.cos(a) * 0.3, y = Math.sin(a) * 0.3;
+    B(r.drum, 0.15, 0.15, 0.72, HZ.BRASS, x, y, 0, m);
+    B(r.drum, 0.1, 0.1, 0.08, HZ.STEEL, x, y, 0.4, m);
+  }
+  // hydraulic power pack on the left trail
+  const pp = lerp3([-R.a[0], R.a[1], R.a[2]], [-R.e[0], R.e[1], R.e[2]], 0.5);
+  B(r.yaw, 0.42, 0.3, 0.46, HZ.OLIVE, pp[0], pp[1] + 0.26, pp[2], m);
+  B(r.yaw, 0.3, 0.04, 0.3, HZ.GUN, pp[0], pp[1] + 0.43, pp[2], m);
+  // ammo pallet on the pad
+  B(r.body, 0.62, 0.08, 0.62, 0x6b5a3a, -1.2, 0.18, -0.8, m);
+  for (const [x, z] of [[-1.3, -0.93], [-1.1, -0.93], [-1.3, -0.67], [-1.1, -0.67]]) {
+    B(r.body, 0.12, 0.34, 0.12, HZ.BRASS, x, 0.39, z, m);
+    B(r.body, 0.08, 0.08, 0.08, HZ.STEEL, x, 0.6, z, m);
+  }
+  r.scaffold = scaffold(r.body, 1.6, 2.5, m);
+  r.barY = 2.6;
+  return finishStructure(r);
+}
+
+/** Truck/launcher pod shared by B4 and B5: hinge axle on `r.barrel`, rocket noses on `r.recoil` (they pull into the
+ * tubes when it fires, as if just launched, and slide back out = reloaded). o: { w, h, l, cols, rows, tube, color }. */
+function hzPod(r, m, o, py, pz) {
+  r.barrel = pivot(r.yaw, 0, py, pz);
+  r.recoil = pivot(r.barrel, 0, 0, 0); r.recoils = [r.recoil];
+  B(r.barrel, o.w + 0.1, 0.18, 0.18, HZ.GUN, 0, 0, 0, m);                                 // hinge axle
+  const cy = o.h / 2 - 0.05, cz = o.l / 2 - 0.25, front = cz + o.l / 2;
+  B(r.barrel, o.w, o.h, o.l, o.color, 0, cy, cz, m);                                       // pod box
+  for (const z of [cz - o.l * 0.32, cz + o.l * 0.32]) B(r.barrel, o.w + 0.06, o.h + 0.06, 0.1, HZ.GUN, 0, cy, z, m);   // frame bands
+  const sx = (o.w - 0.1) / o.cols, sy = (o.h - 0.1) / o.rows;
+  for (let i = 0; i < o.cols; i++) for (let j = 0; j < o.rows; j++) {
+    const x = -o.w / 2 + 0.05 + sx * (i + 0.5), y = cy - o.h / 2 + 0.05 + sy * (j + 0.5);
+    B(r.barrel, o.tube, o.tube, 0.06, HZ.DK, x, y, front + 0.01, m);                       // tube mouth
+    B(r.recoil, o.tube * 0.55, o.tube * 0.55, 0.5, 0xd8d8d8, x, y, front - 0.1, m);        // rocket body
+    B(r.recoil, o.tube * 0.4, o.tube * 0.4, 0.1, HZ.RED, x, y, front + 0.2, m);            // nose
+  }
+  const mz = B(r.barrel, o.w - 0.1, o.h - 0.1, 0.5, 0xffb040, 0, cy, front + 0.3, m, { emissive: 0xff7a00 });
+  mz.castShadow = false; r.muzzle = mz; r.muzzles = [mz];
+  const ex = B(r.barrel, o.w - 0.1, o.h - 0.1, 0.6, 0xff7020, 0, cy, cz - o.l / 2 - 0.3, m, { emissive: 0xdd4000 });
+  ex.castShadow = false; r.exhaust = ex;
+  r.rest = -0.5; r.barrel.rotation.x = r.rest;
+  return { cy, cz, front };
+}
+
+/** Howitzer B4: MLRS. 6-wheel truck on the pad (static), launcher turntable on the bed, 6-rocket pod. */
+function buildMLRS(r, m) {
+  hzPad(r, m, 3.2);
+  const T = r.body, OL = HZ.OLIVE, OD = HZ.OLIVE_D;
+  // chassis: frame rails, 3 axles, 6 wheels, mudguards
+  for (const s of [-1, 1]) B(T, 0.16, 0.2, 3.0, HZ.GUN, s * 0.5, 0.6, -0.05, m);
+  for (const z of [-1.1, -0.42, 0.95]) {
+    B(T, 1.56, 0.12, 0.12, HZ.GUN, 0, 0.47, z, m);
+    for (const s of [-1, 1]) hzWheel(T, s * 0.8, 0.47, z, 0.66, 0.28, m, false);
+  }
+  for (const s of [-1, 1]) {
+    B(T, 0.4, 0.06, 0.85, OD, s * 0.8, 0.86, 0.95, m);
+    B(T, 0.4, 0.06, 1.55, OD, s * 0.8, 0.86, -0.76, m);
+  }
+  // cab
+  B(T, 1.6, 0.85, 0.75, OL, 0, 1.12, 1.1, m);
+  B(T, 1.64, 0.08, 0.79, OD, 0, 1.58, 1.1, m);                                         // roof
+  B(T, 1.36, 0.3, 0.05, HZ.GLASS, 0, 1.3, 1.49, m, GLASS_FX);                          // windscreen
+  for (const s of [-1, 1]) {
+    B(T, 0.05, 0.26, 0.38, HZ.GLASS, s * 0.81, 1.3, 1.1, m, GLASS_FX);                 // side windows
+    B(T, 0.18, 0.12, 0.05, HZ.YEL, s * 0.58, 0.9, 1.49, m, { emissive: 0x6a5410 });    // headlights
+    B(T, 0.06, 0.2, 0.06, HZ.GUN, s * 0.86, 1.36, 1.4, m);                             // mirror
+  }
+  B(T, 0.9, 0.3, 0.05, HZ.DK, 0, 0.88, 1.49, m);                                        // grille
+  B(T, 1.7, 0.14, 0.14, HZ.GUN, 0, 0.66, 1.52, m);                                      // bumper
+  B(T, 0.1, 0.9, 0.1, HZ.GUN, 0.72, 1.7, 0.75, m);                                     // exhaust stack
+  // bed and stabiliser jacks
+  B(T, 1.6, 0.12, 2.0, OD, 0, 0.76, -0.55, m);
+  for (const s of [-1, 1]) {
+    beam(T, [s * 0.8, 0.76, -1.45], [s * 1.05, 0.2, -1.45], 0.12, 0.12, HZ.STEEL, m);
+    B(T, 0.3, 0.06, 0.3, HZ.STEEL, s * 1.05, 0.17, -1.45, m);
+  }
+  B(T, 0.3, 0.3, 0.5, OL, -0.62, 0.97, 0.45, m);                                       // stowage box
+  // launcher turntable and pod
+  r.yaw = pivot(T, 0, 0.82, -0.6);
+  B(r.yaw, 1.3, 0.1, 1.3, HZ.GUN, 0, 0.05, 0, m);
+  B(r.yaw, 1.1, 0.32, 1.0, OL, 0, 0.26, 0, m);
+  for (const s of [-1, 1]) B(r.yaw, 0.14, 0.5, 0.4, HZ.STEEL, s * 0.64, 0.45, -0.4, m);   // hinge brackets
+  hzPod(r, m, { w: 1.32, h: 0.84, l: 2.0, cols: 3, rows: 2, tube: 0.34, color: OL }, 0.6, -0.4);
+  B(r.barrel, 0.06, 0.2, 1.2, HZ.YEL, 0.69, 0.4, 0.75, m);                             // stencil stripes
+  B(r.barrel, 0.06, 0.2, 1.2, HZ.YEL, -0.69, 0.4, 0.75, m);
+  r.scaffold = scaffold(r.body, 1.7, 2.6, m);
+  r.barY = 3.0;
+  return finishStructure(r);
+}
+
+/** Howitzer B5: Thermobaric. Tracked hull on the pad (static), armoured 8-tube launcher with hazard stripes. */
+function buildThermobaric(r, m) {
+  const HULL = 0x3a4030, HULL_D = 0x2c3125, T = r.body;
+  hzPad(r, m, 3.4);
+  // running gear: tracks, road wheels, sprocket + idler, skirts
+  for (const s of [-1, 1]) {
+    const x = s * 1.0;
+    B(T, 0.42, 0.56, 3.3, HZ.TYRE, x, 0.42, 0, m);
+    for (const z of [-1.2, -0.6, 0, 0.6, 1.2]) B(T, 0.46, 0.38, 0.38, HZ.STEEL, x, 0.38, z, m);
+    B(T, 0.46, 0.44, 0.44, HZ.GUN, x, 0.58, 1.55, m);                                   // drive sprocket
+    B(T, 0.46, 0.4, 0.4, HZ.GUN, x, 0.56, -1.55, m);                                    // idler
+    B(T, 0.08, 0.34, 3.0, HULL_D, s * 1.25, 0.82, 0, m);                                // side skirt
+  }
+  // hull
+  B(T, 1.5, 0.5, 3.1, HULL, 0, 0.62, 0, m);
+  B(T, 2.5, 0.36, 2.9, HULL, 0, 1.03, -0.1, m);                                         // upper hull over the tracks
+  const gl = B(T, 2.3, 0.12, 0.7, HULL_D, 0, 0.98, 1.5, m); gl.rotation.x = 0.5;        // glacis
+  for (const x of [-0.75, -0.25, 0.25, 0.75]) {                                          // reactive armour bricks
+    const b = B(T, 0.42, 0.1, 0.36, 0x4a5238, x, 1.06, 1.5, m); b.rotation.x = 0.5;
+  }
+  for (const s of [-1, 1]) {
+    B(T, 0.16, 0.12, 0.08, HZ.YEL, s * 0.95, 0.84, 1.62, m, { emissive: 0x6a5410 });    // headlights
+    B(T, 0.12, 0.12, 0.2, HZ.GUN, s * 0.55, 0.6, 1.6, m);                               // tow hooks
+    B(T, 0.32, 0.32, 0.62, 0x2a3020, s * 0.8, 1.37, -1.2, m);                            // fuel drums
+    B(T, 0.36, 0.06, 0.06, HZ.GUN, s * 0.8, 1.37, -1.2, m);
+    B(T, 0.4, 0.26, 0.6, HULL_D, s * 1.0, 1.34, 0.65, m);                               // stowage bins
+  }
+  // driver's hatch + periscope, commander's cupola with MG
+  B(T, 0.5, 0.1, 0.45, HULL_D, -0.4, 1.26, 1.05, m);
+  B(T, 0.2, 0.1, 0.06, HZ.GLASS, -0.4, 1.34, 1.27, m, GLASS_FX);
+  B(T, 0.46, 0.22, 0.46, HULL_D, 0.45, 1.32, 1.0, m);
+  beam(T, [0.45, 1.46, 1.0], [0.45, 1.46, 1.55], 0.06, 0.06, HZ.GUN, m);
+  B(T, 1.2, 0.08, 0.3, HZ.GUN, 0, 1.25, -1.45, m);                                       // engine grille
+  // launcher
+  r.yaw = pivot(T, 0, 1.21, -0.45);
+  B(r.yaw, 1.5, 0.12, 1.5, HZ.GUN, 0, 0.06, 0, m);
+  B(r.yaw, 1.3, 0.34, 1.2, HULL_D, 0, 0.29, 0, m);
+  for (const s of [-1, 1]) {
+    B(r.yaw, 0.16, 0.42, 0.44, HZ.STEEL, s * 0.93, 0.62, -0.45, m);                     // hinge brackets
+    const ram = B(r.yaw, 0.12, 0.5, 0.12, HZ.CHROME, s * 0.6, 0.6, 0.35, m);            // elevation ram housings
+    ram.rotation.x = 0.3;
+  }
+  B(r.yaw, 0.24, 0.24, 0.24, 0xff8a20, 0.45, 0.58, -0.3, m, { emissive: 0x803000 });    // warning beacon
+  const { cy, cz } = hzPod(r, m, { w: 1.7, h: 1.0, l: 2.4, cols: 4, rows: 2, tube: 0.36, color: HULL }, 0.62, -0.45);
+  for (const s of [-1, 1]) {
+    B(r.barrel, 0.08, 1.04, 2.0, HULL_D, s * 0.89, cy, cz, m);                          // side armour
+    for (let k = 0; k < 7; k++) B(r.barrel, 0.04, 0.2, 0.28, k % 2 ? HZ.DK : HZ.YEL, s * 0.94, cy - 0.38, cz - 0.84 + k * 0.28, m);   // hazard band
+  }
+  B(r.barrel, 1.0, 0.1, 1.2, HULL_D, 0, cy + 0.55, cz, m);                              // top armour
+  r.scaffold = scaffold(r.body, 1.8, 2.8, m);
+  r.barY = 3.1;
   return finishStructure(r);
 }
 

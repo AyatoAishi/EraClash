@@ -7,6 +7,17 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.25.1', date: '2026-10-26T15:40:00+08:00', title: 'Howitzer models overhauled',
+    sections: [
+      { title: 'Howitzer', items: [
+        'All 8 Howitzer models are rebuilt with about twice the detail, and no part floats any more (the trail spades, the Guided Shells radar mast, the Autoloader barrel and the Thermobaric hull were all loose before).',
+        'Path A stays a fixed gun pit that gets more high-tech: <b>Long Tom</b> on a pedestal with a crew deck, <b>Guided Shells</b> adds a spinning radar and a fire-control computer, <b>Railgun</b> becomes an armoured turret with glowing rails and capacitor banks.',
+        'Path B goes mobile: <b>Autoloader</b> gets a drum magazine that turns properly (it used to tumble), the <b>MLRS</b> is a 6-wheel truck and the <b>Thermobaric</b> a tracked launcher. On both, only the launcher turns, and the rockets visibly leave the tubes when it fires, then reload.',
+        'Rocket pods no longer dip into the ground at full elevation.',
+      ] },
+    ],
+  },
+  {
     version: '0.25.0', date: '2026-10-26T14:07:00+08:00', title: 'Hwacha & Machine Gun Nest upgrade trees',
     sections: [
       { title: 'Two trees, built as a pair', items: [
