@@ -7,6 +7,14 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.31.2', date: '2026-10-26T23:25:00+08:00', title: 'Dev Lab: spawn skill-tree forms', author: 'AyatoAishi',
+    sections: [
+      { title: 'Dev Lab', items: [
+        'Sandbox spawn buttons: <b>right-click</b> a troop that has a skill tree to pick what to spawn: the base troop or any form (Lv 5 and Lv 15 branches, e.g. Lightning or Chaotic Viking). The button then shows that form (purple edge + level) and every spawn uses it until you pick another one. Troops without a tree have no menu.',
+      ] },
+    ],
+  },
+  {
     version: '0.31.1', date: '2026-10-26T23:10:00+08:00', title: 'Balance follow-up', author: 'AyatoAishi',
     sections: [
       { title: 'Changes', items: [

@@ -33,11 +33,11 @@ export const ORDER_LABEL = {
 const STAT_KEYS = ['hp', 'hpRegen', 'armor', 'ward', 'evasion', 'missChance', 'damage', 'attackSpeed', 'moveSpeed', 'range'];
 
 export class Unit {
-  constructor(game, defId, team) {
+  constructor(game, defId, team, formId) {
     this.id = ++UID;
     this.game = game;
-    // skill-tree form: same troop id, evolved numbers/name/look (only troops born after the pick)
-    this.def = formDef(defId, game.teams?.[team]?.forms?.[defId]);
+    // skill-tree form: same troop id, evolved numbers/name/look (only troops born after the pick). formId overrides (Dev Lab)
+    this.def = formDef(defId, formId !== undefined ? formId : game.teams?.[team]?.forms?.[defId]);
     this.form = this.def.form || null;
     this.team = team;
     this.ranged = this.def.type === 'ranged';

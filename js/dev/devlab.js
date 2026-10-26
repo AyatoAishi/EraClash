@@ -14,6 +14,7 @@ import { FOW, updateFogTexture } from '../fow.js';
 import { OrbitCam } from './orbit.js';
 import { Creator } from './creator.js';
 import { BUILD_TREES } from '../buildtree.js';
+import { SKILL_TREES } from '../skilltree.js';
 
 /** Every (level, path) design of a building with an upgrade tree, for the level buttons. */
 const buildSteps = (id) => BUILD_TREES[id] ? [[1, null], [2, null], ...['a', 'b'].flatMap((p) => [3, 4, 5].filter((l) => BUILD_TREES[id][p]?.[l]).map((l) => [l, p]))] : [];
@@ -129,7 +130,7 @@ export class DevLab {
     this.aScene.add(aFloor, aGrid, lane);
     this.aWorld = { terrain: null, castle: M.buildCastle(3), hq: M.buildHQ() };
     this.aScene.add(this.aWorld.castle, this.aWorld.hq);
-    this.arena = { map: 'flat', speed: 1, step: 0, invulnBases: true, fog: false, team: 0, count: 1, hold: true, baseLevels: [GAME.baseLevel, GAME.baseLevel], upTeam: 0 };
+    this.arena = { map: 'flat', speed: 1, step: 0, invulnBases: true, fog: false, team: 0, count: 1, hold: true, baseLevels: [GAME.baseLevel, GAME.baseLevel], upTeam: 0, forms: {} };   // forms: unitId -> skill-tree form to spawn (right-click a spawn button)
     this.placing = null;
     this.t = 0;
 
@@ -510,7 +511,7 @@ export class DevLab {
     }
     for (let k = 0; k < A.count; k++) {
       const a = (k / A.count) * Math.PI * 2, r = A.count > 1 ? 0.8 + 0.25 * A.count : 0;
-      const u = new Unit(g, id, team);
+      const u = new Unit(g, id, team, A.forms[id] || null);
       u.spawnAt(x + Math.cos(a) * r, z + Math.sin(a) * r);
       if (team === NEUTRAL_TEAM) {
         u.home = { x: u.pos.x, z: u.pos.z };
@@ -526,7 +527,7 @@ export class DevLab {
     this.placing = id;
     document.body.classList.toggle('dl-placing', !!id);
     this.spawnEl?.querySelectorAll('button[data-unit]').forEach((b) => b.classList.toggle('on', b.dataset.unit === id));
-    if (this.hintEl) this.hintEl.textContent = id ? `Placing ${UNITS[id].name} — left-click the ground (Shift = keep placing), right-click / Esc to stop`
+    if (this.hintEl) this.hintEl.textContent = id ? `Placing ${this.arena.forms[id] ? SKILL_TREES[id][this.arena.forms[id]].name : UNITS[id].name} — left-click the ground (Shift = keep placing), right-click / Esc to stop`
       : this.mode === 'viewer' ? 'Drag = rotate · Right/Shift-drag = pan · Wheel = zoom · Esc = back to menu'
         : 'Normal RTS controls for your (Medieval) troops · pick a unit on the left to place it · Esc = back to menu';
   }
@@ -560,7 +561,12 @@ export class DevLab {
           h('input', { type: 'checkbox', checked: A.hold, onchange: (e) => (A.hold = e.target.checked) }), 'Hold')),
       Object.entries(groups).filter(([, ids]) => ids.length).map(([gname, ids]) => [
         h('div', { class: 'dl-sub' }, gname),
-        h('div', { class: 'dl-grid' }, ids.filter((id) => UNITS[id]).map((id) => h('button', { class: 'dl-b', 'data-unit': id, onclick: () => this.setPlacing(this.placing === id ? null : id) }, UNITS[id].name))),
+        h('div', { class: 'dl-grid' }, ids.filter((id) => UNITS[id]).map((id) => {
+          const f = A.forms[id], tree = SKILL_TREES[id];
+          return h('button', { class: 'dl-b' + (f ? ' form' : ''), 'data-unit': id, title: tree ? 'Right-click: pick a skill-tree form to spawn' : '',
+            onclick: () => this.setPlacing(this.placing === id ? null : id),
+            oncontextmenu: (e) => { e.preventDefault(); if (tree) this.openFormMenu(id, e.currentTarget); } }, f ? tree[f].name : UNITS[id].name, tree ? h('span', { class: 'dl-tree' }, f ? ` ${tree[f].level}` : ' ▾') : null);
+        })),
       ]));
     this.upEl = h('div');
     fill(this.leftEl, this.spawnEl, this.upEl);
@@ -590,6 +596,33 @@ export class DevLab {
       this.inspEl = h('div'));
     this.renderInspector();
     this.setPlacing(this.placing);
+  }
+  /** Right-click menu on a spawn button: base troop or any skill-tree form (grouped by branch), then place it. */
+  openFormMenu(id, anchor) {
+    this.closeFormMenu();
+    const A = this.arena, tree = SKILL_TREES[id], cur = A.forms[id] || null;
+    const pick = (f) => { if (f) A.forms[id] = f; else delete A.forms[id]; this.closeFormMenu(); this.renderArenaPanels(); this.setPlacing(id); };
+    const item = (f, depth) => {
+      const n = f ? tree[f] : null;
+      return h('button', { class: 'dl-b dl-form' + (cur === f ? ' on' : ''), style: `padding-left:${0.55 + depth * 0.9}rem`, onclick: () => pick(f) },
+        f ? n.name : UNITS[id].name + ' (base)', h('span', { class: 'dl-muted' }, f ? ` Lv ${n.level}` : ''));
+    };
+    const rows = [item(null, 0)];
+    const walk = (parent, depth) => { for (const [f, n] of Object.entries(tree)) if ((n.from ?? null) === parent) { rows.push(item(f, depth)); walk(f, depth + 1); } };
+    walk(null, 1);
+    const r = anchor.getBoundingClientRect();
+    this.formMenu = h('div', { class: 'dl-pop' }, h('div', { class: 'dl-sub' }, 'Spawn as'), rows);
+    document.body.appendChild(this.formMenu);
+    const m = this.formMenu, mh = m.offsetHeight;
+    m.style.left = Math.min(innerWidth - m.offsetWidth - 8, r.right + 6) + 'px';
+    m.style.top = Math.max(8, Math.min(innerHeight - mh - 8, r.top)) + 'px';
+    this._fmClose = (e) => { if (e.type === 'keydown' ? e.key === 'Escape' : !m.contains(e.target)) this.closeFormMenu(); };
+    setTimeout(() => { addEventListener('mousedown', this._fmClose, true); addEventListener('keydown', this._fmClose, true); });
+  }
+  closeFormMenu() {
+    if (!this.formMenu) return;
+    this.formMenu.remove(); this.formMenu = null;
+    removeEventListener('mousedown', this._fmClose, true); removeEventListener('keydown', this._fmClose, true);
   }
   renderUpgrades() {
     const g = this.game, A = this.arena; if (!g || !this.upEl) return;
