@@ -27,25 +27,25 @@ export const GAME = {
   highGround: { uphillMiss: 0.5 },
   researchQueueMax: 5,               // Barracks: running research + queued, like the training queue   // ranged attack from low ground (river) at a target on high ground
   defaultVision: [30, 16],
-  dmgVariance: 1,        // each hit rolls damage +/- this much
+  dmgVariance: 2,        // each hit rolls damage +/- this much
   invSlots: 6,           // item slots per troop
   lootLife: 30,          // seconds an item drop stays on the ground before it vanishes (blinks for the last 5)
   maxAttackSpeed: 600,   // attacks per minute hard cap (10/s)
   maxActives: 5,         // active abilities per unit (hotkeys Q W E R T); passives are unlimited
   flyHeight: 3,          // flying units hover this far above the ground
   flyingMiss: 0.5,       // ranged attacks against flying units miss this often (melee can't hit them at all)
-  spawnInvuln: 5,        // seconds of invulnerability (no damage, no CC) after spawning
+  spawnInvuln: 6,        // seconds of invulnerability (no damage, no CC) after spawning
 };
 
 // Base levels — castle and HQ use the same numbers. Matches start at GAME.baseLevel and level up through the
 // Fortify / Expand HQ upgrades (upgrades.js). HP raised in v0.22.0 (Lv 1 = 2500) so early matches last long enough for buildings.
 // slots = wall troop spots (models.js castleSlots / hqSlots) = how many Battlement / Overwatch levels the base can hold.
 export const BASE_LEVELS = [
-  { level: 1, hp: 2500, armor: 0, vision: [30, 16], slots: 1 },
-  { level: 2, hp: 3200, armor: 0, vision: [32, 18], slots: 2 },
-  { level: 3, hp: 4000, armor: 0, vision: [35, 20], slots: 4 },
-  { level: 4, hp: 5000, armor: 2, vision: [38, 22], slots: 6 },
-  { level: 5, hp: 6500, armor: 4, vision: [40, 24], slots: 8 },
+  { level: 1, hp: 3000, armor: 8, vision: [30, 16], slots: 1 },
+  { level: 2, hp: 4500, armor: 10, vision: [32, 18], slots: 2 },
+  { level: 3, hp: 6000, armor: 12, vision: [35, 20], slots: 4 },
+  { level: 4, hp: 8000, armor: 16, vision: [38, 22], slots: 6 },
+  { level: 5, hp: 12000, armor: 20, vision: [40, 24], slots: 8 },
 ];
 export const baseLevelStats = (L) => BASE_LEVELS[Math.max(1, Math.min(BASE_LEVELS.length, L)) - 1];
 
@@ -223,8 +223,8 @@ Object.assign(UNITS, {
   archerTower: {
     id: 'archerTower', name: 'Archer Tower', theme: 'medieval', family: 'siege', role: 'Defense tower', type: 'ranged',
     cost: 200, trainTime: 0,
-    hp: 500, hpRegen: 0, damage: 20, damageType: 'physical', attackSpeed: 60,
-    armor: 3, ward: 0, evasion: 0, missChance: 0,
+    hp: 750, hpRegen: 0, damage: 20, damageType: 'physical', attackSpeed: 60,
+    armor: 4, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 0, range: 15, vision: [26, 16], aggro: 15, radius: 1.5,
     projectile: { kind: 'arrow', speed: 26, arc: 0.12 },
     structure: { tower: true, fire: 'direct', buildTime: 18, footprint: 1.5, minRange: 0, highGround: true, turnRate: 6 },
@@ -234,7 +234,7 @@ Object.assign(UNITS, {
   sniperTower: {
     id: 'sniperTower', name: 'Sniper Tower', theme: 'modern', family: 'siege', role: 'Defense tower', type: 'ranged',
     cost: 220, trainTime: 0,
-    hp: 450, hpRegen: 0, damage: 45, damageType: 'physical', attackSpeed: 24,
+    hp: 600, hpRegen: 0, damage: 45, damageType: 'physical', attackSpeed: 24,
     armor: 3, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 0, range: 18, vision: [28, 18], aggro: 18, radius: 1.5,
     projectile: { kind: 'sniper', speed: 90, arc: 0 },
@@ -245,7 +245,7 @@ Object.assign(UNITS, {
   hwacha: {
     id: 'hwacha', name: 'Hwacha', theme: 'medieval', family: 'siege', role: 'Barrage tower', type: 'ranged',
     cost: 260, trainTime: 0,
-    hp: 450, hpRegen: 0, damage: 14, damageType: 'physical', attackSpeed: 12,
+    hp: 600, hpRegen: 0, damage: 14, damageType: 'physical', attackSpeed: 12,
     armor: 2, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 0, range: 13, vision: [22, 14], aggro: 13, radius: 1.6,
     structure: { tower: true, fire: 'volley', volley: { count: 10, cone: 0.5 }, buildTime: 22, footprint: 1.6, minRange: 2, splash: 1.5, flight: 0.7,
@@ -256,7 +256,7 @@ Object.assign(UNITS, {
   mgNest: {
     id: 'mgNest', name: 'Machine Gun Nest', theme: 'modern', family: 'siege', role: 'Barrage tower', type: 'ranged',
     cost: 260, trainTime: 0,
-    hp: 550, hpRegen: 0, damage: 5, damageType: 'physical', attackSpeed: 330,
+    hp: 700, hpRegen: 0, damage: 5, damageType: 'physical', attackSpeed: 330,
     armor: 4, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 0, range: 11, vision: [24, 14], aggro: 11, radius: 1.6,
     projectile: { kind: 'bullet', speed: 60, arc: 0 },

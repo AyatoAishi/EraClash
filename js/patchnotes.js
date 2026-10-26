@@ -7,6 +7,21 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.29.1', date: '2026-10-26T18:08:00+08:00', title: 'Sturdier bases and towers', author: 'AyatoAishi',
+    sections: [
+      { title: 'Bases', items: [
+        'Castle / HQ HP and armor by level: Lv 1 2,500 / 0 → <b>3,000 / 8</b>, Lv 2 3,200 / 0 → <b>4,500 / 10</b>, Lv 3 4,000 / 0 → <b>6,000 / 12</b>, Lv 4 5,000 / 2 → <b>8,000 / 16</b>, Lv 5 6,500 / 4 → <b>12,000 / 20</b>.',
+        'Armor now cuts base damage by 32% at Lv 1 up to 55% at Lv 5, so effective HP is about <b>+75%</b> at Lv 1 and over <b>3x</b> at Lv 5. Sieges take much longer, and this reins in the Heavy Catapult from 0.29.0.',
+      ] },
+      { title: 'Towers', items: [
+        '<b>Archer Tower</b> HP 500 → <b>750</b>, armor 3 → <b>4</b>. <b>Sniper Tower</b> HP 450 → <b>600</b>. <b>Hwacha</b> HP 450 → <b>600</b>. <b>Machine Gun Nest</b> HP 550 → <b>700</b>.',
+      ] },
+      { title: 'General', items: [
+        'Damage variance per hit ±1 → <b>±2</b>. Spawn protection 5s → <b>6s</b>.',
+      ] },
+    ],
+  },
+  {
     version: '0.29.0', date: '2026-10-26T17:55:00+08:00', title: 'Tier 2 Medieval: Dryad, Catapult, Batrider',
     sections: [
       { title: 'Dryad (Tier 2, 200g, 2 army)', items: [
