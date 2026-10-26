@@ -81,17 +81,9 @@ app.controls = new Controls(() => renderer.domElement, camera, {
   shopOpen: () => app.ui.shopOpen(),
   recent: (slot, many) => { const id = app.recentHires[slot]; if (id) app.hire(id, many ? 5 : 1); },
   useItem: (slot) => app.state === 'playing' && app.ui.useItemSlot(slot),
-  // Space: alternates base <-> the middle of your selected troops (always base when nothing is selected)
-  onCenter: () => {
-    const c = app.controls, sel = c.own().filter((u) => !u.dead);
-    if (app.lastCenter === 'base' && sel.length) {
-      c.centerOn(sel.reduce((a, u) => a + u.pos.x, 0) / sel.length, sel.reduce((a, u) => a + u.pos.z, 0) / sel.length);
-      app.lastCenter = 'units';
-    } else {
-      c.centerOn(app.playerTeam === 0 ? -GAME.baseX + 14 : GAME.baseX - 14);
-      app.lastCenter = 'base';
-    }
-  },
+  // camera to your base (Space handles the selected troops: Controls.centerSelection)
+  onCenterBase: () => app.controls.centerOn(app.playerTeam === 0 ? -GAME.baseX + 14 : GAME.baseX - 14),
+  editFormation: () => app.ui.openFormationEditor(),
 });
 app.ui = new UI(app);
 app.chat = new Chat(app);

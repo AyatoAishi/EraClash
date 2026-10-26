@@ -1712,6 +1712,8 @@ export class Game {
             const u = this.spawn(T.team, T.queue.shift());
             u.paid = T.queuePaid.shift() ?? u.def.cost;
             if (T.isAI && this.diff.waveSize > 1) { u._waiting = true; u.command({ type: 'idle' }); }
+            else if (T.rally?.gate) u.command({ type: 'idle' });                          // rally on own base: wait at the gate
+            else if (T.rally) u.command({ type: 'move', point: { x: T.rally.x + (Math.random() - 0.5) * 2, z: T.rally.z + (Math.random() - 0.5) * 2 } });   // walk to the flag
           }
         } else T.trainT = 0;
         if (T.research) {

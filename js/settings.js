@@ -8,8 +8,10 @@ const KEY = 'eraclash.settings.v1';
     general   : always active in battle
     ability   : QWER slots of the selected troop
     shop      : quick-hire keys for your 3 most recently hired troops, ONLY active while the shop is open
-    item      : use the item in inventory slot 1-6 of the selected troop. With nothing selected a digit
-                recalls its control group instead; Alt + digit always recalls the group.
+    item      : use the item in inventory slot 1-6 of the selected troop
+    group     : unit groups 1-5. The key alone does nothing: Alt + key = set the group, Ctrl + key = select it
+                (double-tap Ctrl + key = jump the camera to it)
+    formation : Alt + key = put the selected troops into that formation (facing the cursor)
 */
 export const ACTIONS = [
   { id: 'attackMove', scope: 'general', label: 'Attack (then left-click target/ground)' },
@@ -23,7 +25,8 @@ export const ACTIONS = [
   { id: 'chat',       scope: 'general', label: 'Open chat (type /help for test commands vs AI)' },
   { id: 'autoLoot',   scope: 'general', label: 'Toggle Auto-loot (creep drops go straight to the killer)' },
   { id: 'selectAll',  scope: 'general', label: 'Select all my troops' },
-  { id: 'centerBase', scope: 'general', label: 'Center camera: base / selected troops (alternates)' },
+  { id: 'centerUnits', scope: 'general', label: 'Camera to selected troops (tap = center, hold = follow)' },
+  { id: 'centerBase', scope: 'general', label: 'Camera to your base' },
   { id: 'panLeft',    scope: 'general', label: 'Pan camera left' },
   { id: 'panRight',   scope: 'general', label: 'Pan camera right' },
   { id: 'panUp',      scope: 'general', label: 'Pan camera up' },
@@ -36,10 +39,14 @@ export const ACTIONS = [
   // quick-hire: the N most recently hired troop types (no per-troop keys — the roster can grow forever)
   ...Array.from({ length: 3 }, (_, i) => ({ id: 'recent' + (i + 1), scope: 'shop', label: `Hire recent troop #${i + 1}` })),
   ...Array.from({ length: 6 }, (_, i) => ({ id: 'item' + (i + 1), scope: 'item', label: `Use item slot ${i + 1}` })),
+  ...Array.from({ length: 5 }, (_, i) => ({ id: 'group' + (i + 1), scope: 'group', label: `Unit group ${i + 1} (Alt = set, Ctrl = select)` })),
+  ...['Circle', 'Square', 'Line', 'Custom'].map((n, i) => ({ id: 'formation' + (i + 1), scope: 'formation', label: `Formation: ${n} (Alt + key)` })),
 ];
 export const ITEM_SLOTS = ACTIONS.filter((a) => a.scope === 'item').map((a) => a.id);
 export const RECENT_SLOTS = ACTIONS.filter((a) => a.scope === 'shop').map((a) => a.id);
-export const SCOPE_LABEL = { general: 'General', ability: 'Abilities (selected troop)', shop: 'Shop: recent troops (only while the shop is open)', item: 'Items (selected troop) · Alt + digit = control group' };
+export const GROUP_SLOTS = ACTIONS.filter((a) => a.scope === 'group').map((a) => a.id);
+export const FORMATION_SLOTS = ACTIONS.filter((a) => a.scope === 'formation').map((a) => a.id);
+export const SCOPE_LABEL = { general: 'General', ability: 'Abilities (selected troop)', shop: 'Shop: recent troops (only while the shop is open)', item: 'Items (selected troop)', group: 'Unit groups · Alt + key = set, Ctrl + key = select (double-tap = jump)', formation: 'Formations · Alt + key (faces the cursor)' };
 export const scopeOf = (actionId) => ACTIONS.find((a) => a.id === actionId)?.scope;
 
 export const DEFAULTS = {
@@ -55,7 +62,8 @@ export const DEFAULTS = {
     autoLoot: 'KeyL',
     chat: 'Enter',
     selectAll: 'KeyF',
-    centerBase: 'Space',
+    centerUnits: 'Space',
+    centerBase: 'Backquote',
     panLeft: 'ArrowLeft',
     panRight: 'ArrowRight',
     panUp: 'ArrowUp',
@@ -69,10 +77,12 @@ export const DEFAULTS = {
     recent2: 'Digit2',
     recent3: 'Digit3',
     item1: 'Digit1', item2: 'Digit2', item3: 'Digit3', item4: 'Digit4', item5: 'Digit5', item6: 'Digit6',
+    group1: 'KeyZ', group2: 'KeyX', group3: 'KeyC', group4: 'KeyV', group5: 'KeyB',
+    formation1: 'Digit1', formation2: 'Digit2', formation3: 'Digit3', formation4: 'Digit4',
   },
   audio: { master: 0.8, music: 0.4, sfx: 0.8, mute: false },
   graphics: { quality: 'medium', pixelated: false, showFps: false, hpBars: 'always', uiScale: 1, damageNumbers: 'crits', critHighlight: true, combatText: true },
-  gameplay: { shopView: 'list', edgePan: true, panSpeed: 1.0, zoomSpeed: 1.0, quickCast: false },
+  gameplay: { shopView: 'list', edgePan: true, panSpeed: 1.0, zoomSpeed: 1.0, quickCast: false, customFormation: null },
 };
 
 function deepMerge(base, over) {
@@ -89,7 +99,10 @@ function deepMerge(base, over) {
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    return deepMerge(DEFAULTS, raw ? JSON.parse(raw) : null);
+    const out = deepMerge(DEFAULTS, raw ? JSON.parse(raw) : null);
+    // v0.27: Space moved from "base" to "selected troops"; old saves had the base on Space too
+    if (out.keys.centerBase === out.keys.centerUnits) out.keys.centerBase = DEFAULTS.keys.centerBase;
+    return out;
   } catch { return structuredClone(DEFAULTS); }
 }
 

@@ -809,3 +809,20 @@ body.placing #view canvas { cursor: copy; }
 #sp-buffs .buff svg { width: 100%; height: 100%; display: block; }
 #sp-buffs .bt { position: absolute; left: 0; right: 0; bottom: -.1rem; text-align: center; font-style: normal; font-size: .75rem; line-height: 1; color: #fff; text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; }
 #sp-buffs em { position: absolute; right: -.15rem; top: -.2rem; font-style: normal; font-size: .75rem; line-height: 1; padding: 0 .12rem; background: #000; color: var(--gold); }
+
+/* formation panel (top-left, under the speed buttons) */
+#formctl { position: absolute; top: calc(var(--p) * 2 + 3.1rem); left: calc(var(--p) * 2); display: flex; align-items: center; gap: .25rem; padding: .3rem .4rem; background: rgba(20, 24, 34, .94); pointer-events: auto; }
+#speedctl.hidden + #formctl { top: calc(var(--p) * 2); }
+#formctl span { font-family: var(--head); font-size: .8rem; color: var(--muted); margin: 0 .3rem 0 .15rem; }
+#formctl button { position: relative; width: 2rem; height: 2rem; padding: .3rem; border: 0; cursor: pointer; background: #07090d; box-shadow: inset 0 0 0 calc(var(--p) * .5) var(--line); }
+#formctl button:hover { filter: brightness(1.3); box-shadow: inset 0 0 0 calc(var(--p) * .5) var(--hp); }
+#formctl button svg { width: 100%; height: 100%; display: block; }
+#formctl button kbd { position: absolute; left: 0; top: 0; font-size: .6rem; padding: 0 .1rem; }
+#formctl button kbd:empty { display: none; }
+#formctl .fedit { margin-left: .2rem; }
+#formedit { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 1rem; background: rgba(20, 24, 34, .98); pointer-events: auto; z-index: 60; width: 24rem; }
+#formedit.hidden { display: none; }
+#formedit h3 { font-family: var(--head); margin: 0 0 .4rem; }
+#formedit p { font-size: .9rem; color: var(--muted); margin: 0 0 .6rem; }
+#formpad { display: block; width: 100%; aspect-ratio: 1; background: #07090d; cursor: crosshair; box-shadow: inset 0 0 0 calc(var(--p) * .5) var(--line); }
+#formedit .fe-row { display: flex; gap: .5rem; justify-content: flex-end; margin-top: .6rem; }

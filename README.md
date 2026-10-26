@@ -23,10 +23,13 @@ Opening index.html directly via file:// will NOT work (ES modules need a server)
 | 1 / 2 / 3 (shop open) | buy troop 1 / 2 / 3 · Shift = 5 |
 | Q W E R | ability slots 1–4 of the selected troop |
 | F | select whole army |
-| Ctrl+1-9 / Alt+1-9 | control groups (double-tap = jump) |
+| Alt+Z X C V B / Ctrl+same | set / select unit group 1-5 (double-tap = jump) |
+| Alt+1 / 2 / 3 / 4 | formation: circle / square / line / your drawn shape (faces the cursor) |
 | 1-6 | use the selected troop's item in that slot (right-click an item: Use / Discard) |
 | right-click ability | toggle autocast for every selected troop with it |
-| Space | camera to base |
+| Space | camera to selected troops (hold = follow) |
+| ` | camera to base |
+| base selected + right-click | rally flag (ground) / wait at gate (own base) / charge (enemy base) |
 | Edge / arrows / middle-drag / wheel | camera |
 | Esc | pause |
 

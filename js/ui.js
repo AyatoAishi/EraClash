@@ -174,6 +174,13 @@ export class UI {
     addEventListener('pointerup', () => { drag = null; pan.classList.remove('drag'); });
     $('#btn-repair').addEventListener('click', () => this.toggleRepair());
     $('#btn-autoloot').addEventListener('click', () => this.toggleAutoLoot());
+    // formations (top-left): click = same as Alt + key; pencil = draw the custom shape
+    $$('#formctl button').forEach((b) => b.addEventListener('click', () => {
+      sfx('click');
+      if (b.dataset.form === 'edit') this.openFormationEditor();
+      else this.app.controls.applyFormation(b.dataset.form);
+    }));
+    this.bindFormationEditor();
     // fast forward (vs AI only): 1x / 2x / 3x
     $$('#speedctl button').forEach((b) => b.addEventListener('click', () => {
       const g = this.app.game;
@@ -228,6 +235,10 @@ export class UI {
         ? `<div class="tip-m">${A.cooldown ? `Cooldown ${A.cooldown}s` : 'No cooldown'}${A.radius ? ` · Radius ${A.radius}` : ''}${A.castRange ? ` · Cast range ${A.castRange}` : ''}${A.leap ? ` · Leap range ${A.leap.range}` : ''}${dmg ? ` · ${dmg} ${DAMAGE_TYPES[A.damageType].name.toLowerCase()} dmg` : ''}${A.affectsFlying !== undefined ? ` · Affects flying: ${A.affectsFlying ? 'yes' : 'no'}` : ''}${A.manaCost ? ` · ${A.manaCost} mana` : ''}${el.dataset.key ? ` · Key <kbd>${el.dataset.key}</kbd>` : ''}</div>${el.dataset.key ? `<div class="tip-m">${canAutocast(A) ? `Right-click: autocast ${entry?.st.auto ? '<b>ON</b>' : 'off'}` : 'No autocast'}</div>` : ''}` : '';
       html = `<div class="tip-h"><svg class="ico"><use href="#${A.icon}"/></svg><b>${A.name}</b><small class="${A.kind}">${A.kind.toUpperCase()}</small></div>
         <p>${abilityText(A)}</p>${meta}${status ? `<div class="tip-s ${status.on ? 'on' : ''}">${status.text}</div>` : ''}`;
+    } else if (kind === 'formation') {
+      const N = { circle: ['Circle', 'Hollow ring around the middle of your troops.'], square: ['Square', 'Hollow square around the middle of your troops.'], line: ['Line', 'One line across the direction of your cursor.'], custom: ['Custom', 'The shape you drew (pencil button). Up on your drawing = toward the cursor.'], edit: ['Draw custom formation', 'Open the drawing pad for your custom shape. Saved with your settings.'] }[id];
+      const ak = { circle: 'formation1', square: 'formation2', line: 'formation3', custom: 'formation4' }[id];
+      html = `<div class="tip-h"><svg class="ico"><use href="#f-${id === 'edit' ? 'draw' : id}"/></svg><b>${N[0]}</b></div><p>${N[1]}</p>${ak ? `<div class="tip-m">Key <kbd>Alt+${keyLabel(settings.keys[ak])}</kbd> · faces your cursor · not sticky</div>` : ''}`;
     } else if (kind === 'status') {
       const x = el._st; if (!x) return this.hideTip();
       html = `<div class="tip-h"><svg class="ico"><use href="#${x.icon}"/></svg><b>${x.name}</b><small class="${x.kind === 'buff' ? 'passive' : 'active'}">${x.kind.toUpperCase()}</small></div>
@@ -378,6 +389,8 @@ export class UI {
         ['ability', SCOPE_LABEL.ability, null],
         ['shop', SCOPE_LABEL.shop, null],
         ['item', SCOPE_LABEL.item, null],
+        ['group', SCOPE_LABEL.group, null],
+        ['formation', SCOPE_LABEL.formation, null],
       ];
       for (const [scope, title] of groups) {
         list.insertAdjacentHTML('beforeend', `<div class="kb-head">${title}</div>`);
@@ -392,7 +405,7 @@ export class UI {
       const fixed = [
         ['Select unit / box select', 'LMB / drag'], ['Add to selection', 'Shift+LMB'],
         ['Select all of type', 'Dbl-click'], ['Move / attack target', 'RMB'],
-        ['Control groups: save / recall', 'Ctrl+1-9 / Alt+1-9'], ['Item: use / discard', 'LMB / RMB slot'], ['Zoom', 'Wheel'], ['Drag camera', 'MMB'], ['Close shop / pause', 'Esc'],
+        ['Ability: autocast on / off', 'RMB icon'], ['Base selected: rally flag / gate / charge', 'RMB ground / own / enemy base'], ['Item: use / discard', 'LMB / RMB slot'], ['Zoom', 'Wheel'], ['Drag camera', 'MMB'], ['Close shop / pause', 'Esc'],
       ];
       for (const [l, k] of fixed) {
         const row = document.createElement('div');
@@ -560,8 +573,10 @@ export class UI {
         <div><kbd>${keyLabel(k.shop)}</kbd> open the Shop. Click a troop to hire it (search + list/card view at the top); your 3 most recent hires get quick keys <kbd>${keyLabel(k.recent1)}</kbd> <kbd>${keyLabel(k.recent2)}</kbd> <kbd>${keyLabel(k.recent3)}</kbd> while it's open, <kbd>Shift</kbd> hires 5, <kbd>Esc</kbd> closes it. <kbd>${keyLabel(k.selectAll)}</kbd> selects all your troops.</div>
         <div><kbd>${keyLabel(k.abil1)}</kbd> <kbd>${keyLabel(k.abil2)}</kbd> <kbd>${keyLabel(k.abil3)}</kbd> <kbd>${keyLabel(k.abil4)}</kbd> use the selected troop's 1st–4th <b>active</b> ability (5th: <kbd>${keyLabel(k.abil5)}</kbd>) (every selected troop of that type casts). You can also click the ability icon.</div>
         <div><kbd>RMB</kbd> on a dropped item = closest selected troop picks it up. <kbd>${keyLabel(k.autoLoot)}</kbd> toggles <b>Auto-loot</b> (creep drops go straight to the killer's inventory).</div>
-        <div><kbd>Ctrl+1-9</kbd> save group, <kbd>Alt+1-9</kbd> recall (plain <kbd>1-9</kbd> too when nothing is selected), double-tap to jump camera. <kbd>1-6</kbd> use the selected troop's items; right-click an item to discard it.</div>
-        <div>Push the mouse against a screen edge or use the arrow keys to scroll. <kbd>${keyLabel(k.centerBase)}</kbd> jumps home; press again to jump to your selected troops (it alternates). Minimap: <kbd>LMB</kbd> jump/drag camera, <kbd>RMB</kbd> move troops.</div>
+        <div><b>Groups</b>: <kbd>Alt+${keyLabel(k.group1)}</kbd>…<kbd>Alt+${keyLabel(k.group5)}</kbd> sets group 1–5 from your selection, <kbd>Ctrl+${keyLabel(k.group1)}</kbd>… selects it, double-tap to jump the camera there. <kbd>1-6</kbd> use the selected troop's items; right-click an item to discard it.</div>
+        <div><b>Formations</b>: <kbd>Alt+${keyLabel(k.formation1)}</kbd> circle, <kbd>Alt+${keyLabel(k.formation2)}</kbd> square, <kbd>Alt+${keyLabel(k.formation3)}</kbd> line, <kbd>Alt+${keyLabel(k.formation4)}</kbd> your own drawn shape (or the FORM buttons, top-left). The shape faces your cursor; your next right-click is a normal move.</div>
+        <div><b>Rally</b>: select your base and right-click the ground to plant a flag — new troops walk there. Right-click your own base = they wait at the gate, the enemy base = they charge (default).</div>
+        <div>Push the mouse against a screen edge or use the arrow keys to scroll. <kbd>${keyLabel(k.centerUnits)}</kbd> centers on your selected troops (hold to follow them), <kbd>${keyLabel(k.centerBase)}</kbd> jumps home. Minimap: <kbd>LMB</kbd> jump/drag camera, <kbd>RMB</kbd> move troops.</div>
       </div>`;
   }
 
@@ -1237,6 +1252,45 @@ export class UI {
       const b = $('b', c); b.style.width = (fr * 100) + '%';
       b.style.background = fr > 0.5 ? 'var(--hp)' : fr > 0.25 ? 'var(--gold)' : 'var(--bad)';
     });
+  }
+
+  // ---------------- custom formation drawing pad ----------------
+  openFormationEditor() {
+    this._fePts = (settings.gameplay.customFormation || []).map((p) => [...p]);
+    $('#formedit').classList.remove('hidden');
+    this.drawFormationPad();
+  }
+  drawFormationPad() {
+    const c = $('#formpad'), x = c.getContext('2d'), W = c.width, P = this._fePts || [];
+    x.fillStyle = '#07090d'; x.fillRect(0, 0, W, W);
+    x.fillStyle = '#1e2632'; for (let i = 1; i < 8; i++) { x.fillRect(i * W / 8, 0, 1, W); x.fillRect(0, i * W / 8, W, 1); }
+    x.fillStyle = '#ffe14a'; x.fillRect(W / 2 - 6, 6, 12, 4); x.fillRect(W / 2 - 3, 2, 6, 4);   // "forward" marker
+    const toPx = (p) => [(p[0] + 1) / 2 * W, (1 - p[1]) / 2 * W];
+    x.fillStyle = '#5ce36f';
+    for (let i = 1; i < P.length; i++) {   // chunky pixel stroke
+      const [ax, ay] = toPx(P[i - 1]), [bx, by] = toPx(P[i]), n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 3));
+      for (let k = 0; k <= n; k++) x.fillRect(Math.round((ax + (bx - ax) * k / n) / 4) * 4 - 2, Math.round((ay + (by - ay) * k / n) / 4) * 4 - 2, 5, 5);
+    }
+    if (P.length === 1) { const [a, b] = toPx(P[0]); x.fillRect(a - 2, b - 2, 5, 5); }
+  }
+  bindFormationEditor() {
+    const c = $('#formpad'); let down = false;
+    const at = (e) => { const r = c.getBoundingClientRect(); return [Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1)), Math.max(-1, Math.min(1, 1 - ((e.clientY - r.top) / r.height) * 2))]; };
+    c.addEventListener('pointerdown', (e) => { down = true; c.setPointerCapture(e.pointerId); this._fePts = [at(e)]; this.drawFormationPad(); });
+    c.addEventListener('pointermove', (e) => {
+      if (!down) return;
+      const p = at(e), L = this._fePts[this._fePts.length - 1];
+      if (Math.hypot(p[0] - L[0], p[1] - L[1]) > 0.04) { this._fePts.push(p); this.drawFormationPad(); }
+    });
+    c.addEventListener('pointerup', () => (down = false));
+    $('#fe-clear').onclick = () => { sfx('click'); this._fePts = []; this.drawFormationPad(); };
+    $('#fe-cancel').onclick = () => { sfx('click'); $('#formedit').classList.add('hidden'); };
+    $('#fe-save').onclick = () => {
+      if ((this._fePts || []).length < 2) { this.toast('Draw a shape first', 'err'); return; }
+      settings.gameplay.customFormation = this._fePts.slice(0, 200).map(([a, b]) => [Math.round(a * 1000) / 1000, Math.round(b * 1000) / 1000]);
+      saveSettings(); sfx('click'); $('#formedit').classList.add('hidden');
+      this.toast(`Custom formation saved (Alt+${keyLabel(settings.keys.formation4)})`);
+    };
   }
 
   /** Buff / debuff row above the selection panel (Unit.statusList). Rebuilt only when the set changes; timers tick in place. */

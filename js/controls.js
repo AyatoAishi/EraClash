@@ -2,16 +2,54 @@
 import * as THREE from 'three';
 import { GAME, UNITS } from './config.js';
 import { UNIT_BUILDERS } from './models.js';
-import { settings, ITEM_SLOTS } from './settings.js';
+import { settings, ITEM_SLOTS, GROUP_SLOTS, FORMATION_SLOTS, keyLabel } from './settings.js';
 import { sfx } from './audio.js';
 
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+// ---------------- formations ----------------
+export const FORMATIONS = ['circle', 'square', 'line', 'custom'];
+const SP = 1.35;   // spacing between troops (same as the move formation)
+/**
+ * Slot offsets [across, forward] around the group's middle for `n` troops. Forward = toward the cursor.
+ * custom: `pts` is the drawn path, normalized [-1, 1] (x = across, y = forward), resampled to n evenly spaced points.
+ */
+export function formationSlots(shape, n, pts) {
+  if (n <= 1) return [[0, 0]];
+  const out = [];
+  if (shape === 'circle') {   // hollow ring
+    const r = Math.max(1.4, n * SP / (Math.PI * 2));
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; out.push([Math.sin(a) * r, Math.cos(a) * r]); }
+  } else if (shape === 'square') {   // hollow square: walk the perimeter
+    const L = Math.max(1.4, n * SP / 4), per = 4 * L;
+    for (let i = 0; i < n; i++) {
+      const t = i / n * per, side = Math.floor(t / L), f = t - side * L, h = L / 2;
+      out.push(side === 0 ? [-h + f, h] : side === 1 ? [h, h - f] : side === 2 ? [h - f, -h] : [-h, -h + f]);
+    }
+  } else if (shape === 'custom' && pts?.length > 1) {
+    const seg = []; let len = 0;
+    for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(d); len += d; }
+    const k = len > 0 ? Math.max(SP * (n - 1) / len, 0.5) : 1;   // scale so neighbours sit ~SP apart
+    let cx = 0, cy = 0;
+    for (let i = 0; i < n; i++) {
+      let t = len * i / (n - 1), j = 0;
+      while (j < seg.length - 1 && t > seg[j]) { t -= seg[j]; j++; }
+      const f = seg[j] ? Math.min(1, t / seg[j]) : 0, a = pts[j], b = pts[j + 1];
+      const x = (a[0] + (b[0] - a[0]) * f) * k, y = (a[1] + (b[1] - a[1]) * f) * k;
+      out.push([x, y]); cx += x / n; cy += y / n;
+    }
+    for (const p of out) { p[0] -= cx; p[1] -= cy; }   // centered on the group
+  } else {   // line: across the facing direction
+    for (let i = 0; i < n; i++) out.push([(i - (n - 1) / 2) * SP, 0]);
+  }
+  return out;
+}
 
 export class Controls {
   constructor(canvasGetter, camera, hooks) {
     this.getCanvas = canvasGetter;
     this.camera = camera;
-    this.hooks = hooks; // { onSelectionChange, toast, trainHotkey, onCenter }
+    this.hooks = hooks; // { onSelectionChange, toast, trainHotkey, onCenterBase, editFormation, ... }
     this.target = new THREE.Vector3(-40, 0, 0);
     this.height = 34;
     this.enabled = false;
@@ -33,6 +71,7 @@ export class Controls {
 
   setGame(game, team) {
     this.cancelBuild?.();
+    if (this.flag) { this.flag.parent?.remove(this.flag); this.flag = null; }
     this.game = game; this.team = team; this.selection = []; this.groups = {}; this.armed = false; this.selectedBase = null;
     for (const m of [this.rangeMesh, this.minRangeMesh, this.hoverRing, this.baseRing, this.aimMesh]) if (m) game.scene.add(m);   // the Dev Lab arena has its own scene
     this.hooks.onSelectionChange?.();
@@ -69,8 +108,10 @@ export class Controls {
       this.target.x += dx * sp * dt;
       this.target.z += dz * sp * dt * 0.7;
       this.clampTarget();
+      if (this.keys.has(k.centerUnits)) this.centerSelection(false);   // held: follow the selected troops
     }
     this.apply();
+    this.updateRallyFlag();
     this.updateBuildGhost();
     this.updateRange(dt);
     this.updateHover();
@@ -82,6 +123,22 @@ export class Controls {
       this.selection = this.selection.filter((u) => !gone(u));
       this.hooks.onSelectionChange?.();
     }
+  }
+
+  /** Rally flag: only drawn for you, only while your base is selected. */
+  updateRallyFlag() {
+    const R = this.game?.teams[this.team]?.rally, show = !!(R && !R.gate && this.selectedBase?.team === this.team);
+    if (!this.flag) {
+      if (!show) return;
+      const g = new THREE.Group(), box = (w, h, d, c, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color: c })); m.position.set(x, y, z); m.material.userData.noFow = true; g.add(m); return m; };
+      box(0.12, 2.4, 0.12, 0x3a2a1a, 0, 1.2, 0);                       // pole
+      box(0.9, 0.55, 0.06, 0xe83a2a, 0.5, 2.05, 0);                    // cloth
+      box(0.3, 0.25, 0.07, 0xff6a4a, 0.75, 1.75, 0);                   // tail
+      box(0.5, 0.08, 0.5, 0x2a1a10, 0, 0.04, 0);                       // base
+      g.renderOrder = 3; this.flag = g; this.game.scene.add(g);
+    }
+    this.flag.visible = show;
+    if (show) { this.flag.position.set(R.x, 0, R.z); this.flag.children[1].rotation.y = Math.sin(performance.now() / 300) * 0.25; }
   }
 
   // ---------------- single-unit attack-range circle (pixel dots) ----------------
@@ -474,6 +531,7 @@ export class Controls {
     this.setSelection(all);
   }
   rightClickAt(sx, sy) {
+    if (this.selectedBase && this.selectedBase.team === this.team && !this.own().length) return this.setRally(sx, sy);
     if (!this.own().length) return;
     const gp = this.groundAt(sx, sy);
     const L = gp && this.game.lootNear(gp, 1.1);
@@ -485,6 +543,77 @@ export class Controls {
     const p = this.groundAt(sx, sy);
     if (p) this.issueMove(p, 'move');
   }
+  // ---------------- unit groups ----------------
+  setGroup(n) {
+    const own = this.own();
+    if (!own.length) { this.hooks.toast?.(`Select troops first, then Alt + ${keyLabel(settings.keys['group' + n])} to make group ${n}`); return; }
+    this.groups[n] = own;
+    for (const u of this.game.units) if (u.group === n) u.group = 0;
+    own.forEach((u) => (u.group = n));
+    this.hooks.toast?.(`Group ${n} set (${own.length})`);
+    sfx('click');
+  }
+  selectGroup(n) {
+    const alive = (this.groups[n] || []).filter((u) => !u.dead && u.group === n);
+    if (!alive.length) { this.hooks.toast?.(`Group ${n} is empty (Alt + ${keyLabel(settings.keys['group' + n])} sets it)`); return; }
+    this.setSelection(alive);
+    const now = performance.now();
+    if (this.lastGroupTap.n === n && now - this.lastGroupTap.t < 350) this.centerSelection(true);
+    this.lastGroupTap = { n, t: now };
+  }
+  /** Camera to the middle of the selected troops (nothing selected: tap goes to the base). */
+  centerSelection(tap) {
+    const sel = this.selection.filter((u) => !u.dead);
+    if (!sel.length) { if (tap) this.hooks.onCenterBase?.(); return; }
+    const cx = sel.reduce((a, u) => a + u.pos.x, 0) / sel.length, cz = sel.reduce((a, u) => a + u.pos.z, 0) / sel.length;
+    if (tap) this.centerOn(cx, cz);
+    else { this.target.x += (cx - this.target.x) * 0.25; this.target.z += (cz - this.target.z) * 0.25; this.clampTarget(); }
+  }
+
+  // ---------------- formations ----------------
+  /**
+   * Put the selected troops into a shape around their current middle, facing the cursor (the line runs across that
+   * direction, so a cursor to their left makes a vertical line). Not sticky: the next right-click is a normal move.
+   */
+  applyFormation(shape) {
+    const units = this.own().filter((u) => !u.immobile);
+    if (!units.length) { this.hooks.toast?.('Select troops first'); return; }
+    let pts = shape === 'custom' ? settings.gameplay.customFormation : null;
+    if (shape === 'custom' && !(pts && pts.length > 1)) { this.hooks.toast?.('Draw your custom formation first (✎ on the formation panel)'); this.hooks.editFormation?.(); return; }
+    const n = units.length;
+    const c = units.reduce((a, u) => (a.x += u.pos.x / n, a.z += u.pos.z / n, a), { x: 0, z: 0 });
+    const m = this.groundAt(this.mouse.x, this.mouse.y);
+    let fx = m ? m.x - c.x : (this.team === 0 ? 1 : -1), fz = m ? m.z - c.z : 0;
+    const fl = Math.hypot(fx, fz); if (fl < 0.3) { fx = this.team === 0 ? 1 : -1; fz = 0; } else { fx /= fl; fz /= fl; }
+    const slots = formationSlots(shape, n, pts).map(([a, b]) => ({ x: c.x + fx * b - fz * a, z: c.z + fz * b + fx * a }));   // a = across, b = forward
+    const lim = GAME.baseX - GAME.baseHalfX - 0.6;
+    for (const p of slots) { p.x = Math.max(-lim, Math.min(lim, p.x)); p.z = Math.max(-GAME.mapHalfWidth, Math.min(GAME.mapHalfWidth, p.z)); }
+    // greedy: each slot takes the closest free troop (cheap, and with n <= 40 good enough to avoid crossing paths)
+    const free = new Set(units);
+    for (const p of slots) {
+      let best = null, bd = Infinity;
+      for (const u of free) { const d = (u.pos.x - p.x) ** 2 + (u.pos.z - p.z) ** 2; if (d < bd) { bd = d; best = u; } }
+      free.delete(best); best.command({ type: 'move', point: p });
+    }
+    this.game.marker(c, 0x5dff7a);
+    this.hooks.toast?.(`Formation: ${shape}`);
+    sfx('order');
+  }
+
+  // ---------------- base rally point ----------------
+  /** Base selected + right-click: ground = rally flag, own base = stay at the gate, enemy base = default (charge). */
+  setRally(sx, sy) {
+    const T = this.game.teams[this.team], b = this.baseAt(sx, sy);
+    if (b && b.team === this.team) { T.rally = { gate: true }; this.hooks.toast?.('New troops wait at the gate'); }
+    else if (b) { T.rally = null; this.hooks.toast?.('New troops charge the enemy base (default)'); }
+    else {
+      const p = this.groundAt(sx, sy); if (!p) return;
+      T.rally = { x: p.x, z: p.z }; this.hooks.toast?.('Rally point set: new troops walk to the flag');
+      this.game.marker(p, 0xff4a3a);
+    }
+    sfx('order');
+  }
+
   armedClickAt(sx, sy) {
     const u = this.unitAt(sx, sy);
     if (u && u.team !== this.team) this.issueAttack(u);
@@ -592,35 +721,22 @@ export class Controls {
         const slot = ['recent1', 'recent2', 'recent3'].findIndex((a) => k[a] === e.code);
         if (slot >= 0) { e.preventDefault(); this.hooks.recent?.(slot, e.shiftKey); return; }
       }
-      // 2) item slots (1-6 by default) on the selected troop. Alt + digit skips this and recalls the control group.
+      // 2) unit groups (Alt + key = set, Ctrl + key = select) and formations (Alt + key)
+      if (e.altKey || e.ctrlKey || e.metaKey) {
+        const gi = GROUP_SLOTS.findIndex((a) => k[a] === e.code);
+        if (gi >= 0) { e.preventDefault(); if (e.altKey) this.setGroup(gi + 1); else this.selectGroup(gi + 1); return; }
+        const fi = FORMATION_SLOTS.findIndex((a) => k[a] === e.code);
+        if (fi >= 0 && e.altKey) { e.preventDefault(); this.applyFormation(FORMATIONS[fi]); return; }
+      }
+      // 3) item slots (1-6 by default) on the selected troop
       if (!e.ctrlKey && !e.metaKey && !e.altKey && this.own().length) {
         const it = ITEM_SLOTS.findIndex((a) => k[a] === e.code);
         if (it >= 0) { e.preventDefault(); this.hooks.useItem?.(it); return; }
       }
-      // 3) ability slots (Q W E R by default)
+      // 4) ability slots (Q W E R by default)
       const slot = ['abil1', 'abil2', 'abil3', 'abil4', 'abil5'].findIndex((a) => k[a] === e.code);
       if (slot >= 0 && this.own().length) { e.preventDefault(); this.castActive(slot); return; }
-      // 4) control groups (Ctrl + N saves, N / Alt + N recalls)
-      if (e.code.startsWith('Digit') && e.code !== 'Digit0') {
-        const n = e.code.slice(5);
-        if (e.altKey) e.preventDefault();
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          this.groups[n] = this.own();
-          this.hooks.toast?.(`Group ${n} set (${this.groups[n].length})`);
-        } else if (this.groups[n]) {
-          const alive = this.groups[n].filter((u) => !u.dead);
-          this.setSelection(alive);
-          const now = performance.now();
-          if (this.lastGroupTap.n === n && now - this.lastGroupTap.t < 350 && alive.length) {
-            const cx = alive.reduce((a, u) => a + u.pos.x, 0) / alive.length;
-            const cz = alive.reduce((a, u) => a + u.pos.z, 0) / alive.length;
-            this.centerOn(cx, cz);
-          }
-          this.lastGroupTap = { n, t: now };
-        }
-        return;
-      }
+      if (e.altKey) e.preventDefault();   // Alt alone focuses the browser menu on some systems
       if (e.code === k.attackMove) { e.preventDefault(); this.setArmed(true); }
       else if (e.code === k.stop) { this.cancelTargeting(); this.setArmed(false); this.stop(); }
       else if (e.code === k.charge) this.charge();
@@ -633,7 +749,8 @@ export class Controls {
       else if (e.code === k.autoLoot) this.hooks.toggleAutoLoot?.();
       else if (e.code === k.chat || (k.chat === 'Enter' && e.code === 'NumpadEnter')) { e.preventDefault(); this.hooks.openChat?.(); }
       else if (e.code === k.selectAll) this.selectAll();
-      else if (e.code === k.centerBase) { e.preventDefault(); this.hooks.onCenter?.(); }
+      else if (e.code === k.centerUnits) { e.preventDefault(); this.centerSelection(true); }
+      else if (e.code === k.centerBase) { e.preventDefault(); this.hooks.onCenterBase?.(); }
       if (e.code.startsWith('Arrow')) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));

@@ -7,6 +7,28 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.27.0', date: '2026-10-26T17:36:00+08:00', title: 'Formations, unit groups, camera follow, rally flag',
+    sections: [
+      { title: 'Formations (new)', items: [
+        'Four formations for your selected troops: <b>Circle</b> and <b>Square</b> (hollow), <b>Line</b>, and <b>Custom</b>: a shape you draw yourself on a pad (pencil button). Keys: <b>Alt + 1 / 2 / 3 / 4</b>, or the new buttons at the top left.',
+        'The shape forms around the middle of your troops and <b>faces your cursor</b>: cursor to their left = a vertical line. It isn\'t sticky: your next right-click is a normal move (troops have different speeds, so a locked shape would fall apart anyway).',
+        'Your custom drawing is saved with your settings. Up on the pad = toward the cursor; troops spread evenly along what you drew.',
+      ] },
+      { title: 'Unit groups (reworked)', items: [
+        '5 groups. <b>Alt + Z / X / C / V / B</b> sets group 1–5 from your selection, <b>Ctrl + same key</b> selects it, double-tap Ctrl + key jumps the camera there. All rebindable in Options (the modifiers stay fixed).',
+        'The old Ctrl + 1-9 / Alt + 1-9 control groups are gone: digits are for items (1-6) and Alt + digit is formations now.',
+      ] },
+      { title: 'Camera', items: [
+        '<b>Space</b> centers on your selected troops; <b>hold</b> it to follow them. With nothing selected it goes to your base.',
+        'Base camera moved to its own key: <b>`</b> (backquote), rebindable. Old saved settings that had both on Space are fixed automatically.',
+      ] },
+      { title: 'Rally flag (new)', items: [
+        'Select your base and <b>right-click the ground</b>: a red flag goes up and every new troop walks there and waits. Right-click <b>your own base</b>: new troops wait at the gate. Right-click the <b>enemy base</b>: back to the default (they charge).',
+        'Only you see the flag, and only while your base is selected.',
+      ] },
+    ],
+  },
+  {
     version: '0.26.0', date: '2026-10-26T17:16:00+08:00', title: 'Exp from bounties, autocast, buff bar',
     sections: [
       { title: 'Skill tree exp', items: [
