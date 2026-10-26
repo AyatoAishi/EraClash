@@ -82,13 +82,13 @@ export const SKILL_TREES = {
   archer: {   // Ranger
     scout: {
       name: 'Scout Ranger', from: null, level: 5,
-      cost: 5, stats: { damage: 2 }, abilityMods: { eagleEye: EAGLE_EYE_SCOUT },
+      cost: 5, stats: { damage: 10 }, abilityMods: { eagleEye: EAGLE_EYE_SCOUT },
       look: { eyes: 0xffe14a, hair: { 0x2a1d14: 0xd8c070, 0x8a3b1e: 0xe8d890 }, gear: ['feather', 'spyglass'] },
       desc: 'Eagle Eye: true-strike shots.',
     },
     stalker: {
       name: 'Stalker', from: 'scout', level: 15,
-      cost: 5, stats: { damage: 2, range: 1 }, abilities: ['cutThroat'], abilityMods: { eagleEye: EAGLE_EYE_SCOUT },
+      cost: 5, stats: { damage: 16, range: 1 }, abilities: ['cutThroat'], abilityMods: { eagleEye: EAGLE_EYE_SCOUT },
       look: { eyes: 0xff3b2f, hair: { 0x2a1d14: 0x14141a, 0x8a3b1e: 0x24242e }, colors: { 0x3d5a24: 0x1e1e26, 0x34501f: 0x16161c, 0x4e6b2e: 0x2a2a34 }, gear: ['faceMask', 'backDaggers'] },
       desc: 'Longer reach, untouchable after kills.',
     },
@@ -305,7 +305,7 @@ export const SKILL_TREES = {
     },
     rambo: {
       name: 'Rambo', from: 'machineGunner', level: 15,
-      stats: { attackSpeed: 20, range: 1, damage: 5 }, abilities: ['doubleTap'],
+      stats: { attackSpeed: 20, range: 1, damage: 7 }, abilities: ['doubleTap'],
       look: { colors: { 0x7fd4ff: 0xff3b2f, 0x3b4652: 0x4a5a30 }, gear: ['lmg', 'headband', 'bandolier'] },
       desc: 'Double Tap every 6s.',
     },

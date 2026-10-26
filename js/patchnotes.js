@@ -7,6 +7,16 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.31.4', date: '2026-10-26T23:15:00+08:00', title: 'Ranger, Fury and Rambo buffs', author: 'AyatoAishi',
+    sections: [
+      { title: 'Changes', items: [
+        '<b>Ranger</b> damage 14 → <b>16</b>. <b>Scout Ranger</b> damage +2 → <b>+10</b>. <b>Stalker</b> damage +2 → <b>+16</b>.',
+        '<b>Fury</b> (Frenzy / Chaotic Viking): +4% → <b>+10%</b> damage taken from Vikings per stack (Frenzy max 10 stacks = +100%, Chaotic max 20 = +200%).',
+        '<b>Rambo</b> damage +5 → <b>+7</b>.',
+      ] },
+    ],
+  },
+  {
     version: '0.31.3', date: '2026-10-26T23:35:00+08:00', title: 'Gold Will rework', author: 'AyatoAishi',
     sections: [
       { title: 'Riot Skirmisher', items: [

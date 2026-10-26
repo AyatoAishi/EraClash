@@ -138,7 +138,7 @@ export const UNITS = {
   archer: {
     id: 'archer', name: 'Ranger', theme: 'medieval', family: 'marksman', role: 'Ranged marksman', type: 'ranged',
     cost: 75, trainTime: 2.0,
-    hp: 70, hpRegen: 0.5, damage: 14, damageType: 'physical', attackSpeed: 45,
+    hp: 70, hpRegen: 0.5, damage: 16, damageType: 'physical', attackSpeed: 45,
     armor: 0, ward: 0, evasion: 0, missChance: 0,
     moveSpeed: 3.0, range: 9, vision: [30, 16], aggro: 12, radius: 0.45,
     projectile: { kind: 'arrow', speed: 20, arc: 0.18 },
@@ -467,8 +467,8 @@ export const ABILITIES = {
   // ---------- skill-tree passives (js/skilltree.js) ----------
   fury: {
     id: 'fury', kind: 'passive', name: 'Fury', icon: 'p-fury',
-    duration: 5, maxStacks: 10, perStack: 0.04,   // +4% damage taken from Vikings per stack; maxStacks 0 = no limit (Chaotic Viking)
-    desc: 'Each hit puts 1 Fury stack on the target for 5s (hitting again refreshes it and adds 1, max 10). The target takes +4% damage from every Viking per stack.',
+    duration: 5, maxStacks: 10, perStack: 0.1,   // +4% damage taken from Vikings per stack; maxStacks 0 = no limit (Chaotic Viking)
+    desc: 'Each hit puts 1 Fury stack on the target for 5s (hitting again refreshes it and adds 1, max 10). The target takes +10% damage from every Viking per stack.',
     text: (A, P) => `Each hit puts 1 Fury stack on the target for ${A.duration}s (hitting again refreshes it and adds 1, ${A.maxStacks ? `max ${A.maxStacks}` : '<b>no limit</b>'}). The target takes +${P(A.perStack)} damage from every Viking per stack.`,
   },
   chainLightning: {
