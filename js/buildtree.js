@@ -105,6 +105,55 @@ export const BUILD_TREES = {
         desc: 'A drone pad: every 8s a 10-missile strike on the target area; true sight 18.' },
     },
   },
+  // Hwacha & Machine Gun Nest: paired trees. Path A = fewer, heavier hits that beat armor (fire / AP rounds),
+  // path B = more shots that slow (it absorbs the old Rocket Rack / Belt Feed Barracks upgrades).
+  hwacha: {
+    2: { name: 'Iron-Banded Hwacha', cost: 160, time: 4, stats: { hp: 600, damage: 16, armor: 3 }, structure: { volley: { count: 12, cone: 0.5 } },
+      desc: 'Iron-banded cart and wooden mantlets: +150 HP, 12 rockets (16 each), +1 armor.' },
+    a: {
+      name: 'Singijeon', desc: 'Fewer, heavier fire-arrows: big splash, burning ground, then a stun.',
+      3: { name: 'Daesingijeon Rack', cost: 320, time: 6, stats: { damage: 40, range: 15 }, structure: { volley: { count: 6, cone: 0.35 }, splash: 2, flight: 0.9, minRange: 3 },
+        desc: 'Six big rocket-arrows: 40 each, splash 2, range 15.' },
+      4: { name: 'Fire Dragon Rack', cost: 520, time: 9, stats: { damage: 42 }, structure: { burn: { radius: 1.5, dps: 6, t: 3 } },
+        desc: 'Incendiary warheads: 42 each, and every rocket leaves burning ground (6/s for 3s, magic).' },
+      5: { name: 'Thunder Rocket Battery', cost: 940, time: 12, stats: { hp: 900, damage: 38, range: 16 }, structure: { volley: { count: 8, cone: 0.4 }, splash: 2.2, stun: 0.5 },
+        desc: '8 thunder rockets: 38 each, splash 2.2, burning ground, stun 0.5s.' },
+    },
+    b: {
+      name: 'Ripple Fire', desc: 'More rockets, faster, and they slow: blankets wide areas.',
+      3: { name: 'Twin Hwacha', cost: 320, time: 6, stats: { damage: 15, attackSpeed: 15 }, structure: { volley: { count: 16, cone: 0.6 } },
+        desc: 'Two carts side by side: 16 rockets (15 each) every 4s.' },
+      4: { name: 'Munjong Hwacha', cost: 520, time: 9, stats: { damage: 14, range: 15 }, structure: { volley: { count: 24, cone: 0.75 }, suppress: { pct: 25, t: 1.5 } },
+        desc: 'A hundred-arrow frame: 24 rockets in a wide fan, hits slow 25%, range 15.' },
+      5: { name: 'Whirlwind Battery', cost: 940, time: 12, stats: { hp: 850, damage: 16, attackSpeed: 20, range: 16 },
+        structure: { volley: { count: 16, cone: 0.6 }, volleyTargets: 2, splash: 1.8, suppress: { pct: 35, t: 2 } },
+        desc: 'Two launchers on a turntable: every 3s, 16 rockets (16 each, splash 1.8) at <b>two</b> groups; hits slow 35%.' },
+    },
+  },
+  mgNest: {
+    2: { name: 'Fortified Pillbox', cost: 160, time: 4, stats: { hp: 750, damage: 6, armor: 5, range: 12 },
+      desc: 'Thicker concrete, armored vision slits: +200 HP, 6 damage, +1 armor, range 12.' },
+    a: {
+      name: 'Heavy Caliber', desc: 'Bigger rounds: pierce armor, then explode and swat flyers.',
+      3: { name: 'Heavy MG Post', cost: 320, time: 6, stats: { damage: 13, attackSpeed: 210, range: 13 },
+        desc: 'A .50 cal on a pintle: 13 damage, range 13.' },
+      4: { name: 'Twin .50 Bunker', cost: 520, time: 9, stats: { damage: 14, attackSpeed: 240 }, structure: { armorPierce: 4 },
+        desc: 'Twin .50s with AP rounds: 14 damage, shots ignore 4 armor.' },
+      5: { name: 'Autocannon Bunker', cost: 940, time: 12, stats: { hp: 1000, damage: 28, attackSpeed: 150, range: 14 },
+        structure: { hitSplash: { radius: 1.4, pct: 0.5 }, flyingBonus: 0.5 },
+        desc: 'A 20mm autocannon: 28 per shell, 50% splash around the target, +50% vs flying.' },
+    },
+    b: {
+      name: 'Rotary', desc: 'Spinning barrels: more bullets, more targets, heavier slows.',
+      3: { name: 'Gatling Nest', cost: 320, time: 6, stats: { attackSpeed: 510 }, structure: { suppress: { pct: 25, t: 1 } },
+        desc: 'A crank Gatling: attack speed 510, hits slow 25%.' },
+      4: { name: 'Minigun Nest', cost: 520, time: 9, stats: { damage: 5, attackSpeed: 480 }, structure: { multishot: 2, suppress: { pct: 30, t: 1.5 } },
+        desc: 'Twin electric miniguns: 2 targets per shot, hits slow 30%.' },
+      5: { name: 'Vulcan CIWS', cost: 940, time: 12, stats: { hp: 900, damage: 5, attackSpeed: 540, range: 13 },
+        structure: { multishot: 3, suppress: { pct: 35, t: 1.5 }, flyingBonus: 0.5, trueSight: 10 },
+        desc: 'Radar-guided rotary cannon: 3 targets, slow 35%, +50% vs flying, true sight 10.' },
+    },
+  },
 };
 
 /** The step a building would take next: { level, path, node } list (one entry, or two at the Lv 2 → 3 fork). */

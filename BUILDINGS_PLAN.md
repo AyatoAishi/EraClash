@@ -246,7 +246,7 @@ The base structure rig in [`js/models.js`](file:///c:/Users/Admin/EraClash/js/mo
     * Flashing status LEDs and radar dish rotation.
 
 ### 4.5 Hwacha (Medieval Barrage Tower)
-* **Current State**: Single static model (`buildHwacha`) with a 5×4 grid of rocket tubes on a cart. **No upgrade tree exists in [`js/buildtree.js`](file:///c:/Users/Admin/EraClash/js/buildtree.js)**.
+* **Current State (v0.25.0)**: Full 5-level tree in `js/buildtree.js` with 8 models: Lv 2 Iron-Banded Hwacha; path A Singijeon (Daesingijeon Rack → Fire Dragon Rack → Thunder Rocket Battery: big rockets, burning ground, stun); path B Ripple Fire (Twin Hwacha → Munjong Hwacha → Whirlwind Battery: more rockets, slows, two groups per salvo). Ripple-fire launch animation and cart rocking are still open.
 * **Proposal for Discussion**:
   1. **Visual Overhaul**: Historic Joseon-inspired aesthetic with iron-spoke wagon wheels, curved blast shields, wooden elevation ratchet, and paper rocket fuses.
   2. **Upgrade Progression (Potential 3-5 Tiers)**:
@@ -257,7 +257,7 @@ The base structure rig in [`js/models.js`](file:///c:/Users/Admin/EraClash/js/mo
   3. **Animations**: Sequential ripple-fire (rockets launching tube-by-tube with exhaust smoke), cart recoil rocking backwards.
 
 ### 4.6 Machine Gun Nest (Modern Barrage Tower)
-* **Current State**: Single static model (`buildMgNest`) with a basic concrete block, sandbags, and tripod gun. **No upgrade tree exists in [`js/buildtree.js`](file:///c:/Users/Admin/EraClash/js/buildtree.js)**.
+* **Current State (v0.25.0)**: Full 5-level tree in `js/buildtree.js` with 8 models: Lv 2 Fortified Pillbox; path A Heavy Caliber (Heavy MG Post → Twin .50 Bunker → Autocannon Bunker: AP rounds, splash, anti-air); path B Rotary (Gatling Nest → Minigun Nest → Vulcan CIWS: spinning barrels, multi-target, slows, true sight). Belt scrolling, heat glow and brass ejection are still open.
 * **Proposal for Discussion**:
   1. **Visual Overhaul**: Hexagonal or pillbox bunker with sloped armor skirts, spent brass chute, spade-grip heavy machine gun with cooling shroud, and green ammo cans with looping link belts.
   2. **Upgrade Progression (Potential 3-5 Tiers)**:
@@ -330,7 +330,7 @@ r.radar = radarGroup;
 When planning implementation with your next assistant, focus on resolving these specific questions:
 
 1. **Hwacha & MG Nest Upgrade Paths**:
-   * *Decision*: Should we give Hwacha and MG Nest full 5-tier upgrade trees in `buildtree.js` (like Cannon/Howitzer), or maintain them as specialized non-branching utility emplacements with visual-only upgrades?
+   * *Decided (v0.25.0)*: full 5-level trees, built as a pair (path A heavy hits past armor, path B more shots that slow).
 2. **Visual Fidelity vs Performance Budget**:
    * *Budget*: Target under ~300 mesh boxes per base and under ~150 mesh boxes per deployable tower to preserve 60 FPS performance on lower-tier GPUs and mobile web browsers.
    * *Material Caching*: Continue using the shared `mats` map so material instances are minimized and batchable by Three.js.

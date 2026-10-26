@@ -642,10 +642,10 @@ export class Game {
     this.burst(u.pos, 14, [0xffffff, 0xf7c948], 3, 0.8);
     this.emit('built', u);
   }
-  /** A building came online: true-sight towers (Sniper Tower) start revealing invisible enemies around them. */
+  /** A building came online (or was upgraded): true-sight towers (Sniper Tower, Vulcan CIWS) start revealing invisible enemies around them. */
   activateStructure(u) {
     const r = u.structure.trueSight;
-    if (r) this.detectors.push({ team: u.team, pos: u.pos, get radius() { return u.structure.trueSight || 0; }, get dead() { return u.dead; } });   // radius follows upgrades
+    if (r && !u.detecting) { u.detecting = true; this.detectors.push({ team: u.team, pos: u.pos, get radius() { return u.structure.trueSight || 0; }, get dead() { return u.dead; } }); }   // radius follows upgrades
   }
   /** Tear down your own building: refunds GAME.build.refund of what you paid. */
   demolish(u) {
@@ -710,7 +710,7 @@ export class Game {
     }
     this.shells.push({ mesh, marker, src, team: src.team, start, end, t: -(o.delay || 0), T: o.flight ?? S.flight, apex: dist * (o.arc ?? S.arc ?? (howitzer ? 0.45 : 0.06)),
       dmg: o.dmg ?? src.rollDamage(), splash: o.splash ?? src.splashRadius, kb: o.rocket && !S.pellet ? 0 : S.knockback || 0, groundOnly: S.groundOnly, small: !!o.rocket,
-      guided: S.guided && target.dead === false ? target : null, stun: S.stun || 0, burn: S.burn || null });
+      guided: S.guided && target.dead === false ? target : null, stun: S.stun || 0, burn: S.burn || null, slow: o.slow || null });
     if (o.rocket) return;
     if (this.audible(src.pos.x)) sfx('snipe', 60);
     this.burst(start, 6, [0xd8d8d8, 0x9a9a9a, 0xffb040], 2, 0.6, 1.2);   // muzzle smoke
@@ -728,7 +728,7 @@ export class Game {
       const d = Math.max(src.minRange + src.radius, Math.min(src.effRange + src.radius, d0 + (Math.random() - 0.5) * 4));
       const mz = src.rig.muzzles?.length ? src.rig.muzzles[k % src.rig.muzzles.length] : src.rig.muzzle;
       this.fireShell(src, { pos: { x: src.pos.x + Math.sin(a) * d, z: src.pos.z + Math.cos(a) * d } },
-        { rocket: true, muzzle: mz, delay: k * (S.pellet ? 0.01 : 0.05), flight: S.flight + Math.random() * 0.2, arc: S.arc ?? (S.pellet ? 0.03 : 0.12) });
+        { rocket: true, muzzle: mz, delay: k * (S.pellet ? 0.01 : 0.05), flight: S.flight + Math.random() * 0.2, arc: S.arc ?? (S.pellet ? 0.03 : 0.12), slow: S.suppress });
     }
     if (this.audible(src.pos.x)) sfx(S.pellet ? 'snipe' : 'zap', 60);
     const mp = new THREE.Vector3(); src.rig.muzzle.getWorldPosition(mp);
@@ -775,6 +775,7 @@ export class Game {
       const dealt = o.takeDamage(p.dmg * f, src, 'physical', { ranged: true, splash: true });
       if (src && !src.dead) src.damageDealt += dealt;
       if (p.kb && !o.dead) o.knockback(p.end, p.kb * f);
+      if (p.slow && !o.dead) o.addSlow(p.slow.pct, p.slow.t);   // Munjong / Whirlwind: volley rockets slow (structure.suppress)
       if (p.stun && !o.dead && !o.structure) { o.disarmT = Math.max(o.disarmT || 0, p.stun); o.pendingHit = null; o.addSlow(100, p.stun); }   // stun = can't attack or move
       if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
     }
@@ -810,6 +811,33 @@ export class Game {
       }
       if (F.t <= 0) { this.scene.remove(F.mesh); F.mesh.geometry.dispose(); F.mesh.material.dispose(); this.fires.splice(i, 1); }
     }
+  }
+  /** Whirlwind Battery: `n` more volleys, each at the biggest group outside the splash of the ones already aimed. */
+  fireExtraVolleys(src, main, n) {
+    const aimed = [main], R = src.splashRadius, dist = (a, b) => Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z);
+    const pool = this.units.filter((o) => o !== main && src.canShell(o));
+    for (let k = 0; k < n; k++) {
+      let best = null, bs = -Infinity;
+      for (const o of pool) {
+        if (aimed.some((a) => dist(a, o) <= R * 2)) continue;
+        const score = pool.filter((e) => dist(e, o) <= R).length * 100 - src.edgeDist(o);
+        if (score > bs) { bs = score; best = o; }
+      }
+      if (!best) return;
+      aimed.push(best); this.fireVolley(src, best);
+    }
+  }
+  /** Autocannon Bunker: `dmg` splash (100% → 50% at the edge) to other enemies within `R` of the target (flying too). */
+  hitSplash(src, main, dmg, R) {
+    for (const o of this.units) {
+      if (o === main || o.dead || o.tower || o.team === src.team || (o.team === NEUTRAL_TEAM && o.aggroTeam !== src.team)) continue;
+      const d = Math.max(0, Math.hypot(o.pos.x - main.pos.x, o.pos.z - main.pos.z) - o.radius);
+      if (d > R) continue;
+      const dealt = o.takeDamage(dmg * (1 - 0.5 * d / R), src, 'physical', { ranged: true, splash: true });
+      src.damageDealt += dealt;
+      if (dealt > 0) this.emit('hitDmg', o.pos, dealt, false, o.team);
+    }
+    this.burst(main.pos, 4, [0xffb040, 0x8a7a6a], 2, 0.4, 0.7);
   }
   /** Twin / Fire Archers: extra arrows at other targets in range (nearest first), on top of the main shot. */
   fireExtraShots(src, main, n) {

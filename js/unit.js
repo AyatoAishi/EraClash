@@ -352,7 +352,7 @@ export class Unit {
     let d = def ? this[def] : 0;
     // Zealot (Drow): basic attacks ignore the target's BASE armor (bonus armor still counts)
     if (def === 'armor' && opts?.attack && source?.ability) { const z = source.ability('zealot'); if (z && !z.st.broken) d -= Math.max(0, this.base?.armor || 0); }
-    const pierce = def === 'armor' ? (source?.pas?.armorPierce || 0) : 0;
+    const pierce = def === 'armor' ? (source?.pas?.armorPierce || source?.structure?.armorPierce || 0) : 0;   // structure: Twin .50 AP rounds
     if (pierce) d = Math.max(Math.min(d, 0), d - pierce);            // ignores up to N armor, never below 0
     const dmg = Math.max(0, raw * (def ? defenseMult(d) : 1)) * this.damageTakenMult;
     if (dmg <= 0) return 0;
@@ -622,6 +622,8 @@ export class Unit {
     if (sup && !tg.dead) tg.addSlow(sup.pct, sup.t);
     const bh = this.structure?.burnHit;     // Fire Archers: hits set the target on fire
     if (bh && !tg.dead) tg.addBurn(bh.dps, bh.t, this);
+    const hs = this.structure?.hitSplash;   // Autocannon Bunker: shells burst around the target
+    if (hs && raw > 0) this.game.hitSplash(this, tg, raw * hs.pct, hs.radius);
     if (shot?.magic && !tg.dead) { const m = tg.takeDamage(shot.magic, this, 'magic'); this.damageDealt += m; if (m > 0) this.game.emit('hitDmg', tg.pos, m, false, this.team); }
     if (shot?.breakT && !tg.dead) tg.applyBreak(shot.breakT);
     if (shot?.slow && !tg.dead) tg.addSlow(shot.slow.pct, shot.slow.t);            // Flick
@@ -1145,6 +1147,7 @@ export class Unit {
     this.rig = rig; this.shotIdx = 0; this.recoilT = 0;
     this.bar.position.y = (rig.barY || 2.95) * (rig.scale || 1) + 0.2;
     this.target = null;
+    if (this.built) this.game.activateStructure?.(this);   // new true sight (Vulcan CIWS), also in the Dev Lab
   }
   /** Can this building fire at `o` right now (alive, visible, not flying, between min and max range)? */
   canShell(o) {
@@ -1209,7 +1212,10 @@ export class Unit {
             this.releaseAttack(tg);
             if (S.multishot > 1) g.fireExtraShots(this, tg, S.multishot - 1);   // Twin / Fire Archers: more targets per shot
           }
-          else if (S.fire === 'volley') g.fireVolley(this, tg);   // Hwacha / Grapeshot / MLRS: a fan of projectiles
+          else if (S.fire === 'volley') {                           // Hwacha / Grapeshot / MLRS: a fan of projectiles
+            g.fireVolley(this, tg);
+            if (S.volleyTargets > 1) g.fireExtraVolleys(this, tg, S.volleyTargets - 1);   // Whirlwind Battery: more targets per salvo
+          }
           else if (S.fire === 'line') g.fireLine(this, tg);       // Railgun: instant piercing slug
           else g.fireShell(this, tg);                              // artillery shell
           this.shotIdx = (this.shotIdx + 1) % Math.max(1, r.muzzles?.length || 1);   // multi-barrel guns fire in turn
@@ -1382,6 +1388,7 @@ export class Unit {
       // Auxiliary rotating drum / radar
       if (r.radar) r.radar.rotation.y += dt * 1.5;
       if (r.drum) r.drum.rotation.z += dt * 2.0;
+      for (const sp of r.spins || []) sp.rotation.z += dt * 30 * Math.min(1, this.recoilT * 3);   // Gatling / minigun / CIWS barrels spin while firing
       // Auxiliary railgun capacitor glow pulsing
       if (r.glow) {
         const pulse = this.aimT > 0 ? (0.6 + 0.4 * Math.sin(Date.now() * 0.012)) : 0.25;

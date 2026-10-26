@@ -2100,48 +2100,186 @@ export function buildSniperTower(level = 1, path = null) {
   r.barY = roofY + (Bp && L >= 5 ? 3.6 : 1);
   return finishStructure(r);
 }
-export function buildHwacha() {
+// Hwacha: 8 looks — Lv1 rocket cart, Lv2 Iron-Banded Hwacha, A3 Daesingijeon Rack, A4 Fire Dragon Rack,
+// A5 Thunder Rocket Battery, B3 Twin Hwacha, B4 Munjong Hwacha, B5 Whirlwind Battery.
+// Every launcher frame sits in the one `barrel` pivot (they tilt together); each frame has its own flash in `muzzles`.
+export function buildHwacha(level = 1, path = null) {
   const r = structureRig(), m = r.mats;
-  B(r.body, 2.6, 0.9, 2.6, 0x7a5532, 0, 0.45, 0, m);                                   // raised wooden firing platform
-  for (const s of [-1, 1]) B(r.body, 2.6, 0.18, 0.18, 0x5e4026, 0, 0.95, s * 1.22, m);
-  r.yaw = pivot(r.body, 0, 0.9, 0);
-  B(r.yaw, 0.9, 0.18, 2.2, 0x6b4a2b, 0, 0.45, -0.2, m);                                  // cart bed + shafts
-  for (const s of [-1, 1]) { B(r.yaw, 0.12, 0.12, 1.6, 0x5e4026, s * 0.35, 0.4, -1.3, m); B(r.yaw, 0.14, 0.9, 0.9, 0x4a3520, s * 0.6, 0.45, 0, m); }
-  // launcher frame: a grid of rocket tubes, tilted up
-  r.barrel = pivot(r.yaw, 0, 0.75, 0);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  B(r.recoil, 1.3, 0.95, 0.9, 0x7a5532, 0, 0.45, 0.1, m);
-  for (let i = 0; i < 5; i++) for (let j = 0; j < 4; j++) {
-    B(r.recoil, 0.16, 0.16, 0.35, 0x2a1d12, -0.5 + i * 0.25, 0.1 + j * 0.24, 0.6, m);     // tube mouths
-    B(r.recoil, 0.07, 0.07, 0.12, 0xc9a050, -0.5 + i * 0.25, 0.1 + j * 0.24, 0.8, m);      // arrow tips
+  const L = level, A = L >= 3 && path === 'a', Bp = L >= 3 && path === 'b';
+  const WOOD = 0x7a5532, DWOOD = 0x5e4026, CART = 0x6b4a2b, WHEEL = 0x4a3520, IRON = 0x3a3d42, BRONZE = 0xb08a3a, RED = 0x8a2a1c, TUBE = 0x2a1d12, TIP = 0xc9a050;
+  const stone = A && L >= 5, ph = stone ? 1.2 : 0.9, pw = Bp ? 3.2 : L >= 2 ? 2.8 : 2.6;
+  B(r.body, pw, ph, pw, stone ? 0x8d8f93 : WOOD, 0, ph / 2, 0, m);                                     // firing platform
+  if (stone) for (let y = 0.35; y < ph - 0.1; y += 0.4) B(r.body, pw + 0.02, 0.06, pw + 0.02, 0x74767b, 0, y, 0, m);   // stone courses
+  for (const s of [-1, 1]) {
+    B(r.body, pw, 0.18, 0.18, L >= 2 ? IRON : DWOOD, 0, ph + 0.05, s * (pw / 2 - 0.1), m);            // rails (iron-banded from Lv 2)
+    if (L >= 2) B(r.body, 0.18, 0.18, pw, IRON, s * (pw / 2 - 0.1), ph + 0.05, 0, m);
   }
-  r.muzzle = B(r.recoil, 1.3, 1, 0.3, 0xffb040, 0, 0.45, 0.9, m, { emissive: 0xff6a00 }); r.muzzle.castShadow = false;
+  if (A && L >= 4) for (const [sx, sz] of [[-1, -1], [1, -1]]) {   // Fire Dragon / Thunder: braziers on the back corners
+    B(r.body, 0.4, 0.5, 0.4, IRON, sx * (pw / 2 - 0.3), ph + 0.25, sz * (pw / 2 - 0.3), m);
+    const f = B(r.body, 0.34, 0.35, 0.34, 0xffb040, sx * (pw / 2 - 0.3), ph + 0.62, sz * (pw / 2 - 0.3), m, { emissive: 0xff6a00 }); f.castShadow = false;
+  }
+  if (stone) for (const sx of [-1, 1]) {   // Thunder Rocket Battery: war banners
+    B(r.body, 0.1, 2.6, 0.1, DWOOD, sx * (pw / 2 - 0.2), ph + 1.3, pw / 2 - 0.2, m);
+    B(r.body, 0.06, 0.9, 0.7, sx < 0 ? 0x2a4a8a : RED, sx * (pw / 2 - 0.2), ph + 2.1, pw / 2 - 0.6, m);
+  }
+  if (Bp && L >= 5) {   // Whirlwind Battery: two launchers on an iron turntable
+    r.yaw = pivot(r.body, 0, ph, 0);
+    B(r.yaw, 2.4, 0.22, 2.4, IRON, 0, 0.11, 0, m); B(r.yaw, 2.4, 0.22, 2.4, IRON, 0, 0.11, 0, m).rotation.y = Math.PI / 4;   // octagonal plate
+    r.radar = pivot(r.yaw, 0, 0.22, -0.9);   // spinning pennant mast between the launchers
+    B(r.radar, 0.1, 2.2, 0.1, DWOOD, 0, 1.1, 0, m);
+    B(r.radar, 0.7, 0.4, 0.05, RED, 0.38, 1.9, 0, m);
+    B(r.radar, 0.05, 0.4, 0.7, 0xe0b040, 0, 1.5, 0.38, m);
+    B(r.yaw, 0.45, 0.8, 0.45, IRON, 0, 0.6, 0, m); B(r.yaw, 2.4, 0.2, 0.3, DWOOD, 0, 0.92, 0, m);   // launcher post + cross beam
+  } else r.yaw = pivot(r.body, 0, ph, 0);
+  r.barrel = pivot(r.yaw, 0, Bp && L >= 5 ? 0.95 : 0.75, 0);
+  r.recoil = pivot(r.barrel, 0, 0, 0);
+  /** One cart (on the yaw) + its tube frame (in the recoil). big = Singijeon tubes. */
+  const launcher = (x, cols, rows, o = {}) => {
+    const big = o.big, sp = big ? 0.42 : 0.25, sz = big ? 0.3 : 0.16, fw = cols * sp + 0.3, fh = rows * sp + 0.15, len = big ? 1.3 : 0.9;
+    if (!o.noCart) {
+      B(r.yaw, Math.max(0.9, fw * 0.7), 0.18, 2.2, CART, x, 0.45, -0.2, m);                                // cart bed
+      for (const s of [-1, 1]) {
+        B(r.yaw, 0.12, 0.12, 1.6, DWOOD, x + s * 0.35, 0.4, -1.3, m);                                        // shafts
+        B(r.yaw, 0.14, 0.9, 0.9, L >= 2 ? IRON : WHEEL, x + s * (Math.max(0.45, fw * 0.35) + 0.12), 0.45, 0, m);   // wheels
+      }
+    }
+    const front = 0.1 + len / 2;
+    B(r.recoil, fw, fh, len, o.frame || WOOD, x, fh / 2, 0.1, m);                                           // tube frame
+    if (L >= 2) for (const y of [0.05, fh - 0.05]) B(r.recoil, fw + 0.04, 0.08, len + 0.04, o.band || IRON, x, y, 0.1, m);   // iron bands
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+      const tx = x - (cols - 1) * sp / 2 + i * sp, ty = 0.1 + sp / 2 + j * sp;
+      B(r.recoil, sz, sz, 0.35, TUBE, tx, ty, front + 0.05, m);                                               // tube mouths
+      if (cols * rows <= 32) B(r.recoil, sz * 0.45, sz * 0.45, 0.14, o.tip || TIP, tx, ty, front + 0.26, m, o.tip ? { emissive: 0xff5a00 } : undefined);   // arrow tips
+    }
+    if (cols * rows > 32) for (let j = 0; j < rows; j++) B(r.recoil, fw - 0.2, 0.05, 0.12, TIP, x, 0.1 + sp / 2 + j * sp, front + 0.24, m);   // a row of tips
+    const mz = B(r.recoil, fw, fh, 0.3, 0xffb040, x, fh / 2, front + 0.4, m, { emissive: 0xff6a00 }); mz.castShadow = false;
+    r.muzzles.push(mz);
+    return { fw, fh, front };
+  };
+  if (Bp && L >= 5) { launcher(-0.75, 4, 4, { noCart: true, frame: RED }); launcher(0.75, 4, 4, { noCart: true, frame: RED }); }
+  else if (Bp && L >= 4) {   // Munjong Hwacha: one wide hundred-arrow frame on a long cart
+    const f = launcher(0, 10, 5, { frame: 0x6b2a24, band: BRONZE });
+    for (const s of [-1, 1]) B(r.yaw, 0.14, 0.9, 0.9, IRON, s * 0.75, 0.45, -1, m);                        // second axle
+    B(r.recoil, f.fw + 0.3, 0.12, 0.3, BRONZE, 0, f.fh + 0.06, f.front - 0.1, m);                             // bronze cap
+  } else if (Bp) { launcher(-0.75, 4, 4); launcher(0.75, 4, 4); }                                             // Twin Hwacha
+  else if (A) {
+    const f = launcher(0, L >= 5 ? 4 : 3, 2, { big: true, frame: L >= 4 ? RED : WOOD, band: L >= 5 ? BRONZE : IRON, tip: L >= 4 ? 0xff8a2a : null });
+    if (L >= 4) {   // Fire Dragon: a dragon head on the front of the cart
+      B(r.yaw, 0.55, 0.45, 0.55, RED, 0, 0.6, 1.15, m);
+      B(r.yaw, 0.4, 0.22, 0.4, RED, 0, 0.5, 1.55, m);                                                          // snout
+      for (const s of [-1, 1]) {
+        B(r.yaw, 0.1, 0.1, 0.06, 0xffe27a, s * 0.18, 0.72, 1.44, m, { emissive: 0xaa6a00 });                 // eyes
+        B(r.yaw, 0.08, 0.35, 0.08, TIP, s * 0.2, 0.95, 1.0, m).rotation.x = -0.5;                              // horns
+      }
+    }
+    if (L >= 5) B(r.recoil, f.fw + 0.2, 0.15, f.front + 0.6, BRONZE, 0, f.fh + 0.08, 0.1, m);               // bronze lid
+  } else {
+    launcher(0, L >= 2 ? 6 : 5, 4);
+    if (L >= 2) for (const s of [-1, 1]) B(r.yaw, 0.12, 1, 1, DWOOD, s * 1.05, 0.95, 0.35, m);              // wooden mantlets
+  }
+  r.muzzle = r.muzzles[0];
   r.barrel.rotation.x = -0.55; r.rest = -0.55;
-  r.muzzleY = 2.2;
-  r.scaffold = scaffold(r.body, 1.45, 2.4, m);
-  r.barY = 3.1;
+  r.muzzleY = (Bp && L >= 5 ? 2.4 : 2.2) + (stone ? 0.3 : 0);
+  r.scaffold = scaffold(r.body, pw / 2 + 0.15, 2.4 + (stone ? 0.3 : 0), m);
+  r.barY = 3.1 + (A ? 0.3 : 0) + (stone ? 0.6 : 0);
   return finishStructure(r);
 }
-export function buildMgNest() {
-  const r = structureRig(), m = r.mats, OL = 0x5b6b3a;
-  B(r.body, 2.8, 2.2, 2.8, 0x9a9da2, 0, 1.1, 0, m);                                     // concrete bunker
-  B(r.body, 2.9, 0.15, 2.9, 0x7a7e84, 0, 2.27, 0, m);
-  B(r.body, 0.1, 0.35, 1.6, 0x1a1a22, 1.42, 1.5, 0, m);                                   // firing slit
-  for (const [x, z, w, d] of [[0, 1.2, 2.6, 0.5], [0, -1.2, 2.6, 0.5], [1.2, 0, 0.5, 1.4], [-1.2, 0, 0.5, 1.4]]) B(r.body, w, 0.45, d, 0xa8956a, x, 2.57, z, m);
-  r.yaw = pivot(r.body, 0, 2.35, 0);
-  B(r.yaw, 0.12, 0.7, 0.12, 0x34373c, 0, 0.35, 0.4, m);                                   // tripod post
-  r.barrel = pivot(r.yaw, 0, 0.8, 0.4);
-  r.recoil = pivot(r.barrel, 0, 0, 0);
-  B(r.recoil, 0.3, 0.28, 0.7, 0x2a2d32, 0, 0, 0, m);
-  B(r.recoil, 0.12, 0.12, 1.1, 0x1e2024, 0, 0, 0.85, m);
-  B(r.recoil, 0.18, 0.2, 0.25, OL, 0.2, -0.05, 0.1, m);                                   // ammo box
-  r.muzzle = B(r.recoil, 0.32, 0.32, 0.32, 0xfff3b0, 0, 0, 1.5, m, { emissive: 0xffd040 }); r.muzzle.castShadow = false;
+// Machine Gun Nest: 8 looks — Lv1 sandbag bunker, Lv2 Fortified Pillbox, A3 Heavy MG Post, A4 Twin .50 Bunker,
+// A5 Autocannon Bunker, B3 Gatling Nest, B4 Minigun Nest, B5 Vulcan CIWS. Rotary barrels spin while firing (`spins`).
+export function buildMgNest(level = 1, path = null) {
+  const r = structureRig(), m = r.mats, OL = 0x5b6b3a, SAND = 0xa8956a, GUN = 0x2a2d32, DGUN = 0x1e2024, STEEL = 0x4a4e54;
+  const L = level, A = L >= 3 && path === 'a', Bp = L >= 3 && path === 'b', ciws = Bp && L >= 5, auto = A && L >= 5;
+  const w = L >= 2 ? 3 : 2.8, h = auto ? 2.5 : L >= 2 ? 2.3 : 2.2, CON = ciws ? 0xb8bcc2 : 0x9a9da2;
+  B(r.body, w, h, w, CON, 0, h / 2, 0, m);                                                                    // bunker
+  B(r.body, w + 0.1, 0.15, w + 0.1, ciws ? 0x9a9ea4 : 0x7a7e84, 0, h + 0.07, 0, m);                          // roof slab
+  B(r.body, 0.1, 0.35, 1.6, 0x1a1a22, w / 2 + 0.02, h * 0.68, 0, m);                                          // firing slit
+  if (L >= 2) {
+    for (const [x, z, sw, sd] of [[-(w / 2 + 0.02), 0, 0.1, 1.2], [0, w / 2 + 0.02, 1.2, 0.1], [0, -(w / 2 + 0.02), 1.2, 0.1]]) B(r.body, sw, 0.3, sd, 0x1a1a22, x, h * 0.68, z, m);
+    const gl = B(r.body, 0.06, 0.18, 1.3, 0x4fa8e0, w / 2 + 0.06, h * 0.68, 0, m, { emissive: 0x0b2a44 }); gl.castShadow = false;   // ballistic glass
+    for (const s of [-1, 1]) {   // sloped armor skirts
+      B(r.body, w + 0.4, 0.7, 0.3, 0x8a8e94, 0, 0.3, s * (w / 2 + 0.1), m).rotation.x = s * 0.35;
+      B(r.body, 0.3, 0.7, w + 0.4, 0x8a8e94, s * (w / 2 + 0.1), 0.3, 0, m).rotation.z = -s * 0.35;
+    }
+  }
+  if (auto) for (const s of [-1, 1]) for (const [y, c] of [[0.9, OL], [1.6, 0x3a4a2a]]) B(r.body, w + 0.04, 0.35, 0.8, c, 0, y, s * 0.6, m);   // camo bands
+  if (Bp && L >= 4) for (let k = 0; k < 8; k++) B(r.body, w / 8, 0.12, w + 0.06, k % 2 ? 0x1a1a1a : 0xf2c94c, -w / 2 + (k + 0.5) * w / 8, h - 0.12, 0, m);   // hazard stripes
+  if (ciws) for (const s of [-1, 1]) { B(r.body, w, 0.08, 0.08, 0xd8dce0, 0, h + 0.55, s * (w / 2 - 0.05), m); B(r.body, 0.08, 0.08, w, 0xd8dce0, s * (w / 2 - 0.05), h + 0.55, 0, m); }   // railing
+  else if (auto) for (const s of [-1, 1]) { B(r.body, w, 0.3, 0.2, STEEL, 0, h + 0.3, s * (w / 2 - 0.1), m); B(r.body, 0.2, 0.3, w, STEEL, s * (w / 2 - 0.1), h + 0.3, 0, m); }   // steel rim
+  else for (const [x, z, sw, sd] of [[0, w / 2 - 0.2, w - 0.2, 0.5], [0, -(w / 2 - 0.2), w - 0.2, 0.5], [w / 2 - 0.2, 0, 0.5, w - 1.2], [-(w / 2 - 0.2), 0, 0.5, w - 1.2]]) B(r.body, sw, 0.45, sd, SAND, x, h + 0.37, z, m);   // sandbag ring
+  if (Bp && L >= 4) { B(r.body, 0.7, 0.55, 0.5, OL, -0.6, h + 0.42, -0.8, m); B(r.body, 0.3, 0.12, 0.2, 0xf2c94c, -0.6, h + 0.75, -0.8, m); }   // minigun battery pack
+  const yawY = h + 0.15;
+  r.yaw = pivot(r.body, 0, yawY, 0);
+  r.spins = [];
+  /** A rotary barrel cluster (n barrels around radius `rad`) on the recoil; spins while firing. */
+  const rotary = (x, y, z, n, rad, len, thick) => {
+    const sp = pivot(r.recoil, x, y, z);
+    for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; B(sp, thick, thick, len, DGUN, Math.cos(a) * rad, Math.sin(a) * rad, len / 2, m); }
+    for (const zz of [0.1, len * 0.6, len - 0.05]) B(sp, rad * 2 + thick + 0.04, rad * 2 + thick + 0.04, 0.08, GUN, 0, 0, zz, m);   // clamps
+    r.spins.push(sp);
+    return z + len;
+  };
+  const flash = (x, y, z, s = 0.32) => { const f = B(r.recoil, s, s, s, 0xfff3b0, x, y, z, m, { emissive: 0xffd040 }); f.castShadow = false; r.muzzles.push(f); };
+  let gunY = 0.8, crew = !(auto || ciws);
+  if (ciws) {   // radar dome over a 6-barrel cannon on a white mount
+    B(r.yaw, 1.3, 0.5, 1.3, 0xd8dce0, 0, 0.25, 0, m);
+    B(r.yaw, 1, 1.1, 1, 0xe8ecf0, 0, 1.3, -0.15, m);                                                          // radome
+    B(r.yaw, 0.7, 0.3, 0.7, 0xe8ecf0, 0, 2, -0.15, m);
+    r.radar = pivot(r.yaw, 0, 2.15, -0.15);
+    B(r.radar, 0.9, 0.35, 0.08, 0x9a9ea4, 0, 0.2, 0.2, m); B(r.radar, 0.08, 0.3, 0.3, 0x9a9ea4, 0, 0.1, 0.05, m);   // spinning search antenna
+    gunY = 0.75;
+    r.barrel = pivot(r.yaw, 0, gunY, 0.3); r.recoil = pivot(r.barrel, 0, 0, 0);
+    B(r.recoil, 0.6, 0.5, 0.6, 0xd8dce0, 0, 0, 0, m);
+    const end = rotary(0, 0, 0.3, 6, 0.15, 1.9, 0.08); flash(0, 0, end + 0.15, 0.45);
+  } else if (auto) {   // enclosed turret, one thick 20mm barrel
+    B(r.yaw, 1.5, 0.9, 1.6, STEEL, 0, 0.45, -0.1, m);
+    B(r.yaw, 1.2, 0.2, 1.2, 0x3a3d42, 0, 1, -0.2, m);
+    B(r.yaw, 0.3, 0.3, 0.2, 0x4fa8e0, 0.45, 0.75, 0.72, m, { emissive: 0x0b2a44 }).castShadow = false;         // sight
+    gunY = 0.5;
+    r.barrel = pivot(r.yaw, 0, gunY, 0.7); r.recoil = pivot(r.barrel, 0, 0, 0);
+    B(r.recoil, 0.6, 0.55, 0.4, GUN, 0, 0, 0.1, m);                                                            // mantlet
+    B(r.recoil, 0.3, 0.3, 0.8, GUN, 0, 0, 0.6, m);                                                             // recoil sleeve
+    B(r.recoil, 0.2, 0.2, 2, DGUN, 0, 0, 1.6, m);
+    B(r.recoil, 0.36, 0.3, 0.35, STEEL, 0, 0, 2.6, m);                                                         // muzzle brake
+    flash(0, 0, 2.95, 0.5);
+    for (const s of [-1, 1]) B(r.yaw, 0.35, 0.35, 0.5, OL, s * 0.95, 0.2, -0.6, m);                           // ammo bins
+  } else {
+    B(r.yaw, L >= 3 ? 0.18 : 0.12, 0.7, L >= 3 ? 0.18 : 0.12, 0x34373c, 0, 0.35, 0.4, m);                    // post
+    r.barrel = pivot(r.yaw, 0, gunY, 0.4); r.recoil = pivot(r.barrel, 0, 0, 0);
+    if (Bp && L >= 4) {   // twin electric miniguns
+      B(r.recoil, 0.9, 0.3, 0.5, GUN, 0, 0, 0, m);
+      for (const s of [-1, 1]) { const e = rotary(s * 0.32, 0, 0.2, 6, 0.09, 1.2, 0.05); flash(s * 0.32, 0, e + 0.12); }
+      B(r.recoil, 0.25, 0.4, 0.3, OL, 0, -0.3, -0.1, m);                                                       // feed box
+    } else if (Bp) {      // crank Gatling
+      B(r.recoil, 0.4, 0.34, 0.6, GUN, 0, 0, 0, m);
+      const e = rotary(0, 0, 0.3, 6, 0.11, 1.3, 0.06); flash(0, 0, e + 0.15);
+      B(r.recoil, 0.06, 0.06, 0.3, STEEL, 0.28, 0, -0.1, m); B(r.recoil, 0.06, 0.25, 0.06, STEEL, 0.32, -0.12, -0.2, m);   // crank
+      B(r.recoil, 0.22, 0.3, 0.3, OL, -0.3, 0.05, 0, m);                                                       // ammo can
+    } else if (A && L >= 4) {   // twin .50s behind a steel shield
+      B(r.recoil, 0.8, 0.34, 0.8, GUN, 0, 0, 0, m);
+      for (const s of [-1, 1]) {
+        B(r.recoil, 0.15, 0.15, 1.6, DGUN, s * 0.22, 0, 1.15, m);
+        B(r.recoil, 0.22, 0.22, 0.3, STEEL, s * 0.22, 0, 0.7, m);                                              // barrel jackets
+        flash(s * 0.22, 0, 2.05);
+        B(r.recoil, 0.25, 0.3, 0.35, OL, s * 0.55, -0.05, 0, m);                                               // ammo cans
+      }
+      B(r.yaw, 1.7, 0.8, 0.12, STEEL, 0, 0.95, 0.95, m); for (const s of [-1, 1]) B(r.yaw, 0.12, 0.8, 0.6, STEEL, s * 0.85, 0.95, 0.7, m);   // shield + cheeks
+    } else {
+      const heavy = A, len = heavy ? 1.6 : 1.1;
+      B(r.recoil, heavy ? 0.36 : 0.3, heavy ? 0.34 : 0.28, heavy ? 0.8 : 0.7, GUN, 0, 0, 0, m);               // receiver
+      B(r.recoil, heavy ? 0.14 : 0.12, heavy ? 0.14 : 0.12, len, DGUN, 0, 0, 0.3 + len / 2, m);
+      if (heavy) { B(r.recoil, 0.22, 0.22, 0.4, STEEL, 0, 0, 0.6, m); B(r.recoil, 0.2, 0.2, 0.15, STEEL, 0, 0, 0.3 + len, m); }   // jacket, flash hider
+      B(r.recoil, 0.18, 0.2, 0.25, OL, 0.2, -0.05, 0.1, m);                                                    // ammo box
+      if (heavy) B(r.recoil, 0.25, 0.3, 0.35, OL, -0.3, -0.05, 0, m);
+      flash(0, 0, 0.45 + len);
+      if (L >= 2) B(r.yaw, heavy ? 1.3 : 1, heavy ? 0.7 : 0.5, 0.1, STEEL, 0, heavy ? 0.95 : 0.85, 0.9, m);   // gun shield
+    }
+  }
+  if (crew) { const gn = addCrew(r, buildGunner(), 0, -0.55, 0.8); gn.armR.rotation.x = -1.3; gn.armL.rotation.x = -1.35; levelCrew(gn); }
+  r.muzzle = r.muzzles[0];
   r.barrel.rotation.x = -0.05; r.rest = -0.05;
-  const gn = addCrew(r, buildGunner(), 0, -0.55, 0.8);
-  gn.armR.rotation.x = -1.3; gn.armL.rotation.x = -1.35; levelCrew(gn);
-  r.muzzleY = 2.35 + 0.8;
-  r.scaffold = scaffold(r.body, 1.5, 2.8, m);
-  r.barY = 4.3;
+  r.muzzleY = yawY + gunY;
+  r.scaffold = scaffold(r.body, w / 2 + 0.1, h + 0.6, m);
+  r.barY = ciws ? h + 3 : h + 2.1;
   return finishStructure(r);
 }
 /** Hwacha rocket-arrow (Game.fireShell volley). */

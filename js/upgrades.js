@@ -231,24 +231,6 @@ export const UPGRADES = {
     levelText: (l) => `${l} rooftop gunner${l > 1 ? 's' : ''}`,
   },
 
-  // ===================== BUILDINGS (Build menu towers; artillery upgrades live in js/buildtree.js) =====================
-  rocketRack: {
-    id: 'rocketRack', faction: 'medieval', category: 'troop', unit: 'hwacha', icon: 'u-rockets',
-    name: 'Rocket Rack', max: 3,
-    price: [150, 250, 400], time: [15, 20, 25],
-    effects: [{ type: 'structureMods', unit: 'hwacha', perLevel: { rockets: 2 } }],
-    desc: 'A bigger launcher frame: every Hwacha volley fires <b>+2 rockets</b> per level.',
-    levelText: (l) => `${10 + 2 * l} rockets per volley`,
-  },
-  beltFeed: {
-    id: 'beltFeed', faction: 'modern', category: 'troop', unit: 'mgNest', icon: 'u-beltfeed',
-    name: 'Belt Feed', max: 3,
-    price: [150, 250, 400], time: [15, 20, 25],
-    effects: [{ type: 'unitStats', unit: 'mgNest', perLevel: { attackSpeed: 60 } }],
-    desc: 'Linked ammo belts: Machine Gun Nests get <b>+60 attack speed</b> per level.',
-    levelText: (l) => `Attack speed ${330 + 60 * l}`,
-  },
-
   // ===================== SHARED (both factions) =====================
   repairCrews: {
     id: 'repairCrews', faction: 'both', category: 'base', icon: 'u-repair',

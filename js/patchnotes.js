@@ -7,6 +7,28 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.25.0', date: '2026-10-26T14:07:00+08:00', title: 'Hwacha & Machine Gun Nest upgrade trees',
+    sections: [
+      { title: 'Two trees, built as a pair', items: [
+        'Select a Hwacha or a Machine Gun Nest to upgrade it, like the other buildings: Lv 2, then pick a path at Lv 3. Both towers share the same shape: <b>path A</b> trades many small hits for a few heavy ones that get past armor, <b>path B</b> fires more and slows what it hits. Prices are the same on both sides: 160 / 320 / 520 / 940g.',
+        'Every level has its own model. The <b>Rocket Rack</b> and <b>Belt Feed</b> Barracks upgrades are gone: their extra rockets and attack speed now come with path B.',
+      ] },
+      { title: 'Hwacha', items: [
+        'Lv 2 <b>Iron-Banded Hwacha</b>: 600 HP, 12 rockets (16 each), +1 armor.',
+        'Path A, Singijeon: <b>Daesingijeon Rack</b> (6 big rockets, 40 each, splash 2, range 15) → <b>Fire Dragon Rack</b> (42 each, every rocket leaves <b>burning ground</b>, 6/s for 3s) → <b>Thunder Rocket Battery</b> (8 rockets, 38 each, splash 2.2, burning ground, <b>stun 0.5s</b>).',
+        'Path B, Ripple Fire: <b>Twin Hwacha</b> (16 rockets every 4s, the old Rocket Rack max) → <b>Munjong Hwacha</b> (24 rockets in a wide fan, hits <b>slow 25%</b>, range 15) → <b>Whirlwind Battery</b> (every 3s, 16 rockets at <b>two different groups</b>, slow 35%).',
+      ] },
+      { title: 'Machine Gun Nest', items: [
+        'Lv 2 <b>Fortified Pillbox</b>: 750 HP, 6 damage, +1 armor, range 12.',
+        'Path A, Heavy Caliber: <b>Heavy MG Post</b> (.50 cal, 13 damage, range 13) → <b>Twin .50 Bunker</b> (14 damage, AP rounds <b>ignore 4 armor</b>) → <b>Autocannon Bunker</b> (28 per shell, <b>50% splash</b> around the target, +50% vs flying).',
+        'Path B, Rotary: <b>Gatling Nest</b> (attack speed 510, the old Belt Feed max, slow 25%) → <b>Minigun Nest</b> (<b>2 targets</b> per shot, slow 30%) → <b>Vulcan CIWS</b> (3 targets, slow 35%, +50% vs flying, <b>true sight 10</b>). The barrels spin while firing.',
+      ] },
+      { title: 'Balance watch', items: [
+        'In test runs against a packed group, the <b>Thunder Rocket Battery</b> dealt the most damage of any tower capstone (burning ground from 8 rockets adds up, plus the stun). It\'s ground-only with a 3 min range, but it\'s the one to watch. The Vulcan CIWS and the Autocannon Bunker landed close to the Sniper and Archer capstones.',
+      ] },
+    ],
+  },
+  {
     version: '0.24.0', date: '2026-10-24T22:30:00+08:00', title: 'Five new skill trees, form outfits, item keys & HP bar fix',
     sections: [
       { title: 'Fixes', items: [
