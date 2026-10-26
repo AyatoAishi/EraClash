@@ -346,6 +346,121 @@ export const SKILL_TREES = {
       desc: 'Flick when attacking too.',
     },
   },
+  // ---------- Modern skill trees (v0.30) ----------
+  sniper: {
+    marksman: {
+      name: 'Marksman', from: null, level: 5,
+      stats: { range: 1 }, abilities: ['steadyAim'],
+      look: { colors: { 0x3f4d2a: 0x6b5a3a, 0x2f3a26: 0x4a3e28 }, gear: ['scopeGlint'] },
+      desc: 'Shots pierce evasion.',
+    },
+    sharpshooter: {
+      name: 'Sharpshooter', from: 'marksman', level: 15,
+      stats: { range: 2, vision: [8, 4] }, abilities: ['precisionAura'],
+      look: { colors: { 0x3f4d2a: 0x8a7a4a, 0x2f3a26: 0x5a4a2a, 0x4a5a3a: 0x5a5a3a }, gear: ['scopeGlint', 'spotterFlag'] },
+      desc: 'Aura: allies +1 range, +6 damage.',
+    },
+    highMarksman: {
+      name: 'High Marksman', from: 'marksman', level: 15,
+      stats: { range: 1 }, abilities: ['execution'],
+      look: { colors: { 0x3f4d2a: 0x2a2a2a, 0x2f3a26: 0x1a1a1a, 0x4a5a3a: 0x3a3a3a }, gear: ['scopeGlint', 'brassBelt'] },
+      desc: 'Killing shots bounce to the next one.',
+    },
+    assassin: {
+      name: 'Assassin', from: null, level: 5,
+      stats: { damage: 10 }, abilityMods: { bullsEye: { curHpPct: 0.1, breakT: 3 } },
+      look: { colors: { 0x3f4d2a: 0x22222a, 0x2f3a26: 0x16161c, 0x4a5a3a: 0x2a2a34, 0x3a4630: 0x1e1e26 }, gear: ['redWrap'] },
+      desc: "Bull's Eye: % current HP + Break.",
+    },
+    vendetta: {
+      name: 'Vendetta', from: 'assassin', level: 15,
+      stats: { damage: 15 }, abilities: ['vendetta'],
+      look: { colors: { 0x3f4d2a: 0x16161c, 0x2f3a26: 0x0d0d10, 0x4a5a3a: 0x1e1e26, 0x3a4630: 0x16161a }, gear: ['redWrap', 'shadowWisps'] },
+      desc: 'Invisible close-range ambush.',
+    },
+    deadEye: {
+      name: 'Dead Eye', from: 'assassin', level: 15,
+      stats: { damage: 30, attackSpeed: -10 }, abilities: ['assassinate'],
+      look: { colors: { 0x3f4d2a: 0x3a1a1a, 0x2f3a26: 0x220e0e, 0x4a5a3a: 0x2a1a1a, 0x3a4630: 0x1e1010 }, gear: ['redWrap', 'redLaser'] },
+      desc: 'Assassinate: long-range missing-HP shot.',
+    },
+  },
+  riotSkirmisher: {
+    fortress: {
+      name: 'Fortress', from: null, level: 5,
+      stats: { hp: 130, armor: 2 }, abilities: ['fortress'],
+      look: { colors: { 0x232c40: 0x3a4a5a }, gear: ['shieldRim'] },
+      desc: 'Soaks shots aimed past him.',
+    },
+    warden: {
+      name: 'Warden', from: 'fortress', level: 15,
+      stats: { hp: 200, armor: 3 }, abilities: ['ironWill'],
+      look: { colors: { 0x232c40: 0x5a6a7a, 0x1a1f2a: 0x3a4a5a }, gear: ['shieldRim', 'wardenCrest'] },
+      desc: 'Shrugs off tower and base fire.',
+    },
+    dire: {
+      name: 'Dire', from: 'fortress', level: 15,
+      stats: { hp: 150, armor: 4 }, removes: ['fortress'], abilities: ['absorb'],
+      look: { colors: { 0x232c40: 0x4a1a1a, 0x1c2436: 0x2a0e0e, 0x1a1f2a: 0x2a1010 }, eyes: 0xff3b2f, gear: ['spikePads', 'absorbRing'] },
+      desc: 'Takes the damage of allies near him.',
+    },
+    breaker: {
+      name: 'Breaker', from: null, level: 5,
+      stats: { hp: 130, ward: 2 }, abilities: ['breaker'],
+      look: { colors: { 0x232c40: 0x3a2a4a }, gear: ['igniteCore'] },
+      desc: 'Enemy casts heal him and allies.',
+    },
+    juggernaut: {
+      name: 'Juggernaut', from: 'breaker', level: 15,
+      stats: { hp: 200, ward: 3 }, abilities: ['goldWill'],
+      look: { colors: { 0x232c40: 0xb08a3a, 0x1c2436: 0x5a4a2a, 0x1a1f2a: 0x8a6a2a }, gear: ['igniteCore', 'goldPlates'] },
+      desc: '+75% physical damage to buildings.',
+    },
+    striker: {
+      name: 'Striker', from: 'breaker', level: 15,
+      stats: { hp: 150, armor: 4 }, removes: ['breaker'], abilities: ['combust'],
+      look: { colors: { 0x232c40: 0x4a2a6a, 0x1c2436: 0x2a1a3a, 0x1a1f2a: 0x3a2a5a }, gear: ['igniteCore', 'arcSparks'] },
+      desc: 'Magic damage taken builds an explosion + shields.',
+    },
+  },
+  reconDrone: {
+    overseer: {
+      name: 'Overseer', from: null, level: 5,
+      stats: { armor: 2 }, abilities: ['miniDrones'],
+      look: { colors: { 0x3b4652: 0x4a5a4a, 0x4aa3ff: 0x5cff7a }, gear: ['droneAntenna'] },
+      desc: '2 mini drones fight beside it.',
+    },
+    overlord: {
+      name: 'Overlord', from: 'overseer', level: 15,
+      stats: { armor: 2 }, abilityMods: { miniDrones: { count: 5 } },
+      look: { colors: { 0x3b4652: 0x2a3a2a, 0x23282e: 0x1a221a, 0x4aa3ff: 0x5cff7a }, gear: ['droneAntenna', 'droneCrown'] },
+      desc: '5 mini drones.',
+    },
+    missileDrone: {
+      name: 'Missile Drone', from: null, level: 5,
+      stats: { damage: 10 }, abilities: ['homingMissile'],
+      look: { colors: { 0x3b4652: 0x5a4a3a, 0x4aa3ff: 0xff8a3a }, gear: ['missilePod'] },
+      desc: 'Every 10s: long-range missile blast.',
+    },
+    barrage: {
+      name: 'Barrage Drone', from: 'missileDrone', level: 15,
+      stats: { damage: 20 }, abilityMods: { homingMissile: { extra: 1 } },
+      look: { colors: { 0x3b4652: 0x6a2a1a, 0x23282e: 0x3a1a10, 0x4aa3ff: 0xffb040 }, gear: ['missilePod', 'missilePod2'] },
+      desc: 'Two missiles at a time.',
+    },
+    swarm: {
+      name: 'Swarm', from: null, level: 5,
+      stats: { damage: -2 }, abilities: ['packBonus'],
+      look: { colors: { 0x3b4652: 0xc8a020, 0x23282e: 0x1a1a1a, 0x4aa3ff: 0xffe14a }, gear: ['swarmStripes'] },
+      desc: 'Stronger for every swarm nearby (max 10).',
+    },
+    hive: {
+      name: 'Hive', from: 'swarm', level: 15,
+      stats: { damage: -1 }, abilityMods: { packBonus: { maxStacks: 25 } },
+      look: { colors: { 0x3b4652: 0xe8b020, 0x23282e: 0x2a1a0a, 0x4aa3ff: 0xff6a1a }, gear: ['swarmStripes', 'hiveGlow'] },
+      desc: 'Pack Bonus up to 25 drones.',
+    },
+  },
 };
 
 export const treeOf = (unitId) => SKILL_TREES[unitId] || null;
@@ -372,7 +487,7 @@ export function formDef(unitId, formId) {
   const d = { ...base, abilities: [...(base.abilities || [])], form: formId, baseName: base.name, abilityMods: {} };
   const path = formPath(unitId, formId), last = SKILL_TREES[unitId][formId];
   // stats + cost: the picked node's numbers only (totals vs the base troop, never stacked with the parent)
-  for (const [k, v] of Object.entries(last.stats || {})) d[k] = Math.round(((d[k] || 0) + v) * 100) / 100;
+  for (const [k, v] of Object.entries(last.stats || {})) d[k] = Array.isArray(v) ? (d[k] || [0, 0]).map((x, i) => x + (v[i] || 0)) : Math.round(((d[k] || 0) + v) * 100) / 100;   // vision: [day, night]
   if (last.cost) d.cost += last.cost;
   for (const f of path) {
     const n = SKILL_TREES[unitId][f];

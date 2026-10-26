@@ -778,7 +778,7 @@ export class UI {
     const n = SKILL_TREES[id][formId], d = formDef(id, formId), parent = formDef(id, n.from), out = [];
     const label = { hp: 'HP', hpRegen: 'REGEN', damage: 'DMG', attackSpeed: 'AS', moveSpeed: 'MS', armor: 'ARMOR', ward: 'WARD', range: 'RANGE', evasion: 'EVA', missChance: 'MISS', mana: 'MANA', manaRegen: 'MANA REGEN' };
     // stats are totals vs the base troop (not added to the parent's)
-    const chips = Object.entries(n.stats || {}).map(([k, v]) => `<span class="sk-stat${v < 0 ? ' neg' : ''}">${v > 0 ? '+' : ''}${fmt(v)}${k === 'missChance' ? '%' : ''} ${label[k] || k}</span>`);
+    const chips = Object.entries(n.stats || {}).map(([k, v]) => Array.isArray(v) ? `<span class="sk-stat">+${fmt(v[0])} DAY / +${fmt(v[1])} NIGHT VISION</span>` : `<span class="sk-stat${v < 0 ? ' neg' : ''}">${v > 0 ? '+' : ''}${fmt(v)}${k === 'missChance' ? '%' : ''} ${label[k] || k}</span>`);
     if (n.cost) chips.push(`<span class="sk-stat${n.cost > 0 ? ' neg' : ''}">${n.cost > 0 ? '+' : ''}${fmt(n.cost)}g</span>`);
     if (chips.length) out.push(`<span class="sk-chips" title="${n.from ? 'Totals vs the base troop (not added to the previous form)' : 'Vs the base troop'}">${chips.join('')}</span>`);
     const ab = [];

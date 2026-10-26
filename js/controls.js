@@ -513,7 +513,7 @@ export class Controls {
       if (!u || !p) { m.visible = false; return; }
       let dx = p.x - u.pos.x, dz = p.z - u.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
       // line casts: full length; Fire Splatter leap / unit casts: up to the cursor, capped at their range
-      const max = T.def.range ?? T.def.leap?.range ?? T.def.castRange ?? 6;
+      const max = T.def.range ?? T.def.leap?.range ?? (T.def.castRange != null ? u.castRangeOf(T.def) : 6);
       const L = T.def.range ? max : Math.min(max, d), W = T.def.width ?? (T.def.leap ? 0.8 : 0.35);
       m.visible = true; m.scale.set(W, 1, L);
       m.position.set(u.pos.x + dx * L / 2, 0.12 + Math.max(0, u.pos.y || 0), u.pos.z + dz * L / 2);

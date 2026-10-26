@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { UNITS, GAME, ITEMS, ABILITIES, DAMAGE_TYPES, defenseMult, attackInterval, canAutocast, abilityText } from './config.js';
 import { UPGRADES, STAT_BOOST } from './upgrades.js';
 import { NEUTRAL_TEAM, CAMP_RULES } from './neutrals.js';
-import { UNIT_BUILDERS, buildZzz, applyLook, animateFx } from './models.js';
+import { UNIT_BUILDERS, buildZzz, applyLook, animateFx, buildMiniDrone } from './models.js';
 import { formDef } from './skilltree.js';
 import { buildingDef } from './buildtree.js';
 import { settings } from './settings.js';
@@ -55,7 +55,7 @@ export class Unit {
       def: this.abilDef(id),
       st: { active: false, stacks: 0, bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, target: null, sinceAttack: 99, scanT: Math.random() * 0.2, cd: 0 },
     }));
-    this.pas = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, armorPierce: 0, lifesteal: 0 };   // summed passive bonuses
+    this.pas = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, bonusMS: 0, armorPierce: 0, lifesteal: 0 };   // summed passive bonuses
     this.slows = [];                   // [{ pct, t }] movement slows (strongest applies)
     this.flying = !!this.def.flying;   // flying: hovers, ignores obstacles/terrain for movement & sight, melee can't hit it
     this.mana = this.maxMana;   // maxMana / manaRegen come from recalcStats (definition + Robe)
@@ -277,7 +277,11 @@ export class Unit {
   get ward() { return this.stats.ward + this.pas.bonusWard - this.wardDebuff; }
   /** Invulnerable: takes no damage and (future) can't be crowd-controlled. Can still be targeted. */
   get invulnerable() { return this.invulnT > 0; }
-  get effRange() { return this.stats.range + (this.pas.bonusRange || 0) + (this.towerRange || 0); }
+  get effRange() { return this.vendettaT > 0 ? this.ability('vendetta').def.range : this.stats.range + (this.pas.bonusRange || 0) + (this.towerRange || 0); }   // Vendetta: fixed close range
+  /** Cast range of a unit-targeted active (Assassinate: attack range + bonus). */
+  castRangeOf(A) { return A.castRangeBonus != null ? this.effRange + A.castRangeBonus : A.castRange || 0; }
+  /** Vendetta: walks through trees, walls and buildings. */
+  get phasing() { return this.vendettaT > 0; }
   get rangeRadius() { return this.effRange + this.radius; }
   /** Snipe Stance state: 'stand' | 'channel' | 'prone' (null if the troop has no stance) */
   /**
@@ -319,10 +323,16 @@ export class Unit {
     if (this.grudgeT > 0) add('grudge', 's-aspd', 'Grudge', 'buff', `+${this.grudgeAS} attack speed.`, this.grudgeT);
     if (this.helmetT > 0) add('helmet', 's-shield', 'Riot Helmet', 'buff', `+${this.helmetArmor} armor.`, this.helmetT);
     if (this.rallyT > 0) add('rally', 's-haste', 'Barding Rally', 'buff', `+${this.rallyBonus} move speed on the trail.`, 0);
+    if (this.vendettaT > 0) add('vendetta', 'a-vendetta', 'Vendetta', 'buff', 'Invisible, walks through terrain; the next attack deals a huge bonus.', this.vendettaT);
+    if (this.shieldHp > 0 && this.shieldT > 0) add('shieldhp', 's-shield', 'Shield', 'buff', `Absorbs the next ${Math.ceil(this.shieldHp)} damage.`, this.shieldT);
+    if (this.breakerStacks?.length) add('breaker', 'p-breaker', 'Ignited', 'buff', `Heals himself and allies within ${this.ability('breaker')?.def.healRadius || 8} range ${this.breakerStacks.length * (this.ability('breaker')?.def.heal || 4)} HP per second.`, Math.max(...this.breakerStacks), this.breakerStacks.length);
     if (this.giveUpHealT > 0) add('regen', 's-regen', 'Regrouping', 'buff', `Heals ${Math.round(CAMP_RULES.giveUpHeal.pct * 100)}% max HP per second.`, this.giveUpHealT);
     for (const { def: A, st } of this.abil) {
       if (st.buffT > 0 && A.kind === 'active') add('ab-' + A.id, A.icon, A.name, 'buff', abilityText(A), st.buffT);
       if (A.id === 'arcaneCoating' && st.on) add('coating', A.icon, 'Coated', 'buff', abilityText(A), 0);
+      if (A.id === 'packBonus' && st.stacks > 0) add('pack', A.icon, A.name, 'buff', `+${f1(st.stacks * A.damage)} damage, +${f1(st.stacks * A.armor)} armor, +${f1(st.stacks * A.moveSpeed)} move speed, +${f1(st.stacks * A.as)} attack speed.`, 0, st.stacks);
+      if (A.id === 'combust' && !st.broken) add('combust', A.icon, A.name, 'buff', st.cd > 0 ? 'Recharging.' : `${Math.floor(st.acc || 0)} / ${A.threshold} magic damage stored.`, st.cd, 0);
+      if (A.id === 'homingMissile' && !st.broken && !(st.cd > 0)) add('missile', A.icon, 'Missile ready', 'buff', `Next attack: +${A.bonusRange} range missile.`, 0);
       if (A.id === 'fervor' && st.stacks > 0) add('fervor', A.icon, A.name, 'buff', `+${f1(st.bonusAS)} attack speed.`, 0, st.stacks);
       if (A.id === 'blueLine' && st.stacks > 0) add('blueline', A.icon, A.name, 'buff', `+${f1(st.bonusDamage)} damage${st.bonusArmor ? `, +${f1(st.bonusArmor)} armor` : ''} from ${st.stacks} nearby officer${st.stacks > 1 ? 's' : ''}.`, 0, st.stacks);
     }
@@ -338,7 +348,7 @@ export class Unit {
   get effMoveSpeed() {
     if (this.immobile) return 0;
     const gale = this.galeUntil > (this.game.time || 0) ? this.galeBonus : 0;   // Galewinds
-    return (this.stats.moveSpeed + gale) * (1 - this.slowPct / 100) * (1 + (this.rallyT > 0 ? this.rallyBonus : 0));
+    return (this.stats.moveSpeed + gale + (this.pas.bonusMS || 0)) * (1 - this.slowPct / 100) * (1 + (this.rallyT > 0 ? this.rallyBonus : 0));
   }
   /** Boomstick (Operator / Shotgunner): damage multiplier vs a target at its current distance. */
   boomMult(t) {
@@ -380,6 +390,7 @@ export class Unit {
       this.game.burst(this.pos, 6, [0x5ce36f, 0xffffff], 1.6, 0.5);
     }
     if (A.trueStrike) { this.trueStrikeT = A.trueStrike; this.trueStrikeBreak = A.breakT || 0; this.game.burst(this.pos, 5, [0xf2c94c, 0xffffff], 1.5, 0.4, 0.7); }
+    this.game.onCast?.(this);   // Breaker
     if (A.consumable) this.removeItem(slot);
     else this.itemCd[slot] = A.cooldown || 0;
     return null;
@@ -420,10 +431,23 @@ export class Unit {
     if (this.tower) return 0;
     if (this.invulnerable) { this.shieldPing = 1; return 0; }
     if (this.game.cheat?.god && this.team === this.game.playerTeam) return 0;
+    // Absorb (Dire): the nearest Dire ally within range takes this damage instead, before any mitigation.
+    // Dires never pass damage to each other; buildings and towers aren't covered.
+    if (!opts?.absorbed && this.team <= 1 && !this.structure && this.game.dires?.length && !this.ability('absorb')) {
+      let dire = null, bd = Infinity;
+      for (const D of this.game.dires) {
+        if (D.dead || D.team !== this.team || D.broken) continue;
+        const d = Math.hypot(D.pos.x - this.pos.x, D.pos.z - this.pos.z);
+        if (d <= D.ability('absorb').def.radius && d < bd) { bd = d; dire = D; }
+      }
+      if (dire) return dire.takeDamage(raw, source, type, { ...(opts || {}), absorbed: true });
+    }
     if (source && source.team !== undefined) raw *= this.game.dmgMult ? this.game.dmgMult(source.team, this.team) : 1;   // AI difficulty 4+
     if (source && source.weakenUntil > (this.game.time || 0)) raw *= 1 - source.weakenPct;   // Mediator: the attacker deals less
     if (source && source.silenceT > 0 && source.silenceSpell && !opts?.attack) raw *= 1 - source.silenceSpell;   // Silencer: silenced casters' spells hit softer
     if (type === 'physical' && source?.team === NEUTRAL_TEAM) { const ng = this.ability('naturesGrace'); if (ng && !ng.st.broken) raw *= 1 - ng.def.creepPhys; }   // Dryad
+    if (type === 'physical' && (source?.structure || source?.tower || source?.isBase)) { const iw = this.ability('ironWill'); if (iw && !iw.st.broken) raw *= 1 - iw.def.structPhys; }   // Warden
+    if (type === 'physical' && this.structure) { const gw = source?.ability?.('goldWill'); if (gw && !gw.st.broken) raw *= 1 + gw.def.vsStructPhys; }   // Juggernaut
     const fz = this.fury;   // Fury: more damage from the troop type that stacked it (Vikings), any damage type
     if (fz && fz.t > 0 && fz.stacks > 0 && source && source.team === fz.team && source.def?.id === fz.unit) raw *= 1 + fz.stacks * fz.per;
     if (opts?.attack) {
@@ -446,7 +470,12 @@ export class Unit {
     if (pierce) d = Math.max(Math.min(d, 0), d - pierce);            // ignores up to N armor, never below 0
     const dmg = Math.max(0, raw * (def ? defenseMult(d) : 1)) * this.damageTakenMult;
     if (dmg <= 0) return 0;
-    this.hp -= dmg;
+    // Combust (Striker): stores magic damage taken; explodes at the threshold
+    if (type === 'magic') { const cb = this.ability('combust'); if (cb && !cb.st.broken && !(cb.st.cd > 0)) { cb.st.acc = (cb.st.acc || 0) + dmg; if (cb.st.acc >= cb.def.threshold) this.combustPending = true; } }
+    // Shield (Combust): temporary silver HP, soaks damage first
+    let left = dmg;
+    if (this.shieldHp > 0 && this.shieldT > 0) { const s = Math.min(this.shieldHp, left); this.shieldHp -= s; left -= s; this.shieldPing = 1; }
+    this.hp -= left;
     this.flash = 1;
     // Interrupt (Dryad forms): anything it damages is silenced (refreshes every hit, poison ticks included)
     const si = source?.ability?.('silenceStrike');
@@ -460,6 +489,8 @@ export class Unit {
     if (rs) { rs.st.acc = (rs.st.acc || 0) + dmg; if (rs.st.acc >= rs.def.threshold) { rs.st.acc = 0; rs.st.buffT = rs.def.duration; } }
     if (this.team === NEUTRAL_TEAM && this.hp > 0) this.game.neutralAggro(this, source);
     if (this.hp <= 0) { this.hp = 0; this.die(source); }
+    else if (this.combustPending) { this.combustPending = false; this.game.combust(this); }
+    if (this.dead) return dmg;
     else if (opts?.attack && !opts.extra && source && !source.dead && !source.isBase && source.team !== this.team) this.reactToAttack(source);
     return dmg;
   }
@@ -493,6 +524,7 @@ export class Unit {
 
   die(source) {
     this.dead = true;
+    if (this.minis) this.clearMiniDrones();
     if (this.obstacle != null) { this.game.terrain?.removeObstacle(this.obstacle); this.obstacle = null; }
     this.deathT = 0;
     this.ring.visible = false; this.bar.visible = false; this.shield.visible = false;
@@ -510,7 +542,9 @@ export class Unit {
 
   /** Passive logic + active cooldowns. Aura-style passives rescan 5x/sec. */
   updatePassive(dt) {
-    const sum = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, armorPierce: 0, lifesteal: 0 };
+    const sum = { bonusDamage: 0, bonusAS: 0, bonusRegen: 0, bonusEvasion: 0, bonusArmor: 0, bonusWard: 0, bonusRange: 0, bonusMS: 0, armorPierce: 0, lifesteal: 0 };
+    if (this.vendettaT > 0) this.vendettaT -= dt;
+    if (this.shieldT > 0) { this.shieldT -= dt; if (this.shieldT <= 0) this.shieldHp = 0; }
     if (this.maxMana && this.mana < this.maxMana) this.mana = Math.min(this.maxMana, this.mana + (this.manaRegen || 0) * dt);
     for (let k = 0; k < this.itemCd.length; k++) if (this.itemCd[k] > 0) this.itemCd[k] -= dt;
     if (this.breakT > 0) this.breakT -= dt;
@@ -529,7 +563,7 @@ export class Unit {
       // Break: breakable passives are switched off entirely
       if (P.kind === 'passive' && this.broken && !P.unbreakable) {
         s.active = false; s.broken = true;
-        s.bonusDamage = s.bonusAS = s.bonusRegen = s.bonusEvasion = s.bonusArmor = s.bonusWard = s.bonusRange = s.lifesteal = 0;
+        s.bonusDamage = s.bonusAS = s.bonusRegen = s.bonusEvasion = s.bonusArmor = s.bonusWard = s.bonusRange = s.bonusMS = s.lifesteal = 0;
         continue;
       }
       s.broken = false;
@@ -584,6 +618,37 @@ export class Unit {
             this.game.ring?.(this.pos, P.radius, P.damageType === 'true' ? 0xffe14a : 0xb07aff);
           } else s.cd = 0.25;   // nothing in reach: check again soon, pulse as soon as something walks in
         }
+      } else if (P.id === 'breaker') {   // Breaker: each ignite stack heals him + allies around him, own 8s timer per stack
+        const S = (this.breakerStacks ||= []);
+        for (let k = S.length - 1; k >= 0; k--) { S[k] -= dt; if (S[k] <= 0) S.splice(k, 1); }
+        s.active = S.length > 0; s.stacks = S.length;
+        s.tick = (s.tick || 0.5) - dt;
+        if (S.length && s.tick <= 0) {
+          s.tick = 0.5;
+          const h = P.heal * S.length * 0.5, r2 = P.healRadius * P.healRadius;
+          for (const o of this.game.units) {
+            if (o.dead || o.team !== this.team || o.tower || o.structure || o.hp >= o.maxHp || (o.pos.x - this.pos.x) ** 2 + (o.pos.z - this.pos.z) ** 2 > r2) continue;
+            o.hp = Math.min(o.maxHp, o.hp + h);
+          }
+          if (Math.random() < 0.5) this.game.burst(this.pos, 2, [0xff8a3a, 0xffe14a], 1.2, 0.4, 0.6);
+        }
+      } else if (P.id === 'combust') {
+        s.active = true; if (s.cd > 0) s.cd -= dt;
+      } else if (P.id === 'homingMissile') {   // Missile / Barrage Drone: ready = next attack is a long-range missile
+        if (s.cd > 0) s.cd -= dt;
+        s.active = !(s.cd > 0);
+        s.bonusRange = s.active ? P.bonusRange : 0;
+      } else if (P.id === 'packBonus') {   // Swarm / Hive: per other pack drone nearby
+        s.scanT -= dt;
+        if (s.scanT <= 0) {
+          s.scanT = 0.25;
+          const r2 = P.radius * P.radius; let n = 0;
+          for (const o of this.game.units) if (o !== this && !o.dead && o.team === this.team && o.ability?.('packBonus') && (o.pos.x - this.pos.x) ** 2 + (o.pos.z - this.pos.z) ** 2 <= r2) n++;
+          s.stacks = Math.min(n, P.maxStacks); s.active = s.stacks > 0;
+          s.bonusDamage = s.stacks * P.damage; s.bonusArmor = s.stacks * P.armor; s.bonusAS = s.stacks * P.as; s.bonusMS = Math.round(s.stacks * P.moveSpeed * 100) / 100;
+        }
+      } else if (P.id === 'steadyAim' || P.id === 'execution' || P.id === 'fortress' || P.id === 'ironWill' || P.id === 'absorb' || P.id === 'goldWill' || P.id === 'miniDrones') {
+        s.active = true;                    // handled on hit / in takeDamage / in projectiles / updateMiniDrones
       } else if (P.id === 'counterstrike' || P.id === 'dkCurse' || P.id === 'zealot' || P.id === 'galewinds' || P.id === 'disrupt' || P.id === 'flick' || P.id === 'boomstick'
         || P.id === 'naturesGrace' || P.id === 'silenceStrike' || P.id === 'splitshot' || P.id === 'siegeBonus' || P.id === 'homingStone' || P.id === 'grudge') {
         s.active = true;                    // handled on hit / when hit
@@ -642,8 +707,9 @@ export class Unit {
           }
         }
       }
-      sum.bonusDamage += s.bonusDamage; sum.bonusAS += s.bonusAS; sum.bonusRegen += s.bonusRegen; sum.bonusEvasion += s.bonusEvasion; sum.bonusArmor += s.bonusArmor || 0; sum.bonusWard += s.bonusWard || 0; sum.bonusRange += s.bonusRange || 0; sum.lifesteal += s.lifesteal || 0;
+      sum.bonusDamage += s.bonusDamage; sum.bonusAS += s.bonusAS; sum.bonusRegen += s.bonusRegen; sum.bonusEvasion += s.bonusEvasion; sum.bonusArmor += s.bonusArmor || 0; sum.bonusWard += s.bonusWard || 0; sum.bonusRange += s.bonusRange || 0; sum.bonusMS += s.bonusMS || 0; sum.lifesteal += s.lifesteal || 0;
     }
+    if (this.vendettaT > 0) invis = true;   // Vendetta
     this.invisible = invis;
     if (this.curseHasteT > 0) sum.bonusAS += this.curseHaste || 0;
     if (this.grudgeT > 0) { this.grudgeT -= dt; sum.bonusAS += this.grudgeAS || 0; }   // Grudge: a Batrider ally fell
@@ -669,14 +735,14 @@ export class Unit {
       for (const u of this.game.units) {
         if (u.dead || u.team !== this.team || !u.abil.length) continue;
         for (const { def: A } of u.abil) {
-          if (!A.aura || (u.broken && !A.unbreakable)) continue;
+          if (!A.aura || (u.broken && !A.unbreakable) || (A.notSelf && u === this)) continue;
           const r = A.aura.radius;
           if ((u.pos.x - this.pos.x) ** 2 + (u.pos.z - this.pos.z) ** 2 > r * r) continue;
           const cur = (got[A.id] ||= {});
           for (const [k, v] of Object.entries(A.aura)) if (k !== 'radius') cur[k] = Math.max(cur[k] || 0, v);
         }
       }
-      this.auraBonus = { bonusArmor: 0, bonusWard: 0, bonusRegen: 0, bonusDamage: 0, bonusAS: 0 };
+      this.auraBonus = { bonusArmor: 0, bonusWard: 0, bonusRegen: 0, bonusDamage: 0, bonusAS: 0, bonusRange: 0 };
       for (const a of Object.values(got)) for (const [k, v] of Object.entries(a)) this.auraBonus[k] = (this.auraBonus[k] || 0) + v;
       this.auras = Object.keys(got);
     }
@@ -689,6 +755,7 @@ export class Unit {
   /** Called when a swing/shot starts against `tg`. */
   onAttackStart(tg) {
     this.stillT = 0; this.invisible = false;
+    if (this.vendettaT > 0) { this.vendettaT = 0; this.vendettaStrike = true; }   // Vendetta: this attack ends it and hits very hard
     if (tg && tg.curse && tg.curse.t > 0) { this.curseHasteT = tg.curse.def.hasteTime; this.curseHaste = tg.curse.def.hasteAS; }
     if (tg && tg.team !== undefined) this.game.vision?.reveal(this, tg.team);   // attacking gives your position away
     const f = this.ability('fervor');
@@ -724,8 +791,14 @@ export class Unit {
       const every = L >= HP.max ? 3 : be.def.every;
       const crit = be.def.critBonus + (L ? HP.values.critBonus[L - 1] : 0);
       be.st.stacks = (be.st.stacks || 0) + 1;
-      if (be.st.stacks >= every) { be.st.stacks = 0; d = Math.round(d * (1 + crit)); this.lastCrit = true; }
+      if (be.st.stacks >= every) {
+        be.st.stacks = 0; d = Math.round(d * (1 + crit)); this.lastCrit = true;
+        if (!be.st.broken && be.def.curHpPct) { shot.curHpPct = be.def.curHpPct; shot.breakT = Math.max(shot.breakT, be.def.breakT || 0); }   // Assassin forms
+      }
     }
+    const sa = this.ability('steadyAim');           // Marksman forms: shots pierce evasion
+    if (sa && !sa.st.broken) shot.trueStrike = true;
+    if (!extra && this.vendettaStrike) { this.vendettaStrike = false; shot.vendetta = this.ability('vendetta')?.def || null; }
     const cs = this.ability('critStrike');
     if (cs && !cs.st.broken && Math.random() < cs.def.chance) {
       const L = Math.max(1, this.upLevel('criticalStrike'));
@@ -762,6 +835,8 @@ export class Unit {
     const hs = this.structure?.hitSplash;   // Autocannon Bunker: shells burst around the target
     if (hs && raw > 0) this.game.hitSplash(this, tg, raw * hs.pct, hs.radius);
     if (shot?.magic && !tg.dead) { const m = tg.takeDamage(shot.magic, this, 'magic'); this.damageDealt += m; if (m > 0) this.game.emit('hitDmg', tg.pos, m, false, this.team); }
+    // Assassin Bull's Eye: + % of the target's current HP (as it was before this hit) as physical damage
+    if (shot?.curHpPct && !tg.dead && !tg.isBase) { const x = tg.takeDamage((tg.hp + dealt) * shot.curHpPct, this, 'physical'); this.damageDealt += x; if (x > 0) this.game.emit('hitDmg', tg.pos, x, true, this.team); }
     if (shot?.breakT && !tg.dead) tg.applyBreak(shot.breakT);
     if (shot?.slow && !tg.dead) tg.addSlow(shot.slow.pct, shot.slow.t);            // Flick
     if (shot?.rapid && !tg.dead) tg.addRapidShred(shot.rapid.per, shot.rapid.t);   // Rapid Fire
@@ -858,7 +933,7 @@ export class Unit {
     if (a.def.cast === 'unit') {   // needs an enemy troop; out of range -> walk there first (cast fires from update)
       const t = aim?.unit || (this.target && !this.target.isBase ? this.target : null);
       if (!t || t.dead || t.team === this.team || t.tower || t.isBase) return false;
-      if (this.edgeDist(t) > a.def.castRange) { this.command({ type: 'attack', target: t }); this.queuedCast = { i, target: t }; return true; }
+      if (this.edgeDist(t) > this.castRangeOf(a.def)) { this.command({ type: 'attack', target: t }); this.queuedCast = { i, target: t }; return true; }
       aim = { unit: t, x: t.pos.x, z: t.pos.z };
     }
     if (a.def.castTime) {
@@ -873,6 +948,7 @@ export class Unit {
     const a = this.abil[i];
     if (!a || this.dead || (a.def.manaCost || 0) > this.mana) return false;
     if (!this.game.castAbility(this, a.def, aim)) return false;
+    if (a.def.id !== 'snipeStance') this.game.onCast?.(this);   // Breaker: enemy casts ignite nearby Breakers
     const wtf = this.game.cheat?.wtf && this.team === this.game.playerTeam;   // /wtf: free, instant recasts
     if (!wtf) this.mana -= a.def.manaCost || 0;
     // Snipe Stance: going prone costs the short cooldown; standing up sets its own cooldown when it finishes
@@ -890,7 +966,7 @@ export class Unit {
   /** Snipe Stance toggle: stand -> channel (immobile) -> prone; recast while channeling/prone -> stand. */
   toggleStance() {
     const a = this.ability('snipeStance');
-    if (!a) return false;
+    if (!a || this.vendettaT > 0) return false;   // no going prone during Vendetta
     const s = a.st;
     if (s.mode === 'stand' || !s.mode) { s.mode = 'channel'; s.chT = a.def.channel; }
     else if (s.mode === 'channel') s.mode = 'stand';                       // recast mid-setup = cancel
@@ -952,6 +1028,8 @@ export class Unit {
         continue;
       }
       if ((A.id === 'enforce' || A.id === 'mediator') && this.game.enemiesInRadius(this, A.radius, A).filter((o) => !o.structure).length >= A.ai.minTargets) { this.castAbility(i); continue; }
+      if (A.id === 'vendetta' && this.target && !this.target.dead && !this.target.isBase && !this.target.structure && this.hp / this.maxHp > 0.4) { this.castAbility(i); continue; }
+      if (A.id === 'assassinate' && this.target && !this.target.dead && !this.target.isBase && !this.target.structure && this.aimT > 0) { this.castAbility(i, { unit: this.target }); continue; }
       if (A.id === 'execute' && this.target && !this.target.dead && !this.target.isBase && this.aimT > 0) { this.castAbility(i, { unit: this.target }); continue; }
       if (A.id === 'arcaneCoating') {   // keep the coating on while there's mana for a few hits
         if (!st.on && this.aimT > 0 && this.mana >= (A.manaPerHit || 0) * 3) this.castAbility(i);
@@ -979,7 +1057,15 @@ export class Unit {
         return;
       }
       if (tg.isBase || !tg.dead) {
-        g.fireProjectile(this, tg); this.onAttackDone();
+        const hm = this.ability('homingMissile');   // Missile / Barrage Drone: the charged attack is a missile
+        if (hm && !hm.st.broken && !(hm.st.cd > 0)) {
+          const M = hm.def, r = this.effRange + this.radius + 0.5;
+          const others = tg.isBase ? [] : g.units.filter((o) => o !== tg && this.isFoe(o) && g.canSee(this.team, o) && Math.hypot(o.pos.x - this.pos.x, o.pos.z - this.pos.z) - o.radius <= r);
+          hm.st.cd = M.cooldown;
+          g.fireProjectile(this, tg, false, { missile: { magic: M.magic, radius: M.radius }, mesh: 'rocket' });
+          for (let k = 0; k < (M.extra || 0); k++) g.fireProjectile(this, others.length ? others[Math.floor(Math.random() * others.length)] : tg, true, { extra: true, missile: { magic: M.magic, radius: M.radius }, mesh: 'rocket' });
+        } else g.fireProjectile(this, tg);
+        this.onAttackDone();
         const sp = this.ability('splitshot');     // Relentless / Split Dryad: extra spears at the nearest other enemies
         if (sp && !sp.st.broken && !tg.isBase) {
           const r = this.effRange + this.radius + 0.5;
@@ -1030,6 +1116,7 @@ export class Unit {
     }
     this.updatePassive(dt);
     if (this.dead) return false;
+    if (this.ability('miniDrones')) this.updateMiniDrones(dt);
     if (this.leap) return this.updateLeap(dt, camQuat);
     if (this.stunT > 0 || this.fearT > 0) return this.updateCC(dt, camQuat);
     if (this.doubleTapQ) {
@@ -1039,7 +1126,7 @@ export class Unit {
     if (this.queuedCast) {   // unit-targeted cast (Execute): walk into range, then cast
       const Q = this.queuedCast, a = this.abil[Q.i];
       if (!a || Q.target.dead || !g.canSee(this.team, Q.target) || a.st.cd > 0) this.queuedCast = null;
-      else if (this.edgeDist(Q.target) <= (a.def.castRange || 0)) { this.queuedCast = null; this.castAbility(Q.i, { unit: Q.target, x: Q.target.pos.x, z: Q.target.pos.z }); }
+      else if (this.edgeDist(Q.target) <= this.castRangeOf(a.def)) { this.queuedCast = null; this.castAbility(Q.i, { unit: Q.target, x: Q.target.pos.x, z: Q.target.pos.z }); }
     }
     if (g.teams[this.team].isAI) { this.aiT = (this.aiT || 0) - dt; if (this.aiT <= 0) { this.aiT = 0.3; if (this.abil.length) this.aiCast(); if (this.dead) return false; this.aiItems(); } }
     else if (this.abil.some((a) => a.st.auto)) { this.aiT = (this.aiT || 0) - dt; if (this.aiT <= 0) { this.aiT = 0.3; this.aiCast(true); if (this.dead) return false; } }   // player autocast
@@ -1457,7 +1544,7 @@ export class Unit {
 
   /** Next point to walk toward on the way to `goal`: straight if the line is clear, else an A* path (cached, re-planned when the goal moves or the map changes). */
   steer(goal, dt) {
-    const T = this.game.terrain; if (!T || this.flying) return goal;   // flying: straight over everything
+    const T = this.game.terrain; if (!T || this.flying || this.phasing) return goal;   // flying / Vendetta: straight over everything
     const p = this.pos;
     const nav = this.nav || (this.nav = { gx: 1e9, gz: 1e9, path: null, t: 0, ver: -1, direct: true });
     nav.t -= dt;
@@ -1475,7 +1562,7 @@ export class Unit {
   /** Keep out of obstacles and stand on the terrain (river = low ground). */
   groundPos() {
     const T = this.game.terrain; if (!T) return;
-    if (!this.flying) T.resolve(this.pos, this.radius * 0.9);
+    if (!this.flying && !this.phasing) T.resolve(this.pos, this.radius * 0.9);
     this.pos.y = T.heightAt(this.pos.x, this.pos.z) + (this.flying ? GAME.flyHeight : 0);
   }
   /** Vision radius right now (nightF 0 = day, 1 = night). */
@@ -1712,7 +1799,64 @@ export class Unit {
     const f = this.hp / this.maxHp;
     this.fill.scale.x = Math.max(0.001, f);
     this.fill.position.x = -(1 - f) / 2;
+    // Shield (Combust): a silver segment after the HP (drawn over the end of the bar when HP is near full)
+    const sh = this.shieldHp > 0 && this.shieldT > 0 ? Math.min(1, this.shieldHp / this.maxHp) : 0;
+    if (sh > 0 && !this.shieldBar) { this.shieldBar = new THREE.Mesh(barGeo, barMat(0xd8dde4)); this.shieldBar.position.z = 0.002; this.shieldBar.renderOrder = 32; this.bar.add(this.shieldBar); }
+    if (this.shieldBar) {
+      this.shieldBar.visible = sh > 0;
+      if (sh > 0) { const x0 = Math.min(f, 1 - sh); this.shieldBar.scale.set(sh, 0.11, 1); this.shieldBar.position.x = -0.5 + x0 + sh / 2; }
+    }
   }
+  /**
+   * Mini Drones (Overseer / Overlord): untargetable pets around the drone. Each picks a random enemy around its
+   * owner, flies toward it (never more than `leash` from the owner) and shoots with the owner's range and attack speed
+   * for `dmgPct` of its damage (on-hit effects apply). Break grounds them (hidden, no shots) until it ends.
+   */
+  updateMiniDrones(dt) {
+    const a = this.ability('miniDrones'), A = a.def, g = this.game;
+    const D = (this.minis ||= []);
+    while (D.length < A.count) {
+      const mesh = buildMiniDrone(); g.scene.add(mesh);
+      const ang = Math.random() * Math.PI * 2;
+      D.push({ mesh, x: this.pos.x + Math.cos(ang) * 1.5, z: this.pos.z + Math.sin(ang) * 1.5, ox: Math.cos(ang) * 1.5, oz: Math.sin(ang) * 1.5, wanderT: 0, cd: Math.random() * 0.6, target: null, retT: 0 });
+    }
+    const grounded = this.broken;
+    const interval = attackInterval(this.effAttackSpeed), reach = this.effRange + A.leash;
+    for (const m of D) {
+      m.mesh.visible = !grounded && this.obj.visible;
+      if (grounded) { m.target = null; continue; }
+      m.cd -= dt; m.retT -= dt; m.wanderT -= dt;
+      if (m.target && (m.target.dead || Math.hypot(m.target.pos.x - this.pos.x, m.target.pos.z - this.pos.z) - m.target.radius > reach + 1 || !g.canSee(this.team, m.target))) m.target = null;
+      if (!m.target && m.retT <= 0) {   // a random enemy around the owner
+        m.retT = 0.3;
+        const pool = g.units.filter((o) => this.isFoe(o) && g.canSee(this.team, o) && Math.hypot(o.pos.x - this.pos.x, o.pos.z - this.pos.z) - o.radius <= reach);
+        m.target = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+      }
+      let gx, gz;
+      if (m.target) {   // hover toward the target, leashed to the owner
+        let dx = m.target.pos.x - this.pos.x, dz = m.target.pos.z - this.pos.z; const d = Math.hypot(dx, dz) || 1;
+        const want = Math.min(A.leash, Math.max(0, d - this.effRange * 0.8));
+        gx = this.pos.x + dx / d * want + m.ox * 0.3; gz = this.pos.z + dz / d * want + m.oz * 0.3;
+      } else {          // idle: drift around the owner like a pet
+        if (m.wanderT <= 0) { m.wanderT = 1 + Math.random() * 1.5; const ang = Math.random() * Math.PI * 2, r = 0.8 + Math.random() * 1.6; m.ox = Math.cos(ang) * r; m.oz = Math.sin(ang) * r; }
+        gx = this.pos.x + m.ox; gz = this.pos.z + m.oz;
+      }
+      const k = Math.min(1, dt * 4); m.x += (gx - m.x) * k; m.z += (gz - m.z) * k;
+      if (Math.hypot(m.x - this.pos.x, m.z - this.pos.z) > A.leash) { m.x = this.pos.x + m.ox * 0.5; m.z = this.pos.z + m.oz * 0.5; }   // strayed: snap back to the owner
+      const y = (this.pos.y || 0) + 1.6 + Math.sin(g.time * 3 + m.ox) * 0.15;
+      m.mesh.position.set(m.x, y, m.z);
+      for (const p of m.mesh.userData.props || []) p.rotation.y += dt * 40;
+      if (m.target) {
+        m.mesh.rotation.y = Math.atan2(m.target.pos.x - m.x, m.target.pos.z - m.z);
+        const inR = Math.hypot(m.target.pos.x - m.x, m.target.pos.z - m.z) - m.target.radius <= this.effRange + 0.5;
+        if (inR && m.cd <= 0 && !this.disarmed && !this.ccd) {
+          m.cd = interval * (0.9 + Math.random() * 0.2);
+          g.fireProjectile(this, m.target, true, { extra: true, dmgMult: A.dmgPct, from: { x: m.x, y, z: m.z } });
+        }
+      }
+    }
+  }
+  clearMiniDrones() { for (const m of this.minis || []) this.game.scene.remove(m.mesh); this.minis = null; }
 
   updateDeath(dt) {
     this.deathT += dt;
@@ -1734,6 +1878,7 @@ export class Unit {
   edgeDist(u) { return Math.hypot(u.pos.x - this.pos.x, u.pos.z - this.pos.z) - this.radius - u.radius; }
 
   dispose() {
+    if (this.minis) this.clearMiniDrones();
     this.obj.parent?.remove(this.obj);
     for (const m of this.rig.matList) m.dispose();
     for (const m of this.rig.extraMats || []) m.dispose();

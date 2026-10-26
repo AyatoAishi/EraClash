@@ -197,6 +197,28 @@ export function animateFx(r, dt) {
 
 /** Gear pieces for skill-tree forms. Each gets the rig and the kit; positions follow the humanoid skeleton. */
 export const FORM_GEAR = {
+  // ---- Sniper (v0.30) ----
+  scopeGlint: (r, { glow }) => { if (r.gun) glow(r.gun, 0.13, 0.13, 0.04, 0xffe14a, 0, 0.16, 0.61); },
+  spotterFlag: (r, { solid, glow }) => { solid(r.torso, 0.04, 0.9, 0.04, 0x2a2a2a, -0.24, 0.6, -0.22); glow(r.torso, 0.3, 0.18, 0.02, 0xffe14a, -0.08, 0.94, -0.22); solid(r.head, 0.2, 0.06, 0.2, 0xffe14a, 0, 0.38, 0); },
+  brassBelt: (r, { solid }) => { for (let k = 0; k < 5; k++) solid(r.torso, 0.06, 0.12, 0.05, 0xd8a83a, -0.24 + k * 0.12, 0.12 - k * 0.08, 0.23); },
+  redWrap: (r, { solid }) => { solid(r.head, 0.52, 0.12, 0.05, 0xa01a1a, 0, -0.12, 0.27); solid(r.head, 0.1, 0.3, 0.05, 0xa01a1a, 0.18, -0.2, -0.27); },
+  shadowWisps: (r, { fx }) => { fx(r.body, 'rise', 8, [0x2a1a3a, 0x16161c, 0x5a2a7a], 0, 0.6, 0, 0.45, 0.12, 1.4); },
+  redLaser: (r, { glow }) => { if (r.gun) { glow(r.gun, 0.03, 0.03, 3.2, 0xff2a2a, 0, 0.1, 3.3, 0.55); glow(r.gun, 0.08, 0.08, 0.06, 0xff2a2a, 0, 0.1, 1.7); } },
+  // ---- Riot Skirmisher (v0.30) ----
+  shieldRim: (r, { solid }) => { if (!r.shield) return; solid(r.shield, 0.08, 1.56, 0.12, 0xb8c0c8, -0.47, 0, 0); solid(r.shield, 0.08, 1.56, 0.12, 0xb8c0c8, 0.47, 0, 0); },
+  wardenCrest: (r, { solid, glow }) => { solid(r.head, 0.1, 0.24, 0.5, 0xb8c0c8, 0, 0.42, 0); glow(r.head, 0.04, 0.06, 0.4, 0x9ad0ff, 0, 0.56, 0); if (r.shield) solid(r.shield, 0.4, 0.4, 0.06, 0xb8c0c8, 0, -0.2, 0.05); },
+  spikePads: (r, { solid }) => { for (const arm of [r.armL, r.armR]) for (const z of [-0.08, 0.08]) solid(arm, 0.08, 0.2, 0.08, 0x8a8a8a, 0, 0.12, z); },
+  absorbRing: (r, { fx }) => { fx(r.body, 'orbit', 6, [0xff3b2f, 0x8a1a1a], 0, 1.2, 0, 0.9, 0.09, 0.6); },
+  igniteCore: (r, { glow }) => { glow(r.torso, 0.22, 0.22, 0.04, 0xff8a3a, 0, -0.02, 0.29); glow(r.torso, 0.1, 0.1, 0.05, 0xffe14a, 0, -0.02, 0.3); },
+  goldPlates: (r, { solid }) => { solid(r.torso, 0.9, 0.12, 0.58, 0xe0b040, 0, 0.32, 0); solid(r.head, 0.64, 0.08, 0.64, 0xe0b040, 0, 0.3, 0); if (r.shield) solid(r.shield, 0.94, 0.1, 0.1, 0xe0b040, 0, 0, 0.02); },
+  arcSparks: (r, { fx }) => { fx(r.body, 'spark', 6, [0xd070ff, 0xffffff, 0x9a6ad8], 0, 1.2, 0, 0.6, 0.08, 1.2); },
+  // ---- Recon Drone (v0.30) ----
+  droneAntenna: (r, { solid, glow }) => { solid(r.torso, 0.04, 0.4, 0.04, 0x15181c, 0.2, 0.42, -0.2); glow(r.torso, 0.08, 0.08, 0.08, 0x5cff7a, 0.2, 0.64, -0.2); },
+  droneCrown: (r, { glow, fx }) => { for (const [x, z, w, d] of [[0, 0.3, 0.6, 0.05], [0, -0.3, 0.6, 0.05], [0.3, 0, 0.05, 0.6], [-0.3, 0, 0.05, 0.6]]) glow(r.torso, w, 0.05, d, 0x5cff7a, x, 0.4, z); fx(r.torso, 'orbit', 3, [0x5cff7a, 0xffffff], 0, 0.45, 0, 0.5, 0.06, 0.1); },
+  missilePod: (r, { solid }) => { for (const x of [-0.5, 0.5]) { solid(r.torso, 0.16, 0.16, 0.5, 0x5a5f69, x, -0.12, 0.05); solid(r.torso, 0.1, 0.1, 0.08, 0xc0392b, x, -0.12, 0.32); } },
+  missilePod2: (r, { solid }) => { for (const x of [-0.5, 0.5]) { solid(r.torso, 0.16, 0.16, 0.5, 0x5a5f69, x, 0.06, 0.05); solid(r.torso, 0.1, 0.1, 0.08, 0xffb040, x, 0.06, 0.32); } },
+  swarmStripes: (r, { solid }) => { for (const z of [-0.25, 0.05, 0.35]) solid(r.torso, 0.92, 0.06, 0.1, 0x111111, 0, 0.16, z); },
+  hiveGlow: (r, { glow, fx }) => { glow(r.torso, 0.3, 0.06, 0.3, 0xff6a1a, 0, 0.34, 0); fx(r.torso, 'spark', 4, [0xffb040, 0xff6a1a], 0, 0.1, 0, 0.6, 0.06, 0.4); },
   // ---- Dryad ----
   hushVeil: (r, { solid }) => { solid(r.head, 0.52, 0.2, 0.04, 0x6a3aa8, 0, -0.13, 0.262); solid(r.head, 0.1, 0.1, 0.04, 0xd8a8ff, 0, -0.13, 0.285); },
   runeHalo: (r, { glow, fx }) => { for (const [x, z, w, d] of [[0, 0.24, 0.5, 0.06], [0, -0.24, 0.5, 0.06], [0.24, 0, 0.06, 0.42], [-0.24, 0, 0.06, 0.42]]) glow(r.head, w, 0.05, d, 0xc070ff, x, 0.62, z); fx(r.head, 'orbit', 4, [0xff4ad8, 0xd8a8ff], 0, 0.62, 0, 0.36, 0.06, 0.2); },
@@ -456,6 +478,7 @@ export function buildSniper() {
   flash.castShadow = false; flash.visible = false;
   r.muzzle = flash;
   r.level = [{ obj: gun, arm: r.armR, offset: 0 }];
+  r.gun = gun;
   r.style = 'rifle';
   return finalize(r);
 }
@@ -603,6 +626,21 @@ export function buildReconDrone() {
   return finalize(r);
 }
 
+
+/** Mini Drone (Overseer / Overlord pet): a tiny quad-rotor. Not a unit; Unit.updateMiniDrones moves it. */
+export function buildMiniDrone() {
+  const g = new THREE.Group();
+  B(g, 0.38, 0.14, 0.38, 0x4a5a4a, 0, 0, 0, null);
+  const eye = B(g, 0.1, 0.07, 0.05, 0x5cff7a, 0, 0, 0.2, null, { emissive: 0x2a8a3a }); eye.castShadow = false;
+  B(g, 0.06, 0.08, 0.26, 0x15181c, 0, -0.1, 0.1, null);
+  g.userData.props = [];
+  for (const [x, z] of [[-0.26, 0.26], [0.26, 0.26], [-0.26, -0.26], [0.26, -0.26]]) {
+    const p = new THREE.Group(); p.position.set(x, 0.1, z); g.add(p);
+    B(p, 0.3, 0.02, 0.05, 0x9aa3ab, 0, 0, 0, null); B(p, 0.05, 0.02, 0.3, 0x9aa3ab, 0, 0, 0, null);
+    g.userData.props.push(p);
+  }
+  return g;
+}
 
 // ======================= Tier 2 troops (v0.29) =======================
 /** Dryad: a small leafy spirit with a big head, flower in her hair and a bundle of thorn spears. Throws overhand. */

@@ -621,6 +621,45 @@ Object.assign(ABILITIES, {
     text: (A, P) => `Every ${A.every}s blasts enemies within ${A.radius}: ${A.flat} + ${P(A.adPct)} of its attack damage as ${A.damageType} damage, knocking them ${A.knockback} away.` },
 });
 
+// ---------- v0.30 Modern skill trees: Sniper, Riot Skirmisher, Recon Drone ----------
+Object.assign(ABILITIES, {
+  // ----- Sniper -----
+  steadyAim: { id: 'steadyAim', kind: 'passive', name: 'Steady Aim', icon: 'p-steady',
+    text: () => 'Attacks <b>pierce evasion</b>: they can\'t miss or be evaded (flying and uphill misses included).' },
+  precisionAura: { id: 'precisionAura', kind: 'passive', name: 'Precision Aura', icon: 'p-precision', notSelf: true, aura: { radius: 8, bonusRange: 1, bonusDamage: 6 },
+    text: (A) => `Allies within ${A.aura.radius} range gain +${A.aura.bonusRange} attack range and +${A.aura.bonusDamage} attack damage. Doesn't affect the Sharpshooter himself; several auras don't stack.` },
+  execution: { id: 'execution', kind: 'passive', name: 'Execution', icon: 'p-execution', radius: 8, maxBounces: 4,
+    text: (A) => `When his bullet kills a unit, it bounces to the nearest ally of the victim within ${A.radius} range for the same damage (a Bull's Eye stays a Bull's Eye). Bounce kills bounce again, up to ${A.maxBounces} times.` },
+  vendetta: { id: 'vendetta', kind: 'active', name: 'Vendetta', icon: 'a-vendetta', cooldown: 100, duration: 20, range: 3, bonusPct: 5, structPct: 1,
+    ai: { whenAttacking: true },
+    text: (A, P) => `Turns <b>invisible</b> for ${A.duration}s, walks through trees and walls, and fights up close (attack range fixed at ${A.range}). His next attack ends it and deals <b>+${P(A.bonusPct)}</b> physical damage (+${P(A.structPct)} against buildings and bases). ${A.cooldown}s cooldown.` },
+  assassinate: { id: 'assassinate', kind: 'active', name: 'Assassinate', icon: 'a-assassinate', cast: 'unit', castTime: 1, castRange: 22, castRangeBonus: 10, cooldown: 60,
+    flat: 100, missingPct: 0.3, damageType: 'magic', ai: { whenAttacking: true },
+    text: (A, P) => `Target an enemy within his attack range +${A.castRangeBonus}. Aims for ${A.castTime}s (works prone), then fires a deadly shot: ${A.flat} + ${P(A.missingPct)} of the target's missing HP as magic damage. Can't be evaded. ${A.cooldown}s cooldown.` },
+  // ----- Riot Skirmisher -----
+  fortress: { id: 'fortress', kind: 'passive', name: 'Fortress', icon: 'p-fortress',
+    text: () => 'Enemy ranged attacks aimed at an ally behind him that pass through him are redirected into him instead.' },
+  ironWill: { id: 'ironWill', kind: 'passive', name: 'Iron Will', icon: 'p-ironwill', structPhys: 0.75,
+    text: (A, P) => `Takes ${P(A.structPhys)} less physical damage from buildings, towers and bases.` },
+  absorb: { id: 'absorb', kind: 'passive', name: 'Absorb', icon: 'p-absorb', radius: 10,
+    text: (A) => `Damage that allies within ${A.radius} range would take goes to him instead (their debuffs still land on them). He takes it before mitigation, so his own armor and ward apply. With several Dires, the nearest one takes it; Dires never pass damage to each other.` },
+  breaker: { id: 'breaker', kind: 'passive', name: 'Breaker', icon: 'p-breaker', radius: 10, healRadius: 8, heal: 4, t: 8,
+    text: (A) => `Every time an enemy within ${A.radius} range casts an ability or uses an item, he ignites: +1 stack for ${A.t}s that heals him and allies within ${A.healRadius} range ${A.heal} HP per second. Stacks without limit; each stack has its own timer.` },
+  goldWill: { id: 'goldWill', kind: 'passive', name: 'Gold Will', icon: 'p-goldwill', vsStructPhys: 0.75,
+    text: (A, P) => `Deals ${P(A.vsStructPhys)} more physical damage to buildings and bases.` },
+  combust: { id: 'combust', kind: 'passive', name: 'Combust', icon: 'p-combust', threshold: 100, damage: 150, radius: 10, shield: 100, shieldT: 5, cooldown: 20,
+    text: (A) => `Stores the magic damage he takes. At ${A.threshold} stored he explodes: ${A.damage} magic damage to enemies within ${A.radius} range, and he and allies within ${A.radius} range get a <b>${A.shield} shield</b> for ${A.shieldT}s (absorbs damage before HP). ${A.cooldown}s cooldown after it goes off.` },
+  // ----- Recon Drone -----
+  miniDrones: { id: 'miniDrones', kind: 'passive', name: 'Mini Drones', icon: 'p-minidrone', count: 2, dmgPct: 0.5, leash: 3,
+    text: (A, P) => `${A.count} mini drones follow him. They can't be targeted or hurt, fly up to ${A.leash} range from him and shoot random enemies around him with his range and attack speed for ${P(A.dmgPct)} of his damage. Their hits apply on-hit effects (Penetration). Break grounds them until it ends.` },
+  homingMissile: { id: 'homingMissile', kind: 'passive', name: 'Homing Missile', icon: 'p-missile', cooldown: 10, magic: 80, radius: 3, bonusRange: 4, extra: 0,
+    text: (A) => `Every ${A.cooldown}s his next attack is a missile with +${A.bonusRange} range that also blasts ${A.magic} magic damage to enemies within ${A.radius} of the impact.${A.extra ? ` Fires ${A.extra} more missile at another random enemy in range (or the same target if there is none).` : ''}` },
+  packBonus: { id: 'packBonus', kind: 'passive', name: 'Pack Bonus', icon: 'p-pack', radius: 8, damage: 2, armor: 1, moveSpeed: 0.1, as: 2, maxStacks: 10,
+    text: (A) => `For every other Swarm or Hive drone within ${A.radius} range: +${A.damage} damage, +${A.armor} armor, +${A.moveSpeed} move speed and +${A.as} attack speed, up to ${A.maxStacks} drones.` },
+});
+// Bull's Eye text (Assassin forms add % current HP + Break)
+ABILITIES.bullsEye.text = (A, P) => `Every ${A.every}th attack is a critical strike dealing ${P(A.critBonus)} bonus damage${A.curHpPct ? `, plus <b>${P(A.curHpPct)} of the target's current HP</b> as physical damage, and Breaks it for ${A.breakT}s` : ''}.`;
+
 /** Troop tier (UNITS[id].tier, default 1). Tier N needs a level N base to hire. */
 export const tierOf = (id) => UNITS[id]?.tier || 1;
 /** Army space a troop takes (UNITS[id].housing, default = its tier: Tier 1 = 1, Tier 2 = 2...). */

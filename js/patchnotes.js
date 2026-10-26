@@ -7,6 +7,39 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.30.0', date: '2026-10-26T20:20:00+08:00', title: 'Modern skill trees: Sniper, Riot Skirmisher, Recon Drone', author: 'AyatoAishi',
+    sections: [
+      { title: 'Sniper', items: [
+        '<b>Marksman</b> (Lv 5): +1 range. <b>Steady Aim</b>: shots can\'t miss or be evaded.',
+        '<b>Sharpshooter</b> (Lv 15): +2 range, +8 day / +4 night vision. <b>Precision Aura</b>: allies within 8 get +1 range and +6 damage (not himself, doesn\'t stack).',
+        '<b>High Marksman</b> (Lv 15): +1 range. <b>Execution</b>: a killing bullet bounces to the victim\'s nearest ally within 8 for the same damage, Bull\'s Eye included. Bounce kills bounce again, up to 4 times.',
+        '<b>Assassin</b> (Lv 5): +10 damage. Bull\'s Eye also deals 10% of the target\'s current HP and Breaks it for 3s.',
+        '<b>Vendetta</b> (Lv 15): +15 damage, keeps the Assassin Bull\'s Eye. New active <b>Vendetta</b> (100s): invisible for 20s, walks through terrain, attack range fixed at 3. The attack that ends it deals +500% (+100% against buildings and bases).',
+        '<b>Dead Eye</b> (Lv 15): +30 damage, -10 attack speed, keeps the Assassin Bull\'s Eye. New active <b>Assassinate</b> (60s): 1s aim (works prone), then 100 + 30% missing HP magic damage at attack range +10.',
+      ] },
+      { title: 'Riot Skirmisher', items: [
+        '<b>Fortress</b> (Lv 5): +130 HP, +2 armor. <b>Fortress</b>: enemy shots aimed at an ally behind him that pass through him hit him instead.',
+        '<b>Warden</b> (Lv 15): +200 HP, +3 armor, keeps Fortress. <b>Iron Will</b>: 75% less physical damage from buildings, towers and bases.',
+        '<b>Dire</b> (Lv 15): +150 HP, +4 armor, loses Fortress. <b>Absorb</b>: damage allies within 10 would take goes to him before mitigation, so his own armor and ward apply. Debuffs still land on the ally. With several Dires the nearest one takes it, and Dires never pass damage to each other.',
+        '<b>Breaker</b> (Lv 5): +130 HP, +2 ward. <b>Breaker</b>: each ability or item an enemy uses within 10 gives a stack (8s each, no limit) that heals him and allies within 8 by 4 HP/s.',
+        '<b>Juggernaut</b> (Lv 15): +200 HP, +3 ward, keeps Breaker. <b>Gold Will</b>: +75% physical damage to buildings and bases.',
+        '<b>Striker</b> (Lv 15): +150 HP, +4 armor, loses Breaker. <b>Combust</b>: after taking 100 magic damage he explodes for 150 magic damage within 10, and he and allies within 10 get a 100 shield for 5s. 20s cooldown.',
+        'New: <b>shields</b>. Temporary HP that soaks damage first, shown as a silver segment on the HP bar.',
+      ] },
+      { title: 'Recon Drone', items: [
+        '<b>Overseer</b> (Lv 5): +2 armor. <b>Mini Drones</b>: 2 untargetable pets that fly within 3 of it and shoot random enemies with its range and attack speed for 50% damage. Their hits apply Penetration. Break grounds them.',
+        '<b>Overlord</b> (Lv 15): +2 armor, 5 mini drones.',
+        '<b>Missile Drone</b> (Lv 5): +10 damage. <b>Homing Missile</b> (10s): the next attack is a +4 range missile that also blasts 80 magic damage within 3.',
+        '<b>Barrage Drone</b> (Lv 15): +20 damage. Each missile fires a second one at another random enemy in range, or the same target if there is none.',
+        '<b>Swarm</b> (Lv 5): -2 damage. <b>Pack Bonus</b>: for each other Swarm or Hive within 8: +2 damage, +1 armor, +0.1 move speed and +2 attack speed, up to 10.',
+        '<b>Hive</b> (Lv 15): -1 damage, Pack Bonus up to 25.',
+      ] },
+      { title: 'Balance watch', items: [
+        'Untested in real matches. Dire and Hive look strongest. A Dire next to a big army takes all its damage, so it either holds a fight or melts fast. 25 Hives each get +50 damage and +25 armor, but they cost over 4,000 gold. Vendetta\'s opener hits about 6x.',
+      ] },
+    ],
+  },
+  {
     version: '0.29.2', date: '2026-10-26T19:20:00+08:00', title: 'Catapult and Acid Spray now hurt neutrals', author: 'AyatoAishi',
     sections: [
       { title: 'Bug fixes', items: [

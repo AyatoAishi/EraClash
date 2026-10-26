@@ -38,6 +38,7 @@ export class Game {
     this.units = [];
     this.particles = [];
     this.projectiles = [];
+    this.fortresses = []; this.dires = [];   // Riot Skirmisher forms (refreshed every frame)
     this.markers = [];
     this.decals = [];
     this.loot = [];
@@ -1033,10 +1034,12 @@ export class Game {
   // ---------------- projectiles ----------------
   fireProjectile(src, target, extra = false, mods = null) {
     const pdef = src.def.projectile;
-    const mesh = pdef.kind === 'arrow' ? buildArrow() : pdef.kind === 'spear' ? buildSpear() : pdef.kind === 'wisp' ? buildWisp() : buildBullet();
-    if (pdef.kind === 'sniper') mesh.scale.set(1.4, 1.4, 2.6);
+    const mesh = mods?.mesh === 'rocket' ? buildRocket() : pdef.kind === 'arrow' ? buildArrow() : pdef.kind === 'spear' ? buildSpear() : pdef.kind === 'wisp' ? buildWisp() : buildBullet();
+    if (pdef.kind === 'sniper' && !mods?.mesh) mesh.scale.set(1.4, 1.4, 2.6);
+    if (mods?.from) mesh.scale.multiplyScalar(0.6);   // mini drone shots
     const f = src.facing;
-    const start = new THREE.Vector3(src.pos.x + Math.sin(f) * 0.9, src.muzzleY + (src.yOff || 0) + (src.pos.y || 0), src.pos.z + Math.cos(f) * 0.9);
+    const start = mods?.from ? new THREE.Vector3(mods.from.x, mods.from.y - 0.15, mods.from.z)   // Mini Drones shoot from where they hover
+      : new THREE.Vector3(src.pos.x + Math.sin(f) * 0.9, src.muzzleY + (src.yOff || 0) + (src.pos.y || 0), src.pos.z + Math.cos(f) * 0.9);
     mesh.position.copy(start);
     this.scene.add(mesh);
     const end = this.projectileAim(target, src);
@@ -1046,8 +1049,9 @@ export class Game {
     if (mods?.dmgMult) dmg *= mods.dmgMult;                                             // Splitshot spears: 75%
     if (src.structure?.flyingBonus && target.flying) dmg *= 1 + src.structure.flyingBonus;   // Skypiercer
     if (src.boomMult) dmg *= src.boomMult(target);                                      // Boomstick: closer = harder
+    if (shot.vendetta) dmg *= 1 + (target.isBase || target.structure ? shot.vendetta.structPct : shot.vendetta.bonusPct);   // Vendetta ambush shot
     if (crit) mesh.scale.multiplyScalar(1.6);
-    this.projectiles.push({ mesh, src, target, start, end, dist0, u: 0, speed: pdef.speed, arc: pdef.arc, kind: pdef.kind, team: src.team, dmg, crit, shot });
+    this.projectiles.push({ mesh, src, target, start, end, dist0, u: 0, speed: mods?.missile ? Math.min(pdef.speed, 30) : pdef.speed, arc: mods?.missile ? 0.12 : pdef.arc, kind: pdef.kind, team: src.team, dmg, crit, shot, px: start.x, pz: start.z });
     if (this.audible(src.pos.x)) sfx(pdef.kind === 'arrow' ? 'bow' : pdef.kind === 'sniper' ? 'snipe' : 'gun', 35);
     // Bowsling: a second arrow at ANOTHER enemy in attack range (never chains off itself)
     const bs = !extra && src.ability('bowsling');
@@ -1203,6 +1207,25 @@ export class Game {
       this.emit('ability', u, A, hits.length);
       return true;
     }
+    if (A.id === 'vendetta') {   // Vendetta: invisible, phasing, close range; the next attack ends it (Unit.onAttackStart)
+      const st = u.ability('snipeStance')?.st; if (st) { st.mode = 'stand'; st.chT = 0; }
+      u.vendettaT = A.duration; u.pendingHit = null; u.nav = null;
+      this.burst(u.pos, 14, [0x2a1a3a, 0x5a2a7a, 0x16161c], 3, 0.7, 1);
+      if (this.audible(u.pos.x)) sfx('whiff', 60);
+      return true;
+    }
+    if (A.id === 'assassinate') {   // Dead Eye: aimed for castTime, then a deadly magic shot (can't be evaded)
+      const t = aim?.unit;
+      if (!t || t.dead || t.tower || t.isBase || u.edgeDist(t) > u.castRangeOf(A) + 1) return false;
+      const dmg = A.flat + A.missingPct * Math.max(0, t.maxHp - t.hp);
+      const dealt = t.takeDamage(dmg, u, A.damageType || 'magic');
+      u.damageDealt += dealt; u.muzzleT = 0.12; u.swing = 1; u.faceTowards(t.pos.x - u.pos.x, t.pos.z - u.pos.z, 1, 1);
+      this.tracer(u.pos, t.pos, 0xff3b2f, 0.4);
+      this.emit('hitDmg', t.pos, dealt, true, u.team);
+      this.burst(t.pos, 14, [0xff3b2f, 0xffffff, 0x1a1a1a], 3.5, 0.5, 1);
+      if (this.audible(u.pos.x)) sfx('snipe', 30);
+      return true;
+    }
     if (A.id === 'execute') {   // unit-targeted finisher
       const t = aim?.unit;
       if (!t || t.dead || t.tower || u.edgeDist(t) > A.castRange + 1) return false;
@@ -1329,7 +1352,21 @@ export class Game {
       at(p.u, p.mesh.position);
       at(Math.min(1, p.u + 0.02), nxt);
       if (nxt.distanceToSquared(p.mesh.position) > 1e-6) p.mesh.lookAt(nxt);
+      // Fortress (Riot Skirmisher): a shot at an ally behind him that passes through him hits him instead
+      if (this.fortresses.length && !t.isBase && !p.redirected && p.u < 1) {
+        const x0 = p.px, z0 = p.pz, x1 = p.mesh.position.x, z1 = p.mesh.position.z, sx = x1 - x0, sz = z1 - z0, sl = sx * sx + sz * sz;
+        for (const F of this.fortresses) {
+          if (F === t || F.dead || F.team !== t.team || F.team === p.team || F.broken) continue;
+          const k = sl > 1e-9 ? Math.max(0, Math.min(1, ((F.pos.x - x0) * sx + (F.pos.z - z0) * sz) / sl)) : 0;
+          if (Math.hypot(F.pos.x - (x0 + sx * k), F.pos.z - (z0 + sz * k)) > F.radius + 0.25) continue;
+          p.target = F; p.redirected = true; p.u = 1; p.end.copy(this.projectileAim(F, p.src));
+          this.burst(F.pos, 3, [0x9ad0ff, 0xffffff], 1.5, 0.3, 0.6);
+          break;
+        }
+      }
+      p.px = p.mesh.position.x; p.pz = p.mesh.position.z;
       if (p.u >= 1) {
+        const t = p.target;
         if (t.isBase) { this.damageBase(t.team, p.dmg, p.src.dead ? null : p.src, p.end); if (p.crit) this.emit('crit', p.end, p.dmg); }
         else if (!t.dead) {
           const dodge = p.shot?.trueStrike ? null : t.dodgeCheck(p.src);   // true strike: can't miss or be evaded
@@ -1339,11 +1376,79 @@ export class Game {
           p.src.onAttackLanded(t, dealt, p.dmg, p.crit, p.shot);
           this.onHit(p.src, t);
           if (p.crit) { this.emit('crit', t.pos, dealt); this.burst(t.pos, 6, [0xf7c948, 0xffe27a], 2.5, 0.5); }
+          // Execution (High Marksman): the killing bullet bounces to the victim's nearest ally
+          const ex = t.dead && p.src.ability?.('execution');
+          if (ex && !ex.st.broken && (p.shot?.bounces || 0) < ex.def.maxBounces) this.executionBounce(p, t, ex.def);
         }
+        if (p.shot?.missile) this.missileBlast(p);
         this.scene.remove(p.mesh);
         this.projectiles.splice(i, 1);
       }
     }
+  }
+
+  /** Execution: same damage (a Bull's Eye stays one), from the victim to its nearest ally within range. */
+  executionBounce(p, victim, E) {
+    let best = null, bd = E.radius;
+    for (const o of this.units) {
+      if (o.dead || o.tower || o === victim || o.team !== victim.team) continue;
+      const d = Math.hypot(o.pos.x - victim.pos.x, o.pos.z - victim.pos.z) - o.radius;
+      if (d <= bd) { bd = d; best = o; }
+    }
+    if (!best) return;
+    const mesh = buildBullet(); mesh.scale.set(1.4, 1.4, 2.6); if (p.crit) mesh.scale.multiplyScalar(1.6);
+    const start = new THREE.Vector3(victim.pos.x, 1.4 + (victim.pos.y || 0), victim.pos.z);
+    mesh.position.copy(start); this.scene.add(mesh);
+    const end = this.projectileAim(best, p.src);
+    const shot = { ...p.shot, extra: true, bounces: (p.shot?.bounces || 0) + 1 };
+    this.projectiles.push({ mesh, src: p.src, target: best, start, end, dist0: Math.max(0.5, start.distanceTo(end)), u: 0, speed: 60, arc: 0, kind: 'sniper', team: p.team, dmg: p.dmg, crit: p.crit, shot, px: start.x, pz: start.z });
+    this.burst(victim.pos, 5, [0xd8a83a, 0xffffff], 2, 0.4, 0.6);
+  }
+  /** Homing Missile (Missile / Barrage Drone): magic blast around the impact (troops and buildings, not bases). */
+  missileBlast(p) {
+    const M = p.shot.missile, src = p.src.dead ? null : p.src, x = p.end.x, z = p.end.z;
+    for (const o of this.units) {
+      if (o.dead || o.tower || o.team === p.team || this.aoeSpares(o, p.team, p.src)) continue;
+      if (Math.hypot(o.pos.x - x, o.pos.z - z) - o.radius > M.radius) continue;
+      const d = o.takeDamage(M.magic, src, 'magic', { splash: true });
+      if (src) src.damageDealt += d;
+      if (d > 0) this.emit('hitDmg', o.pos, d, false, p.team);
+    }
+    this.burst({ x, z }, 14, [0xff6a1a, 0xffb040, 0x5a5a5a], 4, 0.6, 1.1);
+    this.ring({ x, z }, M.radius, 0xff8a3a);
+    if (this.audible(x)) sfx('baseHit', 90);
+  }
+  /** Breaker: an enemy within range of a Breaker cast an ability or used an item: +1 ignite stack on that Breaker. */
+  onCast(caster) {
+    for (const u of this.units) {
+      if (u.dead || u.team === caster.team || u.team > 1) continue;
+      const b = u.ability('breaker'); if (!b || b.st.broken) continue;
+      if (Math.hypot(u.pos.x - caster.pos.x, u.pos.z - caster.pos.z) > b.def.radius) continue;
+      (u.breakerStacks ||= []).push(b.def.t);
+      this.burst(u.pos, 6, [0xff8a3a, 0xffe14a], 2, 0.5, 0.8);
+    }
+  }
+  /** Combust (Striker): explosion + shields once enough magic damage was stored. */
+  combust(u) {
+    const cb = u.ability('combust'); if (!cb || u.dead) return;
+    const A = cb.def; cb.st.acc = 0; cb.st.cd = A.cooldown;
+    for (const o of this.units) {
+      if (o.dead || o.tower || Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z) - o.radius > A.radius) continue;
+      if (o.team === u.team) { if (!o.structure) { o.shieldHp = Math.max(o.shieldT > 0 ? o.shieldHp || 0 : 0, A.shield); o.shieldT = A.shieldT; } }
+      else if (u.isFoe(o)) { const d = o.takeDamage(A.damage, u, 'magic', { splash: true }); u.damageDealt += d; if (d > 0) this.emit('hitDmg', o.pos, d, false, u.team); }
+    }
+    this.ring(u.pos, A.radius, 0xd070ff);
+    this.burst(u.pos, 22, [0xd070ff, 0xffffff, 0x9a6ad8], 6, 0.7, 1.2);
+    if (this.audible(u.pos.x)) sfx('baseHit', 120);
+  }
+  /** A straight, fading shot line (Assassinate). */
+  tracer(a, b, color = 0xff3b2f, life = 0.35) {
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 0.1;
+    const m = new THREE.Mesh(boxGeo(0.08, 0.08, 1), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
+    m.material.userData.noFow = true; m.scale.z = len;
+    m.position.set((a.x + b.x) / 2, 1.3 + ((a.y || 0) + (b.y || 0)) / 2, (a.z + b.z) / 2); m.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+    this.scene.add(m);
+    this.markers.push({ m, t: 0, tracer: true, life });
   }
 
   onHit(attacker, victim) {
@@ -1415,6 +1520,7 @@ export class Game {
     if (this.cheat?.god && team === this.playerTeam) return;
     const debuff = (b.armorDebuff && b.armorDebuff.until > this.time ? b.armorDebuff.v : 0)   // Cursed Splatter
       + (b.auraDebuff && b.auraDebuff.until > this.time ? b.auraDebuff.v : 0);                 // Guardian Aura
+    const gw = src?.ability?.('goldWill'); if (gw && !gw.st.broken) raw *= 1 + gw.def.vsStructPhys;   // Juggernaut
     const dmg = raw * defenseMult(b.armor - debuff) * this.dmgMult(src?.team, team);
     b.hp = Math.max(0, b.hp - dmg);
     b.shake = 0.18;
@@ -1823,6 +1929,9 @@ export class Game {
       }
     } else this.overT += dt;
 
+    // Fortress / Absorb carriers (Riot Skirmisher forms), cached once a frame for projectiles and takeDamage
+    this.fortresses = this.units.filter((u) => !u.dead && u.ability?.('fortress'));
+    this.dires = this.units.filter((u) => !u.dead && u.ability?.('absorb'));
     for (let i = this.units.length - 1; i >= 0; i--) {
       const u = this.units[i];
       const remove = u.update(dt, camQuat);
@@ -1873,6 +1982,7 @@ export class Game {
     for (let i = this.markers.length - 1; i >= 0; i--) {
       const k = this.markers[i];
       k.t += dt;
+      if (k.tracer) { k.m.material.opacity = Math.max(0, 1 - k.t / k.life); if (k.t > k.life) { this.scene.remove(k.m); k.m.material.dispose(); this.markers.splice(i, 1); } continue; }
       if (k.wave) k.m.scale.setScalar(Math.max(0.1, k.wave * Math.min(1, k.t / 0.35)));
       else k.m.scale.setScalar(1.4 - k.t * 1.5);
       k.m.material.opacity = 1 - k.t / 0.6;
