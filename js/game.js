@@ -1,6 +1,6 @@
 // Match state: economy, training queues, AI, combat bookkeeping, particles, win/lose.
 import * as THREE from 'three';
-import { GAME, FACTIONS, UNITS, DIFFICULTY, AI_PERSONALITIES, defenseMult, baseLevelStats, BASE_LEVELS } from './config.js';
+import { GAME, FACTIONS, UNITS, DIFFICULTY, AI_PERSONALITIES, defenseMult, baseLevelStats, BASE_LEVELS, tierOf, housingOf } from './config.js';
 import { Unit } from './unit.js';
 import { UPGRADES, STAT_BOOST, upgradePrice, upgradeTime, upgradesFor } from './upgrades.js';
 import { ABILITIES, ITEMS } from './config.js';
@@ -131,7 +131,20 @@ export class Game {
   on(evt, fn) { (this.listeners[evt] ||= []).push(fn); }
   emit(evt, ...a) { (this.listeners[evt] || []).forEach((fn) => fn(...a)); }
 
-  pop(team) { return this.units.filter((u) => u.team === team && !u.dead && !u.tower && !u.raised && !u.structure).length + this.teams[team].queue.length; }
+  /** Army used: every troop takes `housing` space (Tier 1 = 1, Tier 2 = 2...), queued troops included. */
+  pop(team) {
+    let n = 0;
+    for (const u of this.units) if (u.team === team && !u.dead && !u.tower && !u.raised && !u.structure) n += housingOf(u.def.id);
+    for (const id of this.teams[team].queue) n += housingOf(id);
+    return n;
+  }
+  /** Army limit: GAME.popCap + the Barracks Quarters upgrade. */
+  popCap(team) { return GAME.popCap + (this.upLevel(team, 'housing') || 0) * UPGRADES.housing.values.perLevel; }
+  /** Why `unitId` can't be hired because of its tier (null = it can): Tier N needs base level N. */
+  tierBlock(team, unitId) {
+    const t = tierOf(unitId), b = this.bases[team];
+    return b && b.level < t ? `Tier ${t}: needs a level ${t} base (${(team === 0 ? CASTLE_TIERS : HQ_TIERS)[t - 1]?.name || 'upgrade'})` : null;
+  }
   unitCost(team, unitId) { return Math.round((formDef(unitId, this.teams[team]?.forms[unitId]).cost * this.statMult(team, unitId) + (this.teams[team]?.costAdd[unitId] || 0)) * 100) / 100; }
   /** Stat boost multiplier for a troop type: 1 + 10% per level of every statBoost upgrade that targets it. */
   statMult(team, unitId) {
@@ -316,7 +329,8 @@ export class Game {
     if (this.over) return 'Match is over';
     if (FACTIONS[T.faction].units.indexOf(unitId) < 0) return 'Wrong faction';
     if (T.queue.length >= GAME.queueMax) return 'Training queue full';
-    if (this.pop(team) >= GAME.popCap) return `Army limit reached (${GAME.popCap})`;
+    const tb = this.tierBlock(team, unitId); if (tb) return tb;
+    if (this.pop(team) + housingOf(unitId) > this.popCap(team)) return housingOf(unitId) > 1 && this.pop(team) < this.popCap(team) ? `Not enough army space (${def.name} takes ${housingOf(unitId)})` : `Army limit reached (${this.popCap(team)})`;
     const cost = this.unitCost(team, unitId);
     if (T.gold < cost) return 'Not enough gold';
     T.gold -= cost;
@@ -1357,6 +1371,7 @@ export class Game {
       const P = T.persona || {};
       if (U.id === 'finance') w = (lvl === 0 ? 4 : 0.3) * (0.5 + (P.greed ?? 0.5) * 1.5);   // greedy AIs love economy
       if (U.id === 'reinforce') w = (1 - b.hp / b.maxHp) * 6;
+      if (U.id === 'housing') w = this.pop(T.team) >= this.popCap(T.team) * 0.85 ? 3 : 0.02;   // only when the army is nearly full
       if (U.effects?.[0]?.type === 'towers') w = 1.5;
       const grow = U.effects?.[0]?.type === 'baseLevel';
       if (grow) w = (5 + (1 - b.hp / b.maxHp) * 8) * (0.7 + (P.caution ?? 0.5) * 0.6);   // growing the base is a priority, more so when it's hurt
@@ -1430,7 +1445,8 @@ export class Game {
       T.personaT = this.time;
       for (const k of ['greed', 'aggro', 'caution', 'smart']) P[k] = Math.random();
     }
-    const roster = FACTIONS[T.faction].units.map((id) => UNITS[id]);
+    const roster = FACTIONS[T.faction].units.filter((id) => !this.tierBlock(T.team, id)).map((id) => UNITS[id]);   // only tiers its base allows
+    if (T.aiNext && this.tierBlock(T.team, T.aiNext)) T.aiNext = null;
     const melees = roster.filter((d) => d.type === 'melee').sort((a, b) => a.cost - b.cost);
     const rangeds = roster.filter((d) => d.type === 'ranged').sort((a, b) => a.cost - b.cost);
     const mine = [...this.units.filter((u) => u.team === T.team && !u.dead && !u.tower).map((u) => u.def), ...T.queue.map((id) => UNITS[id])];

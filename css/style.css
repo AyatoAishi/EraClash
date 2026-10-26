@@ -826,3 +826,11 @@ body.placing #view canvas { cursor: copy; }
 #formedit p { font-size: .9rem; color: var(--muted); margin: 0 0 .6rem; }
 #formpad { display: block; width: 100%; aspect-ratio: 1; background: #07090d; cursor: crosshair; box-shadow: inset 0 0 0 calc(var(--p) * .5) var(--line); }
 #formedit .fe-row { display: flex; gap: .5rem; justify-content: flex-end; margin-top: .6rem; }
+
+/* troop tiers in the shop */
+.sitem .nm .tier { font-style: normal; font-size: .7rem; padding: 0 .2rem; margin: 0 .25rem; background: #6a4aa8; color: #fff; vertical-align: middle; }
+.sitem .price .hs { display: block; font-size: .7rem; color: var(--muted); }
+.sitem { position: relative; }
+.sitem .lock { display: none; }
+.sitem.locked > :not(.lock) { filter: grayscale(.85) brightness(.6); }
+.sitem.locked .lock { display: flex; position: absolute; inset: 0; align-items: center; justify-content: center; text-align: center; padding: 0 .6rem; font-family: var(--head); font-size: 1rem; letter-spacing: .03em; color: #ffd27a; background: rgba(7, 9, 13, .78); text-shadow: 2px 2px 0 #000; pointer-events: none; }

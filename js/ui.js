@@ -1,6 +1,6 @@
 // All DOM UI: menus, options, help, HUD, shop, selection panel + inventory, minimap, toasts.
 import * as THREE from 'three';
-import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS, abilityText, canAutocast } from './config.js';
+import { UNITS, FACTIONS, GAME, DIFFICULTY, ITEMS, ABILITIES, FAMILIES, DEFENSES, DAMAGE_TYPES, reductionPct, dps, BASE_LEVELS, abilityText, canAutocast, tierOf, housingOf } from './config.js';
 import { UNIT_BUILDERS, buildCastle, buildHQ, CASTLE_TIERS, HQ_TIERS, applyLook, animateFx } from './models.js';
 import { TERRAIN } from './terrain.js';
 import { SKILL_TREES, formDef, levelInfo, nextForms, formPath } from './skilltree.js';
@@ -623,12 +623,12 @@ export class UI {
       b.innerHTML = `
         <img src="${portraitOf(u).face}" alt="">
         <div>
-          <div class="nm">${typeIcon(u)}${u.name}${u.abilities.map((a) => pIcon(a, 'class="pico sm"')).join('')}</div>
+          <div class="nm">${typeIcon(u)}${u.name}${tierOf(id) > 1 ? `<em class="tier" title="Tier ${tierOf(id)}: needs a level ${tierOf(id)} base, takes ${housingOf(id)} army space">T${tierOf(id)}</em>` : ''}${u.abilities.map((a) => pIcon(a, 'class="pico sm"')).join('')}</div>
           <div class="ln role">${famTag(u)} ${u.role}</div>
           <div class="ln st">HP <b>${u.hp}</b> · ARM <b>${u.armor}</b> · DMG <b>${u.damage}</b> · RNG <b>${u.type === 'ranged' ? u.range : 'melee'}</b></div>
           <div class="ln cs">HP <b>${u.hp}</b> · DMG <b>${u.damage}</b></div>
         </div>
-        <div class="price"><svg class="ico"><use href="#i-coin"/></svg><b>${fmt(this.app.game ? this.app.game.unitCost(this.app.playerTeam, id) : u.cost)}</b></div>`;
+        <div class="price"><svg class="ico"><use href="#i-coin"/></svg><b>${fmt(this.app.game ? this.app.game.unitCost(this.app.playerTeam, id) : u.cost)}</b>${housingOf(id) > 1 ? `<small class="hs">${housingOf(id)} army</small>` : ''}</div><div class="lock"></div>`;
       b.onclick = (e) => this.app.hire(id, e.shiftKey ? 5 : 1);
       box.appendChild(b);
     }
@@ -1105,7 +1105,7 @@ export class UI {
     const dn = g.dayNight, dnEl = $('#daynight');
     if (dnEl._n !== dn.night) { dnEl._n = dn.night; $('use', dnEl).setAttribute('href', dn.night ? '#i-moon' : '#i-sun'); dnEl.classList.toggle('night', dn.night); }
     $('b', dnEl).textContent = fmtTime(dn.left);
-    $('#pop').textContent = `${g.pop(this.app.playerTeam)}/${GAME.popCap}`;
+    $('#pop').textContent = `${g.pop(this.app.playerTeam)}/${g.popCap(this.app.playerTeam)}`;
     for (const b of g.bases) {
       const el = $(`#base-${b.team}`);
       // no CSS transition here: HP changes every frame while sieging/repairing, and a restarting stepped transition froze the bar
@@ -1118,6 +1118,9 @@ export class UI {
     $$('#shop-items .sitem').forEach((el) => {
       const cost = g.unitCost(this.app.playerTeam, el.dataset.id);
       el.classList.toggle('poor', T.gold < cost);
+      const tb = g.tierBlock(this.app.playerTeam, el.dataset.id);
+      el.classList.toggle('locked', !!tb);
+      const lk = $('.lock', el); if (lk && lk.textContent !== (tb || '')) lk.textContent = tb || '';
       const pe = $('.price b', el); if (pe) pe.textContent = Math.round(cost * 10) / 10;
     });
     this.renderBarracks();

@@ -557,6 +557,10 @@ export const ABILITIES = {
 /** Exact, current text for an ability definition (form overrides already merged in): `text(A, pct)` if it has one, else `desc`. */
 const fmtN = (x) => Math.round(x * 100) / 100;
 const pct = (x) => fmtN(x * 100) + '%';
+/** Troop tier (UNITS[id].tier, default 1). Tier N needs a level N base to hire. */
+export const tierOf = (id) => UNITS[id]?.tier || 1;
+/** Army space a troop takes (UNITS[id].housing, default = its tier: Tier 1 = 1, Tier 2 = 2...). */
+export const housingOf = (id) => UNITS[id]?.housing ?? tierOf(id);
 /** Player autocast (right-click an active): only actives the AI knows how to use, minus the ones opted out (autocast: false). */
 export const canAutocast = (A) => !!A && A.kind === 'active' && !!(A.ai || A.aiCast) && A.autocast !== false;
 export function abilityText(A) { try { return typeof A.text === 'function' ? A.text(A, pct) : A.desc; } catch { return A.desc || ''; } }

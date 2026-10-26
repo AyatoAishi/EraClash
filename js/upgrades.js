@@ -131,6 +131,16 @@ export const UPGRADES = {
     levelText: (l) => `${l} wall ranger${l > 1 ? 's' : ''}`,
   },
 
+  // ===================== BOTH FACTIONS =====================
+  housing: {
+    id: 'housing', faction: 'both', category: 'base', icon: 'u-housing',
+    name: 'Barracks Quarters', max: 6,
+    price: [500, 1050, 2200, 4600, 9600, 20000], time: [15, 20, 25, 30, 35, 40],   // x~2.1 per level, 500 -> 20,000
+    values: { perLevel: 10 },
+    desc: 'More bunks: <b>+10 army limit</b> per level (40 → up to 100). Tier 2 troops take 2 army space each.',
+    levelText: (l, U) => `Army limit +${U.values.perLevel * l} (${40 + U.values.perLevel * l})`,
+  },
+
   // ===================== MODERN =====================
   riotTraining: {
     id: 'riotTraining', faction: 'modern', category: 'troop', unit: 'police', icon: 'u-riot',

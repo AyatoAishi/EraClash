@@ -7,6 +7,20 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.28.0', date: '2026-10-26T17:40:00+08:00', title: 'Troop tiers & army space',
+    sections: [
+      { title: 'Tiers (new)', items: [
+        'Every troop now has a <b>Tier</b>. All current Medieval and Modern troops are <b>Tier 1</b>: hire them any time, 1 army space each.',
+        '<b>Tier 2</b> troops need a <b>level 2 base</b> (Stone Keep / Police Precinct: one Fortify / Expand HQ) and take <b>2 army space</b>. At 39 / 40 you can\'t hire one. The shop shows a T2 badge, the space it takes, and a lock banner until your base is high enough.',
+        'Higher tiers level slower on the skill tree (+25% exp per tier above 1, from 0.26).',
+      ] },
+      { title: 'Barracks Quarters (new upgrade, both sides)', items: [
+        '<b>+10 army limit</b> per level, 6 levels: 40 → 100. Price 500 / 1,050 / 2,200 / 4,600 / 9,600 / 20,000 (about x2.1 per level), 15–40s research.',
+        'The top bar shows used / limit with Tier 2 troops counted double. The AI only buys Quarters when its army is nearly full, and never queues a troop its base level can\'t hire.',
+      ] },
+    ],
+  },
+  {
     version: '0.27.0', date: '2026-10-26T17:36:00+08:00', title: 'Formations, unit groups, camera follow, rally flag',
     sections: [
       { title: 'Formations (new)', items: [
