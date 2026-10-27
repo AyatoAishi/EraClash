@@ -20,7 +20,8 @@ import { GAME, ITEMS, UNITS } from './config.js';
 import { boxGeo, buildArrow, buildBullet, buildSpear, buildWisp, buildRocket, buildShell, buildCannonball, buildLoot } from './models.js';
 import { sfx } from './audio.js';
 
-const SNAP_EVERY = 0.1;   // seconds between host snapshots
+const SNAP_EVERY = 0.066; // seconds between host snapshots (15/s: the joiner sees the field ~35ms sooner than at 10/s)
+const SMOOTH = 14;        // guest position/facing blend rate (per second): higher = tighter to the host, less visual lag
 const r1 = (x) => Math.round(x * 10) / 10, r2 = (x) => Math.round(x * 100) / 100;
 
 // ---------------- connection ----------------
@@ -99,7 +100,10 @@ export class NetHost {
     }
     const tether = g.tether.bind(g);
     g.tether = (a, b, life) => { this.fx.push(['tether', a.id, b.id, life]); return tether(a, b, life); };
-    const FWD = new Set(['hitDmg', 'crit', 'heal', 'dodge', 'bounty', 'baseDestroyed', 'upgrade', 'built', 'buildingUpgraded', 'demolish', 'pickup', 'disarm', 'brainwash', 'repair', 'autoLoot', 'cc']);
+    // attacks reveal the attacker to the victim's fog: the joiner's fog runs on its own copy, so replay it there
+    if (g.vision) { const reveal = g.vision.reveal.bind(g.vision); g.vision.reveal = (u, t) => { this.fx.push(['reveal', u.id, t]); return reveal(u, t); }; }
+    // 'form' / 'troopLevel' / 'baseLevel' drive the joiner's shop, skill tree and HUD: without them the joiner never rebuilds those
+    const FWD = new Set(['hitDmg', 'crit', 'heal', 'dodge', 'bounty', 'baseDestroyed', 'upgrade', 'built', 'buildingUpgraded', 'demolish', 'pickup', 'disarm', 'brainwash', 'repair', 'autoLoot', 'cc', 'form', 'troopLevel', 'baseLevel', 'invFull']);
     const emit = g.emit.bind(g);
     g.emit = (evt, ...a) => { if (FWD.has(evt)) this.fx.push(['emit', evt, ...a.map((x) => (x instanceof Unit ? { $u: x.id } : x && typeof x === 'object' && 'x' in x ? posOf(x) : x))]); return emit(evt, ...a); };
     const update = g.update.bind(g);
@@ -126,8 +130,14 @@ export class NetHost {
     for (const u of g.units) {
       alive.add(u.id);
       const row = { i: u.id, x: r2(u.pos.x), z: r2(u.pos.z), r: r2(u.facing), h: r1(u.hp), m: u.maxMana ? r1(u.mana) : undefined, mv: u.moving ? 1 : 0, an: u.atkN || 0, d: u.dead ? 1 : 0, ac: u.casting ? 1 : 0, o: u.order?.type };
+      if (u.structure) {   // turrets/artillery: turret heading is `r`, the emplacement stays put; these drive the guest's visuals
+        const U = u.upgrading;
+        row.ug = U ? { t: r1(U.t), total: U.total, level: U.level, path: U.path ?? null, name: U.name } : 0;
+        row.si = u.shotIdx || 0;
+        if (u.rig?.barrel) row.el = r2(u.rig.barrel.rotation.x);
+      }
       // static-ish part: only when it changed
-      const k = { d: u.def.id, t: u.team, f: u.form || null, tw: u.tower ? [u.yOff, u.towerRange || 0] : 0, it: u.items, s: STAT_ARR(u.stats), b: STAT_ARR(u.base || u.stats),
+      const k = { d: u.def.id, t: u.team, f: u.form || null, tw: u.tower ? [u.yOff, u.towerRange || 0] : 0, bf: u.structure ? r2(u.baseFacing ?? u.facing) : undefined, it: u.items, s: STAT_ARR(u.stats), b: STAT_ARR(u.base || u.stats),
         p: [u.pas.bonusDamage, u.pas.bonusAS, u.pas.bonusArmor, u.pas.bonusWard, u.pas.bonusRange, u.pas.bonusMS || 0, u.pas.bonusRegen, u.pas.bonusEvasion].map(r2), mm: u.maxMana || 0, bl: u.bLevel || 0, bp: u.bPath || null, fl: u.flying ? 1 : 0, au: u.auras || [] };
       const ks = JSON.stringify(k);
       const st = { a: u.abil.map((A) => [A.def.id, ...ABIL_KEYS.map((key) => { const v = A.st[key]; return typeof v === 'number' ? r1(v) : v ?? null; })]),
@@ -241,16 +251,22 @@ export class NetGuest {
       let u = this.unitById(R.i);
       if (!u && R.k) u = this.makeUnit(R);
       if (!u) continue;
+      const hp0 = u.hp, sh0 = u.shieldHp || 0;
       if (R.k) this.applyStatic(u, R.k);
       if (R.st) this.applyStatus(u, R.st);
+      // hit flash: the host flashes in takeDamage, which the joiner never runs, so any HP or shield loss flashes here
+      if (!u.dead && (R.h < hp0 - 0.05 || (u.shieldHp || 0) < sh0 - 0.05)) u.flash = 1;
       u.netX = R.x; u.netZ = R.z; u.netR = R.r;
       u.hp = R.h; if (R.m !== undefined) u.mana = R.m;
       u.moving = !!R.mv; u.casting = R.ac ? (u.casting || { i: 0, t: 0.3 }) : null;
       if (R.o && u.order?.type !== R.o) u.order = { type: R.o };
+      if (u.structure) { u.upgrading = R.ug ? { ...R.ug } : null; u.shotIdx = R.si || 0; u.netEl = R.el; }
       if ((u.atkN || 0) !== R.an) { u.atkN = R.an; u.swing = 1; u.muzzleT = 0.06; }
       if (R.d && !u.dead) { u.dead = true; u.deathT = 0; u.ring.visible = false; u.bar.visible = false; u.shield.visible = false; u.clearMiniDrones?.(); if (g.audible(u.pos.x) && g.seenByViewer(u.pos)) sfx('death', 80); }
     }
     for (let i = g.units.length - 1; i >= 0; i--) if (!seen.has(g.units[i].id)) { const u = g.units[i]; if (u.selected) this.app.controls.setSelection?.(this.app.controls.selection.filter((x) => x !== u)); u.dispose(); g.units.splice(i, 1); }
+    // true sight (Sniper Tower / Vulcan CIWS) decides which invisible troops the joiner can see: rebuild it from the synced towers
+    g.detectors = g.units.filter((u) => u.structure?.trueSight && u.built && !u.dead).map((u) => ({ team: u.team, pos: u.pos, get radius() { return u.structure?.trueSight || 0; }, get dead() { return u.dead; } }));
     // loot
     const lseen = new Set();
     for (const [uid, id, x, z, blink] of S.loot) {
@@ -272,6 +288,7 @@ export class NetGuest {
     try { u = new Unit(g, k.d, k.t, k.f || null); } catch { return null; }
     u.id = R.i;
     u.spawnAt(R.x, R.z); u.facing = R.r; u.netX = R.x; u.netZ = R.z; u.netR = R.r;
+    if (k.bf !== undefined) u.baseFacing = k.bf;
     u.invulnT = 0; u.shield.visible = false;
     if (k.tw) { u.tower = true; u.yOff = k.tw[0]; u.towerRange = k.tw[1]; u.bar.visible = false; u.obj.position.y = u.yOff; }
     if (u.structure) u.buildT = u.structure.buildTime;
@@ -280,6 +297,7 @@ export class NetGuest {
   }
   applyStatic(u, k) {
     if (u.team !== k.t) u.team = k.t;
+    if (k.bf !== undefined) u.baseFacing = k.bf;
     if (k.bl && u.structure && (u.bLevel !== k.bl || (u.bPath || null) !== k.bp)) u.applyBuildLevel(k.bl, k.bp);
     const itemsChanged = JSON.stringify(u.items) !== JSON.stringify(k.it);
     u.items = k.it.slice();
@@ -303,7 +321,7 @@ export class NetGuest {
   update(dt, camQuat) {
     const g = this.g;
     if (!g.over) g.time += dt;   // smooth clock between snapshots (snapshot overwrites it)
-    const k = Math.min(1, dt * 12);
+    const k = Math.min(1, dt * SMOOTH);
     for (let i = g.units.length - 1; i >= 0; i--) {
       const u = g.units[i];
       if (u.dead) { if (u.updateDeath(dt)) { u.dispose(); g.units.splice(i, 1); } continue; }
@@ -317,9 +335,9 @@ export class NetGuest {
       u.obj.rotation.y = u.facing;
       if (u.invulnT > 0) u.updateShield(dt); else if (u.shield.visible) u.shield.visible = false;
       if (u.ability('miniDrones')) u.updateMiniDrones(dt);
+      if (u.structure) this.structureVisuals(u, dt, k);
       u.animate(dt, u.moving ? u.stats.moveSpeed || 2 : 0);
       if (!u.tower) u.updateBar(camQuat);
-      if (u.flash > 0) u.flash = Math.max(0, u.flash - dt * 6);
     }
     for (const b of g.bases) {
       if (b.shake > 0) { b.shake -= dt; b.obj.position.x = b.x + (Math.random() - 0.5) * 0.25 * (b.shake / 0.18); } else b.obj.position.x = b.x;
@@ -332,6 +350,19 @@ export class NetGuest {
     g.applyFog();
     for (const F of this.fireMeshes) F.visible = g.seenByViewer(F.position);
     g.updateVisuals(dt);
+  }
+  /** Turret / artillery visuals the host computes in Unit.updateStructure (never run on the joiner): the emplacement
+   *  stays put and the turret turns (body counter-rotates), the barrel elevates, scaffolding shows while building or
+   *  upgrading, and the hit flash fades. Animate() returns early for structures, so the flash lives here. */
+  structureVisuals(u, dt, blend) {
+    const r = u.rig, S = u.structure;
+    if (!r || !S) return;
+    if (u.baseFacing !== undefined) { r.body.rotation.y = u.baseFacing - u.facing; r.yaw.rotation.y = u.facing - u.baseFacing; }
+    const building = !u.built;
+    r.scaffold.visible = building || !!u.upgrading;
+    r.yaw.scale.set(1, building ? 0.2 + 0.8 * Math.min(1, u.buildT / S.buildTime) : 1, 1);
+    if (r.barrel && u.netEl !== undefined) r.barrel.rotation.x += (u.netEl - r.barrel.rotation.x) * blend;
+    if (u.flash > 0) { u.flash = Math.max(0, u.flash - dt * 6); const f = u.flash * 0.45; for (const m of r.matList) m.emissive.setRGB(f, f * 0.9, f * 0.9); }
   }
   drawFires(list) {
     const g = this.g;
@@ -350,10 +381,12 @@ export class NetGuest {
     if (kind === 'ring') return g.ring(P(a[0]), a[1], a[2]);
     if (kind === 'tracer') return g.tracer?.(P(a[0]), P(a[1]), a[2], a[3]);
     if (kind === 'tether') { const A = this.unitById(a[0]), B = this.unitById(a[1]); if (A && B) g.tether(A, B, a[2]); return; }
+    if (kind === 'reveal') { const A = this.unitById(a[0]); if (A && g.vision) g.vision.reveal(A, a[1]); return; }
     if (kind === 'emit') {
       const [evt, ...args] = a;
       const out = args.map((x) => (x && typeof x === 'object' && x.$u !== undefined ? this.unitById(x.$u) : x));
       if (out.some((x, i) => args[i]?.$u !== undefined && !x)) return;   // the unit is already gone
+      if (evt === 'invFull' && out[0]?.team !== g.playerTeam) return;    // host-side toast: only for the joiner's own troop
       if (evt === 'pickup' && out[0]?.team === g.playerTeam) { /* refreshed by the snapshot */ }
       return g.emit(evt, ...out);
     }

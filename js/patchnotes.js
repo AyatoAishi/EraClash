@@ -7,6 +7,22 @@
 // ============================================================
 export const PATCH_NOTES = [
   {
+    version: '0.32.1', date: '2026-10-27T11:30:00+08:00', title: 'Joiner sync fixes',
+    sections: [
+      { title: 'Online 1v1: what the joiner sees', items: [
+        'Evolving a troop now updates its shop card and skill tree on the joiner\'s screen right away (the icon used to stay the same).',
+        'Turrets and artillery: only the turret turns on the joiner\'s screen, the emplacement stays put (the whole tower used to spin).',
+        'Units hit by the joiner\'s attacks flash white, like they do on the host.',
+        'Turrets on the joiner\'s screen show their barrel elevation, recoil, muzzle flash, build and upgrade scaffolding, and multi-barrel firing order.',
+        'Attacks reveal the attacker in the joiner\'s fog, and Sniper Towers / Vulcan CIWS spot invisible troops for the joiner too.',
+        'Base level names, troop level-up toasts and "Inventory full" now reach the joiner (the last only for the joiner\'s own troops).',
+      ] },
+      { title: 'Latency', items: [
+        'The host sends world snapshots 15 times a second (was 10), and the joiner\'s screen catches up faster, so the delay you see is shorter. Unit behavior and balance are unchanged.',
+      ] },
+    ],
+  },
+  {
     version: '0.32.0', date: '2026-10-26T23:59:00+08:00', title: 'Online 1v1', author: 'AyatoAishi',
     sections: [
       { title: 'New: Online 1v1', items: [

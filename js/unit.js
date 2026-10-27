@@ -1496,6 +1496,7 @@ export class Unit {
         }
         if (Math.abs(da) < (S.fire === 'direct' ? 0.15 : 0.08) && this.atkCd <= 0 && !this.disarmed) {
           this.atkCd = Math.max(this.atkCd, -0.1) + attackInterval(this.effAttackSpeed);
+          this.atkN = (this.atkN || 0) + 1;   // Online 1v1: tells the joiner's browser this turret fired (recoil + muzzle flash)
           if (S.fire === 'direct') {                                // arrow / bullet like a ranged troop (can miss, hits flying)
             this.releaseAttack(tg);
             if (S.multishot > 1) g.fireExtraShots(this, tg, S.multishot - 1);   // Twin / Fire Archers: more targets per shot
